@@ -16,7 +16,7 @@ import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vE-A';
+const VERSION = 'vG-A';
 
 function createCaughtInstance(creature, zoneName) {
   const instanceId = `w${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
@@ -34,6 +34,7 @@ function createCaughtInstance(creature, zoneName) {
     survivalStreak: 0,
     enemyMemory: [],
     foundAt: zoneName,
+    coreId: null,
   };
 }
 
@@ -96,6 +97,16 @@ function App() {
         next = [...prev, instanceId];
       }
       persist(collection, next);
+      return next;
+    });
+  }
+
+  function equipCore(instanceId, coreId) {
+    setCollection((prev) => {
+      const next = prev.map((u) =>
+        u.instanceId === instanceId ? { ...u, coreId: coreId ?? null } : u
+      );
+      persist(next, squadIds);
       return next;
     });
   }
@@ -335,6 +346,7 @@ function App() {
             onEncounters={() => setScreen('encounters')}
             onWalk={() => setScreen('world')}
             justFedInstanceId={justFedInstanceId}
+            onEquipCore={equipCore}
           />
         )}
         {screen === 'encounters' && (

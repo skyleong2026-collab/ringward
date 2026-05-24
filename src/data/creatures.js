@@ -2,18 +2,18 @@
 // Stats: HP 100–500 | Attack 10–50 | Armor 5–25 | Speed 1–10
 
 export const ARCHETYPES = {
-  Anchor: { color: '#4a90d9', label: 'Anchor' },
-  Relay:  { color: '#7ed321', label: 'Relay' },
-  Predator: { color: '#d0021b', label: 'Predator' },
-  Ember:  { color: '#f5a623', label: 'Ember' },
+  Guardian: { color: '#4a90d9', label: 'Guardian' },
+  Echo:     { color: '#7ed321', label: 'Echo' },
+  Swift:    { color: '#d0021b', label: 'Swift' },
+  Spark:    { color: '#f5a623', label: 'Spark' },
 };
 
 export const CREATURES = [
-  // ── Anchors: High HP, High Armor, Low Attack ──
+  // ── Guardians: High HP, High Armor, Low Attack ──
   {
     id: 'vault',
     name: 'VAULT',
-    archetype: 'Anchor',
+    archetype: 'Guardian',
     hp: 480,
     attack: 12,
     armor: 24,
@@ -23,7 +23,7 @@ export const CREATURES = [
   {
     id: 'bastion',
     name: 'BASTION',
-    archetype: 'Anchor',
+    archetype: 'Guardian',
     hp: 440,
     attack: 14,
     armor: 22,
@@ -33,7 +33,7 @@ export const CREATURES = [
   {
     id: 'bulwark',
     name: 'BULWARK',
-    archetype: 'Anchor',
+    archetype: 'Guardian',
     hp: 400,
     attack: 16,
     armor: 20,
@@ -41,11 +41,11 @@ export const CREATURES = [
     flavor: 'Slow. Relentless.',
   },
 
-  // ── Relays: Moderate everything ──
+  // ── Echos: Moderate everything ──
   {
     id: 'conduit',
     name: 'CONDUIT',
-    archetype: 'Relay',
+    archetype: 'Echo',
     hp: 260,
     attack: 26,
     armor: 12,
@@ -55,7 +55,7 @@ export const CREATURES = [
   {
     id: 'nexus',
     name: 'NEXUS',
-    archetype: 'Relay',
+    archetype: 'Echo',
     hp: 240,
     attack: 28,
     armor: 11,
@@ -65,7 +65,7 @@ export const CREATURES = [
   {
     id: 'link',
     name: 'LINK',
-    archetype: 'Relay',
+    archetype: 'Echo',
     hp: 280,
     attack: 24,
     armor: 13,
@@ -73,11 +73,11 @@ export const CREATURES = [
     flavor: 'The network holds.',
   },
 
-  // ── Predators: High Attack, Low HP, Low Armor ──
+  // ── Swifts: High Attack, Low HP, Low Armor ──
   {
     id: 'fang',
     name: 'FANG',
-    archetype: 'Predator',
+    archetype: 'Swift',
     hp: 140,
     attack: 50,
     armor: 5,
@@ -87,7 +87,7 @@ export const CREATURES = [
   {
     id: 'striker',
     name: 'STRIKER',
-    archetype: 'Predator',
+    archetype: 'Swift',
     hp: 160,
     attack: 46,
     armor: 6,
@@ -97,7 +97,7 @@ export const CREATURES = [
   {
     id: 'claw',
     name: 'CLAW',
-    archetype: 'Predator',
+    archetype: 'Swift',
     hp: 180,
     attack: 42,
     armor: 7,
@@ -105,11 +105,11 @@ export const CREATURES = [
     flavor: 'Waits for the wound.',
   },
 
-  // ── Embers: Low HP, Low starting Attack — dangerous late ──
+  // ── Sparks: Low HP, Low starting Attack — dangerous late ──
   {
     id: 'spark',
     name: 'SPARK',
-    archetype: 'Ember',
+    archetype: 'Spark',
     hp: 110,
     attack: 14,
     armor: 8,
@@ -119,7 +119,7 @@ export const CREATURES = [
   {
     id: 'flicker',
     name: 'FLICKER',
-    archetype: 'Ember',
+    archetype: 'Spark',
     hp: 130,
     attack: 12,
     armor: 7,
@@ -129,7 +129,7 @@ export const CREATURES = [
   {
     id: 'cinder',
     name: 'CINDER',
-    archetype: 'Ember',
+    archetype: 'Spark',
     hp: 150,
     attack: 10,
     armor: 9,

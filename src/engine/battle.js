@@ -7,9 +7,11 @@ function calcDamage(rawAttack, targetArmor) {
 }
 
 // ─── Apply damage to a unit (shield → HP) ────────────────────────────────────
-// Returns actual HP damage dealt (post-shield).
+// Sets unit.lastProc for Core effects that trigger during damage application.
 function applyDamage(unit, damage, round) {
   let hpDmg = damage;
+  unit.lastProc = null;
+  const prevShield = unit.shield;
 
   if (unit.shield > 0) {
     const absorbed = Math.min(unit.shield, damage);
@@ -20,17 +22,24 @@ function applyDamage(unit, damage, round) {
 
   const prevHP = Math.max(0, unit.currentHP);
   unit.currentHP = Math.max(0, unit.currentHP - hpDmg);
-  const realHpDmg = prevHP - unit.currentHP; // capped at remaining HP (no overkill)
+  const realHpDmg = prevHP - unit.currentHP;
   unit.tel.damageTaken += realHpDmg;
+
+  // Lastwall: prevent death once per battle — save at 1 HP
+  if (unit.currentHP <= 0 && unit.coreId === 'lastwall' && !unit.lastwallUsed) {
+    unit.currentHP = 1;
+    unit.lastwallUsed = true;
+    unit.lastProc = 'lastwall';
+  }
 
   if (unit.currentHP <= 0) {
     unit.alive = false;
     if (unit.tel.fell === null) unit.tel.fell = round;
   }
 
-  // Anchor Shield trigger: when HP first drops to/below 50% maxHP
+  // Guardian Shield trigger: when HP first drops to/below 50% maxHP
   if (
-    unit.archetype === 'Anchor' &&
+    unit.archetype === 'Guardian' &&
     !unit.hasShielded &&
     unit.alive &&
     unit.currentHP <= unit.maxHP * 0.5
@@ -40,27 +49,38 @@ function applyDamage(unit, damage, round) {
     unit.tel.shieldTriggers += 1;
   }
 
+  // Ironhide: first broken shield reforms at 50% strength (10% maxHP)
+  if (
+    unit.coreId === 'ironhide' &&
+    !unit.ironhideUsed &&
+    unit.hasShielded &&
+    prevShield > 0 &&
+    unit.shield === 0
+  ) {
+    unit.shield = Math.floor(unit.maxHP * 0.1);
+    unit.ironhideUsed = true;
+    unit.lastProc = 'ironhide';
+  }
+
   return realHpDmg;
 }
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
-// Taunt: if any enemy Anchor is alive, attacker must target an Anchor.
-// Among forced/eligible targets, each archetype picks by its own rule.
+// Taunt: if any enemy Guardian is alive, attacker must target a Guardian.
+// Among eligible targets, each archetype picks by its own rule.
 function pickTarget(actor, enemies, lastSquadTarget) {
   const alive = enemies.filter((u) => u.alive);
   if (alive.length === 0) return null;
 
-  const anchors = alive.filter((u) => u.archetype === 'Anchor');
-  const pool = anchors.length > 0 ? anchors : alive;
+  const guardians = alive.filter((u) => u.archetype === 'Guardian');
+  const pool = guardians.length > 0 ? guardians : alive;
 
   switch (actor.archetype) {
-    case 'Anchor':
-      // Highest Attack enemy
+    case 'Guardian':
       return pool.reduce((best, u) =>
         u.currentAttack > best.currentAttack ? u : best
       );
-    case 'Relay': {
-      // Same target as last ally that acted; fall back to highest HP
+    case 'Echo': {
       const last = lastSquadTarget
         ? pool.find((u) => u.id === lastSquadTarget)
         : null;
@@ -69,13 +89,11 @@ function pickTarget(actor, enemies, lastSquadTarget) {
         pool.reduce((best, u) => (u.currentHP > best.currentHP ? u : best))
       );
     }
-    case 'Predator':
-      // Lowest current HP enemy
+    case 'Swift':
       return pool.reduce((best, u) =>
         u.currentHP < best.currentHP ? u : best
       );
-    case 'Ember':
-      // Highest current HP enemy
+    case 'Spark':
       return pool.reduce((best, u) =>
         u.currentHP > best.currentHP ? u : best
       );
@@ -96,36 +114,36 @@ function generateOutcome(winner, rounds, unitsA, unitsB) {
     return `Neither squad broke in 10 rounds — ${side} held more HP (${Math.round(remHP)}) and took the timeout victory.`;
   }
 
-  const embers = winUnits.filter((u) => u.archetype === 'Ember' && u.alive);
-  const scaledEmber = embers.find((e) => e.stokeStacks >= 5);
-  if (scaledEmber) {
-    return `${scaledEmber.name} scaled to ${scaledEmber.stokeStacks} Stoke stacks by round ${scaledEmber.tel.roundReachedPeak}, converting patience into decisive damage.`;
+  const sparks = winUnits.filter((u) => u.archetype === 'Spark' && u.alive);
+  const scaledSpark = sparks.find((e) => e.stokeStacks >= 5);
+  if (scaledSpark) {
+    return `${scaledSpark.name} scaled to ${scaledSpark.stokeStacks} Stoke stacks by round ${scaledSpark.tel.roundReachedPeak}, converting patience into decisive damage.`;
   }
 
-  const predators = winUnits.filter((u) => u.archetype === 'Predator');
-  const execKills = predators.reduce((s, p) => s + p.tel.executeKills, 0);
-  const anchors = winUnits.filter((u) => u.archetype === 'Anchor' && u.alive);
-  if (execKills > 0 && anchors.length > 0) {
-    const anchor = anchors[0];
-    const pred = predators[0];
-    return `${anchor.name} locked enemy fire and kept the front intact while ${pred.name} closed out low-HP targets with ${execKills} execute strike${execKills > 1 ? 's' : ''}.`;
+  const swifts = winUnits.filter((u) => u.archetype === 'Swift');
+  const execKills = swifts.reduce((s, p) => s + p.tel.executeKills, 0);
+  const guardians = winUnits.filter((u) => u.archetype === 'Guardian' && u.alive);
+  if (execKills > 0 && guardians.length > 0) {
+    const guardian = guardians[0];
+    const swift = swifts[0];
+    return `${guardian.name} locked enemy fire and kept the front intact while ${swift.name} closed out low-HP targets with ${execKills} execute strike${execKills > 1 ? 's' : ''}.`;
   }
   if (execKills > 0) {
-    return `${side}'s Predator secured ${execKills} execute kill${execKills > 1 ? 's' : ''}, eliminating wounded targets before they could recover.`;
+    return `${side}'s Swift secured ${execKills} execute kill${execKills > 1 ? 's' : ''}, eliminating wounded targets before they could recover.`;
   }
 
-  const relays = winUnits.filter((u) => u.archetype === 'Relay');
-  const echoTotal = relays.reduce((s, r) => s + r.tel.echoDamage, 0);
-  const echoEvents = relays.reduce((s, r) => s + r.tel.echoEvents, 0);
+  const echos = winUnits.filter((u) => u.archetype === 'Echo');
+  const echoTotal = echos.reduce((s, r) => s + r.tel.echoDamage, 0);
+  const echoEvents = echos.reduce((s, r) => s + r.tel.echoEvents, 0);
   if (echoEvents >= 5) {
-    return `${side}'s Relay network fired ${echoEvents} echoes for ${Math.round(echoTotal)} bonus damage — sustained amplification decided the fight.`;
+    return `${side}'s Echo network fired ${echoEvents} echoes for ${Math.round(echoTotal)} bonus damage — sustained amplification decided the fight.`;
   }
 
-  if (anchors.length > 0) {
-    const absorbed = anchors.reduce((s, a) => s + a.tel.shieldAbsorbed, 0);
+  if (guardians.length > 0) {
+    const absorbed = guardians.reduce((s, a) => s + a.tel.shieldAbsorbed, 0);
     return absorbed > 0
-      ? `${anchors[0].name} held the frontline and shielded ${Math.round(absorbed)} damage, giving ${side}'s squad the HP cushion they needed.`
-      : `${anchors[0].name} absorbed sustained pressure and kept ${side}'s squad intact through round ${rounds}.`;
+      ? `${guardians[0].name} held the frontline and shielded ${Math.round(absorbed)} damage, giving ${side}'s squad the HP cushion they needed.`
+      : `${guardians[0].name} absorbed sustained pressure and kept ${side}'s squad intact through round ${rounds}.`;
   }
 
   return `${side} won in round ${rounds} through superior damage output and favorable targeting.`;
@@ -135,31 +153,27 @@ function generateOutcome(winner, rounds, unitsA, unitsB) {
 function generateCoaching(winner, rounds, unitsA, unitsB) {
   const all = [...unitsA, ...unitsB];
 
-  // 1. Ember survived 6+ rounds (alive, stacks ≥ 6)
-  const scaledEmber = all.find(
-    (u) => u.archetype === 'Ember' && u.alive && u.stokeStacks >= 6
+  const scaledSpark = all.find(
+    (u) => u.archetype === 'Spark' && u.alive && u.stokeStacks >= 6
   );
-  if (scaledEmber) {
-    return `Ember scaled uncontested — no burst to answer it.`;
+  if (scaledSpark) {
+    return `Spark scaled uncontested — no burst to answer it.`;
   }
 
-  // 2. Any Predator had 0 execute hits (threshold was never reached)
-  const predators = all.filter((u) => u.archetype === 'Predator');
-  if (predators.length > 0 && predators.every((p) => p.tel.executeHits === 0)) {
-    return `Predator found no execute opportunities — targets stayed above threshold.`;
+  const swifts = all.filter((u) => u.archetype === 'Swift');
+  if (swifts.length > 0 && swifts.every((p) => p.tel.executeHits === 0)) {
+    return `Swift found no execute opportunities — targets stayed above threshold.`;
   }
 
-  // 3. Any Relay fired fewer than 3 echo events
-  const relays = all.filter((u) => u.archetype === 'Relay');
-  const lowRelay = relays.find((r) => r.tel.echoEvents < 3);
-  if (lowRelay) {
-    return `Relay had low value: squad effects were sparse.`;
+  const echos = all.filter((u) => u.archetype === 'Echo');
+  const lowEcho = echos.find((r) => r.tel.echoEvents < 3);
+  if (lowEcho) {
+    return `Echo had low value: squad effects were sparse.`;
   }
 
-  // 4. Squad A had no Anchor and lost
-  const squadAHasAnchor = unitsA.some((u) => u.archetype === 'Anchor');
-  if (winner === 'B' && !squadAHasAnchor) {
-    return `Squad lacked stabilization — no Anchor to absorb pressure.`;
+  const squadAHasGuardian = unitsA.some((u) => u.archetype === 'Guardian');
+  if (winner === 'B' && !squadAHasGuardian) {
+    return `Squad lacked stabilization — no Guardian to absorb pressure.`;
   }
 
   return '';
@@ -170,8 +184,21 @@ function computeThreat(unit) {
   const hpNorm = unit.hp / 500;
   const atkNorm = unit.attack / 50;
   const spdNorm = unit.speed / 10;
-  const scaling = unit.archetype === 'Ember' ? 1.4 : 1.0;
+  const scaling = unit.archetype === 'Spark' ? 1.4 : 1.0;
   return (hpNorm * 0.35 + atkNorm * 0.45 + spdNorm * 0.2) * scaling;
+}
+
+// ─── Collect Core proc callouts for result summary ────────────────────────────
+function gatherCoreProcs(battleLog) {
+  const procs = [];
+  for (const { round, events } of battleLog) {
+    for (const e of events) {
+      if (e.type === 'core_proc') {
+        procs.push({ unitName: e.actorName, callout: e.callout, round, coreId: e.coreId });
+      }
+    }
+  }
+  return procs;
 }
 
 // ─── Main battle function ─────────────────────────────────────────────────────
@@ -189,6 +216,11 @@ export function battle(squadA, squadB, seed) {
     stokeStacks: 0,
     alive: true,
     threat: computeThreat(creature),
+    lastProc: null,
+    ironhideUsed: false,
+    lastwallUsed: false,
+    quickstrikeUsedThisRound: false,
+    firstEchoFiredThisRound: false,
     tel: {
       damageDealt: 0,
       damageTaken: 0,
@@ -210,7 +242,6 @@ export function battle(squadA, squadB, seed) {
   const unitsA = squadA.map((u) => initUnit(u, 'A'));
   const unitsB = squadB.map((u) => initUnit(u, 'B'));
 
-  // Per-squad "last ally target" id for Relay targeting
   const lastSquadTarget = { A: null, B: null };
 
   let winner = null;
@@ -222,6 +253,12 @@ export function battle(squadA, squadB, seed) {
     const aliveA = unitsA.filter((u) => u.alive);
     const aliveB = unitsB.filter((u) => u.alive);
     if (aliveA.length === 0 || aliveB.length === 0) break;
+
+    // Reset per-round Core flags
+    for (const unit of [...unitsA, ...unitsB]) {
+      unit.quickstrikeUsedThisRound = false;
+      unit.firstEchoFiredThisRound = false;
+    }
 
     // Speed-ordered turn list; ties broken by seeded RNG
     const turnOrder = [...aliveA, ...aliveB].sort((a, b) => {
@@ -242,16 +279,12 @@ export function battle(squadA, squadB, seed) {
       const target = pickTarget(actor, enemies, lastSquadTarget[actor.squad]);
       if (!target) continue;
 
-      // Track squad's last targeted enemy (used by Relay)
       lastSquadTarget[actor.squad] = target.id;
 
       // ── Compute raw attack (Execute doubles vs targets below 30% HP) ──
       let rawAttack = actor.currentAttack;
       let isExecute = false;
-      if (
-        actor.archetype === 'Predator' &&
-        target.currentHP < target.maxHP * 0.3
-      ) {
+      if (actor.archetype === 'Swift' && target.currentHP < target.maxHP * 0.3) {
         rawAttack *= 2;
         isExecute = true;
       }
@@ -282,34 +315,126 @@ export function battle(squadA, squadB, seed) {
         type: 'attack',
       });
 
-      // ── Echo: all alive Relay allies (not the actor itself) fire immediately ──
-      if (actor.archetype !== 'Relay') {
-        const relayAllies = allies.filter(
-          (u) => u.alive && u.archetype === 'Relay' && u !== actor
+      // ── Core procs from applyDamage (Ironhide, Lastwall save) ──
+      if (target.lastProc === 'ironhide') {
+        roundEvents.push({
+          actorId: target.id, actorName: target.name, actorSquad: target.squad,
+          type: 'core_proc', coreId: 'ironhide', callout: 'Shield Reformed',
+        });
+      }
+      if (target.lastProc === 'lastwall') {
+        roundEvents.push({
+          actorId: target.id, actorName: target.name, actorSquad: target.squad,
+          type: 'core_proc', coreId: 'lastwall', callout: 'LAST STAND',
+        });
+      }
+
+      // ── Lastwall reflection: 30% of incoming damage returned to attacker ──
+      if (target.lastwallUsed && actor.alive) {
+        const reflection = Math.max(1, Math.floor(actualDmg * 0.3));
+        actor.currentHP = Math.max(0, actor.currentHP - reflection);
+        actor.tel.damageTaken += reflection;
+        if (actor.currentHP <= 0 && actor.alive) {
+          actor.alive = false;
+          if (actor.tel.fell === null) actor.tel.fell = round;
+        }
+        roundEvents.push({
+          actorId: target.id, actorName: target.name, actorSquad: target.squad,
+          targetId: actor.id, targetName: actor.name,
+          damage: reflection,
+          type: 'core_proc', coreId: 'lastwall', callout: 'LAST STAND',
+        });
+      }
+
+      // ── Quickstrike: bonus attack on kill (once per round) ──
+      if (killed && actor.coreId === 'quickstrike' && !actor.quickstrikeUsedThisRound && actor.alive) {
+        actor.quickstrikeUsedThisRound = true;
+        const bonusTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad]);
+        if (bonusTarget && bonusTarget.alive) {
+          let bonusRaw = actor.currentAttack;
+          if (actor.archetype === 'Swift' && bonusTarget.currentHP < bonusTarget.maxHP * 0.3) bonusRaw *= 2;
+          const bonusDmg = calcDamage(bonusRaw, bonusTarget.armor);
+          const bonusWasAlive = bonusTarget.alive;
+          const bonusActual = applyDamage(bonusTarget, bonusDmg, round);
+          actor.tel.damageDealt += bonusActual;
+          if (bonusActual > actor.tel.largestHit) actor.tel.largestHit = bonusActual;
+          const bonusKilled = bonusWasAlive && !bonusTarget.alive;
+          if (bonusKilled) actor.tel.standardKills += 1;
+          roundEvents.push({
+            actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
+            targetId: bonusTarget.id, targetName: bonusTarget.name,
+            damage: bonusActual, killed: bonusKilled,
+            type: 'core_proc', coreId: 'quickstrike', callout: 'EXTRA ACTION',
+          });
+        }
+      }
+
+      // ── Kindling: Spark ally gains +2 Stoke stacks when any ally falls ──
+      if (killed) {
+        const deadSquad = target.squad === 'A' ? unitsA : unitsB;
+        for (const sp of deadSquad) {
+          if (sp.alive && sp.archetype === 'Spark' && sp.coreId === 'kindling' && sp !== target) {
+            sp.stokeStacks += 2;
+            sp.currentAttack = sp.attack * (1 + 0.12 * sp.stokeStacks);
+            roundEvents.push({
+              actorId: sp.id, actorName: sp.name, actorSquad: sp.squad,
+              type: 'core_proc', coreId: 'kindling', callout: 'Flame Inherited',
+            });
+          }
+        }
+      }
+
+      // ── Echo: alive Echo allies fire immediately after any non-Echo action ──
+      if (actor.archetype !== 'Echo') {
+        const echoAllies = allies.filter(
+          (u) => u.alive && u.archetype === 'Echo' && u !== actor
         );
-        for (const relay of relayAllies) {
-          if (!target.alive) continue; // target already dead
-          const echoRaw = actor.currentAttack * 0.5;
+        for (const echo of echoAllies) {
+          if (!target.alive) continue;
+
+          // Resonator: first Echo each round fires at full power
+          const isFirstEcho = !echo.firstEchoFiredThisRound;
+          const resonatorActive = echo.coreId === 'resonator' && isFirstEcho;
+          const echoPower = resonatorActive ? 1.0 : 0.5;
+          echo.firstEchoFiredThisRound = true;
+
+          const echoRaw = actor.currentAttack * echoPower;
           const echoDmg = calcDamage(echoRaw, target.armor);
           const echoActual = applyDamage(target, echoDmg, round);
 
-          relay.tel.echoEvents += 1;
-          relay.tel.echoDamage += echoActual;
-          relay.tel.damageDealt += echoActual;
-
-          if (!target.alive) relay.tel.standardKills += 1;
+          echo.tel.echoEvents += 1;
+          echo.tel.echoDamage += echoActual;
+          echo.tel.damageDealt += echoActual;
+          if (!target.alive) echo.tel.standardKills += 1;
 
           roundEvents.push({
-            actorId: relay.id,
-            actorName: relay.name,
-            actorSquad: relay.squad,
-            targetId: target.id,
-            targetName: target.name,
-            damage: echoActual,
-            isExecute: false,
-            killed: !target.alive,
-            type: 'echo',
+            actorId: echo.id, actorName: echo.name, actorSquad: echo.squad,
+            targetId: target.id, targetName: target.name,
+            damage: echoActual, isExecute: false, killed: !target.alive,
+            type: resonatorActive ? 'core_proc' : 'echo',
+            coreId: resonatorActive ? 'resonator' : null,
+            callout: resonatorActive ? 'Resonance' : null,
           });
+
+          // Chain Link: echo jumps once to the nearest other enemy
+          if (echo.coreId === 'chainlink') {
+            const jumpTarget = enemies.filter((u) => u.alive && u !== target)[0];
+            if (jumpTarget) {
+              const jumpRaw = actor.currentAttack * 0.5;
+              const jumpDmg = calcDamage(jumpRaw, jumpTarget.armor);
+              const jumpActual = applyDamage(jumpTarget, jumpDmg, round);
+              echo.tel.echoEvents += 1;
+              echo.tel.echoDamage += jumpActual;
+              echo.tel.damageDealt += jumpActual;
+              if (!jumpTarget.alive) echo.tel.standardKills += 1;
+              roundEvents.push({
+                actorId: echo.id, actorName: echo.name, actorSquad: echo.squad,
+                targetId: jumpTarget.id, targetName: jumpTarget.name,
+                damage: jumpActual, killed: !jumpTarget.alive,
+                type: 'core_proc', coreId: 'chainlink', callout: 'Echo Jump',
+              });
+            }
+          }
         }
       }
 
@@ -324,9 +449,9 @@ export function battle(squadA, squadB, seed) {
 
     if (winner) break;
 
-    // ── End of round: Ember Stoke (+12% base attack per round survived) ──
+    // ── End of round: Spark Stoke (+12% base attack per round survived) ──
     for (const unit of [...unitsA, ...unitsB]) {
-      if (unit.alive && unit.archetype === 'Ember') {
+      if (unit.alive && unit.archetype === 'Spark') {
         unit.stokeStacks += 1;
         unit.currentAttack = unit.attack * (1 + 0.12 * unit.stokeStacks);
         unit.tel.peakStacks = unit.stokeStacks;
@@ -334,7 +459,6 @@ export function battle(squadA, squadB, seed) {
       }
     }
 
-    // Check for elimination at end of round
     if (unitsA.every((u) => !u.alive)) { winner = 'B'; break; }
     if (unitsB.every((u) => !u.alive)) { winner = 'A'; break; }
   }
@@ -346,11 +470,11 @@ export function battle(squadA, squadB, seed) {
     winner = hpA >= hpB ? 'A' : 'B';
   }
 
-  // Compute Ember % of total damage
+  // Compute Spark % of total damage
   const allUnits = [...unitsA, ...unitsB];
   const totalDmg = allUnits.reduce((s, u) => s + u.tel.damageDealt, 0);
   for (const unit of allUnits) {
-    if (unit.archetype === 'Ember' && totalDmg > 0) {
+    if (unit.archetype === 'Spark' && totalDmg > 0) {
       unit.tel.damagePercent = parseFloat(
         ((unit.tel.damageDealt / totalDmg) * 100).toFixed(1)
       );
@@ -364,15 +488,14 @@ export function battle(squadA, squadB, seed) {
   const battleUpdates = {};
 
   for (const unit of unitsA) {
-    let xp = 15; // participation base
+    let xp = 15;
     if (unit.alive) {
-      xp += 5; // survival bonus
-      survivalUpdates[unit.instanceId] = 1; // increment survival count
+      xp += 5;
+      survivalUpdates[unit.instanceId] = 1;
     }
-    if (playerWon) xp += 5; // victory bonus
+    if (playerWon) xp += 5;
     xpRewards[unit.instanceId] = xp;
 
-    // Battle record: track count, wins, enemy names
     battleUpdates[unit.instanceId] = {
       battleCount: 1,
       winCount: playerWon ? 1 : 0,
@@ -392,5 +515,6 @@ export function battle(squadA, squadB, seed) {
     xpRewards,
     survivalUpdates,
     battleUpdates,
+    coreProcs: gatherCoreProcs(battleLog),
   };
 }

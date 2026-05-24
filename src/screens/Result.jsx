@@ -1,8 +1,9 @@
 import { ARCHETYPES } from '../data/creatures.js';
+import { CORES } from '../data/cores.js';
 
 function computeCarryHighlight(squadA) {
   for (const u of squadA) {
-    if (u.archetype === 'Ember' && u.stokeStacks >= 6 && u.tel.damagePercent >= 30) {
+    if (u.archetype === 'Spark' && u.stokeStacks >= 6 && u.tel.damagePercent >= 30) {
       return {
         name: u.name,
         label: 'CARRIED',
@@ -10,7 +11,7 @@ function computeCarryHighlight(squadA) {
         color: '#f5a623',
       };
     }
-    if (u.archetype === 'Predator' && u.tel.executeKills >= 2) {
+    if (u.archetype === 'Swift' && u.tel.executeKills >= 2) {
       return {
         name: u.name,
         label: 'DELIVERED',
@@ -18,7 +19,7 @@ function computeCarryHighlight(squadA) {
         color: '#d0021b',
       };
     }
-    if (u.archetype === 'Relay' && u.tel.echoEvents >= 10) {
+    if (u.archetype === 'Echo' && u.tel.echoEvents >= 10) {
       return {
         name: u.name,
         label: 'CASCADED',
@@ -26,7 +27,7 @@ function computeCarryHighlight(squadA) {
         color: '#7ed321',
       };
     }
-    if (u.archetype === 'Anchor' && u.tel.shieldAbsorbed >= 60 && u.alive) {
+    if (u.archetype === 'Guardian' && u.tel.shieldAbsorbed >= 60 && u.alive) {
       return {
         name: u.name,
         label: 'HELD',
@@ -45,19 +46,19 @@ function UnitRow({ unit, isWinnerSquad, xpGain }) {
 
   function archetypeDetail() {
     switch (unit.archetype) {
-      case 'Anchor':
+      case 'Guardian':
         return t.shieldTriggers > 0
           ? `Shield triggered · Absorbed ${Math.round(t.shieldAbsorbed)} dmg`
           : `No shield trigger`;
-      case 'Relay':
+      case 'Echo':
         return `${t.echoEvents} echo${t.echoEvents !== 1 ? 's' : ''} · +${Math.round(t.echoDamage)} echo dmg`;
-      case 'Predator': {
+      case 'Swift': {
         const execStr = t.executeHits > 0
           ? `Execute ×${t.executeHits} (${t.executeKills} kill${t.executeKills !== 1 ? 's' : ''})`
           : `No execute`;
         return `${execStr} · ${t.standardKills} standard kill${t.standardKills !== 1 ? 's' : ''} · Largest hit: ${Math.round(t.largestHit)}`;
       }
-      case 'Ember':
+      case 'Spark':
         return `Peak ${t.peakStacks} stacks (rnd ${t.roundReachedPeak}) · ${t.damagePercent}% of squad dmg`;
       default:
         return '';
@@ -111,8 +112,19 @@ function UnitRow({ unit, isWinnerSquad, xpGain }) {
 }
 
 export default function Result({ result, onTryAgain, onNewBattle }) {
-  const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards } = result;
+  const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, coreProcs } = result;
   const { squadA, squadB } = telemetry;
+
+  const groupedProcs = (() => {
+    if (!coreProcs || coreProcs.length === 0) return [];
+    const map = {};
+    for (const p of coreProcs) {
+      const key = `${p.unitName}|${p.callout}`;
+      if (!map[key]) map[key] = { unitName: p.unitName, callout: p.callout, coreId: p.coreId, count: 0 };
+      map[key].count += 1;
+    }
+    return Object.values(map);
+  })();
 
   const winnerLabel = winner === 'A' ? 'SQUAD A' : 'SQUAD B';
   const winColor = '#7ed321';
@@ -169,6 +181,30 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
               </span>
             </div>
             <div style={{ fontSize: 11, color: '#666' }}>{carryHighlight.line}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Core activations */}
+      {groupedProcs.length > 0 && (
+        <div style={{ background: '#0a0a14', border: '1px solid #2a2a3a', borderRadius: 8, padding: '12px 14px' }}>
+          <div style={{ fontSize: 10, color: '#444', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }}>Core Activations</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {groupedProcs.map((e, i) => {
+              const coreColor = CORES[e.coreId]?.color || '#888';
+              return (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ color: '#666' }}>{e.unitName}</span>
+                    <span style={{
+                      fontSize: 8, color: coreColor, background: coreColor + '18',
+                      border: `1px solid ${coreColor}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1,
+                    }}>{e.callout}</span>
+                  </div>
+                  {e.count > 1 && <span style={{ fontSize: 10, color: '#444' }}>×{e.count}</span>}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

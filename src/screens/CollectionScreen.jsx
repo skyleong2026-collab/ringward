@@ -1,8 +1,9 @@
 import { ARCHETYPES } from '../data/creatures.js';
+import { CORES } from '../data/cores.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
 import { useState, useEffect } from 'react';
 
-const ARCHETYPE_ABBR = { Anchor: 'ANC', Relay: 'REL', Predator: 'PRE', Ember: 'EMB' };
+const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'SPK' };
 
 function XpBar({ xp }) {
   const prog = xpProgress(xp);
@@ -27,7 +28,94 @@ function XpBar({ xp }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed }) {
+function CoreSelectModal({ unit, onEquipCore, onClose }) {
+  const arch = ARCHETYPES[unit.archetype];
+  const allCores = Object.values(CORES);
+  const archCores = allCores.filter((c) => c.archetype === unit.archetype);
+  const otherCores = allCores.filter((c) => c.archetype !== unit.archetype);
+
+  function renderCore(core, dim) {
+    const equipped = unit.coreId === core.id;
+    return (
+      <div
+        key={core.id}
+        onClick={() => { onEquipCore(unit.instanceId, equipped ? null : core.id); onClose(); }}
+        style={{
+          background: equipped ? core.color + '18' : '#0d0d18',
+          border: `1px solid ${equipped ? core.color + '55' : '#2a2a3a'}`,
+          borderRadius: 7,
+          padding: '10px 12px',
+          cursor: 'pointer',
+          marginBottom: 6,
+          opacity: dim ? 0.45 : 1,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontWeight: 700, fontSize: 12, color: core.color, letterSpacing: 0.5 }}>{core.name}</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {equipped && <span style={{ fontSize: 8, color: core.color, letterSpacing: 1 }}>EQUIPPED</span>}
+            <span style={{
+              fontSize: 8, color: core.color, background: core.color + '18',
+              border: `1px solid ${core.color}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1,
+            }}>{core.callout}</span>
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: dim ? '#555' : '#888', lineHeight: 1.4 }}>{core.description}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#0a0a14', border: '1px solid #2a2a3a', borderRadius: 10, padding: 16, maxWidth: 340, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP CORE</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#eee', marginTop: 2 }}>{unit.name}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#444', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>×</button>
+        </div>
+
+        {archCores.length > 0 && (
+          <>
+            <div style={{ fontSize: 9, color: arch.color + 'aa', letterSpacing: 1.5, marginBottom: 8 }}>
+              {unit.archetype.toUpperCase()} CORES
+            </div>
+            {archCores.map((core) => renderCore(core, false))}
+          </>
+        )}
+
+        {otherCores.length > 0 && (
+          <>
+            <div style={{ fontSize: 9, color: '#2a2a3a', letterSpacing: 1.5, margin: '10px 0 8px' }}>OTHER CORES</div>
+            {otherCores.map((core) => renderCore(core, true))}
+          </>
+        )}
+
+        {unit.coreId && (
+          <button
+            onClick={() => { onEquipCore(unit.instanceId, null); onClose(); }}
+            style={{
+              width: '100%', marginTop: 6, padding: '8px',
+              background: 'none', border: '1px solid #2a2a3a', borderRadius: 6,
+              color: '#444', fontSize: 11, cursor: 'pointer', letterSpacing: 1,
+            }}
+          >
+            Remove Core
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenCoreModal }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
@@ -103,6 +191,25 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
         )}
       </div>
 
+      <div
+        onClick={() => onOpenCoreModal(unit)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 0',
+          borderTop: '1px solid #111',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>CORE</span>
+        {unit.coreId ? (
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: CORES[unit.coreId]?.color || '#888' }}>
+            {CORES[unit.coreId]?.name || unit.coreId}
+          </span>
+        ) : (
+          <span style={{ fontSize: 9, color: '#222' }}>tap to equip</span>
+        )}
+      </div>
+
       <XpBar xp={unit.xp} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
@@ -152,7 +259,8 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, justFedInstanceId }) {
+export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, justFedInstanceId, onEquipCore }) {
+  const [coreModalUnit, setCoreModalUnit] = useState(null);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
   const squadFull = squadIds.length >= 8;
@@ -225,6 +333,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
               onFeed={onFeed}
               canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
               justFed={justFedInstanceId === u.instanceId}
+              onOpenCoreModal={(u) => setCoreModalUnit(u)}
             />
           ))}
         </div>
@@ -252,11 +361,19 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
                 onFeed={onFeed}
                 canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
                 justFed={justFedInstanceId === u.instanceId}
+                onOpenCoreModal={(u) => setCoreModalUnit(u)}
               />
             ))}
           </div>
         )}
       </div>
+      {coreModalUnit && (
+        <CoreSelectModal
+          unit={coreModalUnit}
+          onEquipCore={onEquipCore}
+          onClose={() => setCoreModalUnit(null)}
+        />
+      )}
     </div>
   );
 }
