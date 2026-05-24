@@ -18,6 +18,15 @@ import { animationStyles } from './ui/animations.js';
 
 const VERSION = 'vG-B';
 
+// Migrate stale archetype names from pre-vG-A builds
+const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
+function migrateCollection(col) {
+  return col.map((u) => ({
+    ...u,
+    archetype: ARCHETYPE_MIGRATION[u.archetype] ?? u.archetype,
+  }));
+}
+
 function createCaughtInstance(creature, zoneName) {
   const instanceId = `w${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
   return {
@@ -53,7 +62,7 @@ function App() {
   const [collection, setCollection] = useState(() => {
     try {
       const saved = localStorage.getItem('8gents_collection');
-      return saved ? JSON.parse(saved) : buildStartingCollection();
+      return migrateCollection(saved ? JSON.parse(saved) : buildStartingCollection());
     } catch {
       return buildStartingCollection();
     }
