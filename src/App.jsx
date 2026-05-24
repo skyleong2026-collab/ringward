@@ -312,13 +312,14 @@ function App() {
         </span>
         <span style={{
           fontSize: 10,
-          color: '#444',
-          background: '#111',
+          color: '#ddd',
+          background: '#1a1a22',
           padding: '3px 8px',
           borderRadius: 4,
           letterSpacing: 1,
           fontFamily: 'monospace',
-          border: '1px solid #222',
+          border: '1px solid #444',
+          fontWeight: 600,
         }}>
           {VERSION}
         </span>
