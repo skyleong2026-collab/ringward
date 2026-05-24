@@ -45,4 +45,48 @@ export const ENCOUNTERS = [
     squad: [c('vault'), c('bastion')],
     difficulty: 'Defensive',
   },
+
+  // ── Harder encounters: test Core mechanics and force proc chains ──
+  {
+    id: 'overdrive',
+    name: 'Overdrive',
+    flavor: 'A Swift and two Sparks accelerating. By round 3 they hit like meteors. Kill fast or lose.',
+    squad: [c('fang'), c('spark'), c('flicker')],
+    difficulty: 'Aggressive',
+  },
+  {
+    id: 'forge',
+    name: 'The Forge',
+    flavor: 'Two Guardians trading blows. Shields break and reform. Whoever breaks last wins.',
+    squad: [c('vault'), c('vault')],
+    difficulty: 'Defensive',
+  },
+  {
+    id: 'resonance-cascade',
+    name: 'Resonance Cascade',
+    flavor: 'Three Echos firing in sync. Their chains weave through your squad. Silence them or be overwhelmed.',
+    squad: [c('conduit'), c('nexus'), c('link')],
+    difficulty: 'Aggressive',
+  },
+  {
+    id: 'extinction-event',
+    name: 'Extinction Event',
+    flavor: 'One Guardian holding five Sparks. Each ally fall feeds their flame. Breaks you or breaks itself.',
+    squad: [c('vault'), c('spark'), c('flicker'), c('cinder'), c('spark'), c('flicker')],
+    difficulty: 'Aggressive',
+  },
+  {
+    id: 'precision',
+    name: 'Precision',
+    flavor: 'Four Swifts hunting wounded prey. They chain executes. One mistake opens the kill window.',
+    squad: [c('fang'), c('striker'), c('claw'), c('fang')],
+    difficulty: 'Aggressive',
+  },
+  {
+    id: 'siege',
+    name: 'Siege',
+    flavor: 'Two iron Guardians with two Echo supports. Walls that echo. Unstoppable formation.',
+    squad: [c('vault'), c('bastion'), c('conduit'), c('nexus')],
+    difficulty: 'Defensive',
+  },
 ];
