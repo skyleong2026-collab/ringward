@@ -52,7 +52,7 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
       gap: 7,
       position: 'relative',
       ...aura,
-      animation: bouncing ? 'card-bounce 0.4s ease-out' : 'none',
+      animation: bouncing ? 'card-bounce 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), level-flash 0.5s ease-out' : 'none',
     }}>
       {inSquad && (
         <div style={{
@@ -64,11 +64,14 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
 
       <div>
         <div style={{
-          fontSize: 12, fontWeight: 900, color: '#eee',
+          fontSize: 12, fontWeight: 900, color: unit.survivalCount >= 5 ? '#d4af37' : '#eee',
           letterSpacing: 0.5,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          textShadow: unit.survivalCount >= 10 ? '0 0 8px rgba(212,175,55,0.4)' : 'none',
         }}>
           {unit.name}
+          {unit.survivalCount >= 10 && ' ⚔'}
+          {unit.survivalCount >= 5 && unit.survivalCount < 10 && ' •'}
         </div>
         <div style={{ fontSize: 9, color: arch.color, letterSpacing: 1, marginTop: 1 }}>
           {ARCHETYPE_ABBR[unit.archetype]}
@@ -77,7 +80,27 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
               ·{unit.feedHistory.length} fed
             </span>
           )}
+          {unit.survivalCount > 0 && (
+            <span style={{ color: '#d4af37', marginLeft: 5 }}>
+              ·{unit.survivalCount} survived
+            </span>
+          )}
         </div>
+        {unit.foundAt && (
+          <div style={{ fontSize: 8, color: '#3a6a4a', letterSpacing: 0.5, marginTop: 1 }}>
+            ∘ {unit.foundAt}
+          </div>
+        )}
+        {unit.battleCount > 0 && (
+          <div style={{ fontSize: 8, color: '#888', marginTop: 2, lineHeight: 1.2 }}>
+            <div>{unit.winCount}-{unit.battleCount - unit.winCount} record · {unit.survivalStreak} streak</div>
+            {unit.enemyMemory && unit.enemyMemory.length > 0 && (
+              <div style={{ color: '#666', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                vs {unit.enemyMemory.slice(0, 2).join(', ')}{unit.enemyMemory.length > 2 ? '...' : ''}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <XpBar xp={unit.xp} />
@@ -129,7 +152,7 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, justFedInstanceId }) {
+export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, justFedInstanceId }) {
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
   const squadFull = squadIds.length >= 8;
@@ -142,24 +165,43 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
         <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
           SQUAD — {squadIds.length}/8
         </div>
-        <button
-          onClick={onEncounters}
-          disabled={squadIds.length === 0}
-          style={{
-            padding: '9px 16px',
-            background: squadIds.length > 0 ? '#e86040' : '#111',
-            border: 'none',
-            borderRadius: 7,
-            color: squadIds.length > 0 ? '#fff' : '#333',
-            fontSize: 11,
-            fontWeight: 900,
-            letterSpacing: 1.5,
-            cursor: squadIds.length > 0 ? 'pointer' : 'default',
-            textTransform: 'uppercase',
-          }}
-        >
-          Battle →
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onWalk}
+            style={{
+              padding: '9px 14px',
+              background: 'none',
+              border: '1px solid #2a4a3a',
+              borderRadius: 7,
+              color: '#3a6a4a',
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: 1.5,
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            Walk
+          </button>
+          <button
+            onClick={onEncounters}
+            disabled={squadIds.length === 0}
+            style={{
+              padding: '9px 14px',
+              background: squadIds.length > 0 ? '#e86040' : '#111',
+              border: 'none',
+              borderRadius: 7,
+              color: squadIds.length > 0 ? '#fff' : '#333',
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: 1.5,
+              cursor: squadIds.length > 0 ? 'pointer' : 'default',
+              textTransform: 'uppercase',
+            }}
+          >
+            Battle →
+          </button>
+        </div>
       </div>
 
       {/* Active squad */}

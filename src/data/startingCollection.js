@@ -9,7 +9,14 @@ function inst(creature, instanceId) {
     xp: 0,
     level: 1,
     feedCount: 0,
-    feedHistory: [], // [{ archetype, creatureName }]
+    feedHistory: [],
+    survivalCount: 0,
+    revivals: 0,
+    battleCount: 0,
+    winCount: 0,
+    survivalStreak: 0,
+    enemyMemory: [],
+    foundAt: null,
   };
 }
 

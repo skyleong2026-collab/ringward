@@ -1,5 +1,43 @@
 import { ARCHETYPES } from '../data/creatures.js';
 
+function computeCarryHighlight(squadA) {
+  for (const u of squadA) {
+    if (u.archetype === 'Ember' && u.stokeStacks >= 6 && u.tel.damagePercent >= 30) {
+      return {
+        name: u.name,
+        label: 'CARRIED',
+        line: `${u.stokeStacks} stacks reached. ${u.tel.damagePercent}% of squad damage.`,
+        color: '#f5a623',
+      };
+    }
+    if (u.archetype === 'Predator' && u.tel.executeKills >= 2) {
+      return {
+        name: u.name,
+        label: 'DELIVERED',
+        line: `${u.tel.executeKills} execute kills. Largest hit: ${Math.round(u.tel.largestHit)}.`,
+        color: '#d0021b',
+      };
+    }
+    if (u.archetype === 'Relay' && u.tel.echoEvents >= 10) {
+      return {
+        name: u.name,
+        label: 'CASCADED',
+        line: `${u.tel.echoEvents} echoes fired. +${Math.round(u.tel.echoDamage)} bonus damage.`,
+        color: '#7ed321',
+      };
+    }
+    if (u.archetype === 'Anchor' && u.tel.shieldAbsorbed >= 60 && u.alive) {
+      return {
+        name: u.name,
+        label: 'HELD',
+        line: `Absorbed ${Math.round(u.tel.shieldAbsorbed)} damage. Held to the end.`,
+        color: '#4a90d9',
+      };
+    }
+  }
+  return null;
+}
+
 function UnitRow({ unit, isWinnerSquad, xpGain }) {
   const color = ARCHETYPES[unit.archetype].color;
   const t = unit.tel;
@@ -78,6 +116,7 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
 
   const winnerLabel = winner === 'A' ? 'SQUAD A' : 'SQUAD B';
   const winColor = '#7ed321';
+  const carryHighlight = computeCarryHighlight(squadA);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -100,6 +139,39 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
           <span style={{ fontFamily: 'monospace', fontSize: 11 }}>seed:{seed.toString(16).toUpperCase().padStart(8, '0')}</span>
         </div>
       </div>
+
+      {/* Carry highlight */}
+      {carryHighlight && (
+        <div style={{
+          background: carryHighlight.color + '0a',
+          border: `1px solid ${carryHighlight.color}28`,
+          borderRadius: 7,
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+              <span style={{ fontSize: 14, fontWeight: 900, color: carryHighlight.color, letterSpacing: 1 }}>
+                {carryHighlight.name}
+              </span>
+              <span style={{
+                fontSize: 8,
+                color: carryHighlight.color,
+                background: carryHighlight.color + '15',
+                border: `1px solid ${carryHighlight.color}35`,
+                borderRadius: 3,
+                padding: '1px 5px',
+                letterSpacing: 1,
+              }}>
+                {carryHighlight.label}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: '#666' }}>{carryHighlight.line}</div>
+          </div>
+        </div>
+      )}
 
       {/* Per-unit breakdown */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

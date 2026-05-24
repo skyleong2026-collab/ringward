@@ -24,9 +24,12 @@ function EnemyUnitChip({ unit }) {
   );
 }
 
-function EncounterCard({ encounter, playerSquadSize, onRun }) {
+function EncounterCard({ encounter, playerSquadSize, onRun, history }) {
   const diff = encounter.difficulty;
   const diffColor = DIFFICULTY_COLOR[diff] || '#888';
+  const record = history?.[encounter.id];
+  const totalFights = (record?.wins || 0) + (record?.losses || 0);
+
   return (
     <div style={{
       background: '#0d0d18',
@@ -38,9 +41,16 @@ function EncounterCard({ encounter, playerSquadSize, onRun }) {
       gap: 10,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: 15, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>
-          {encounter.name}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>
+            {encounter.name}
+          </span>
+          {totalFights > 0 && (
+            <span style={{ fontSize: 9, color: '#666' }}>
+              {record.wins}-{record.losses} record
+            </span>
+          )}
+        </div>
         <span style={{
           fontSize: 9,
           color: diffColor,
@@ -87,7 +97,7 @@ function EncounterCard({ encounter, playerSquadSize, onRun }) {
   );
 }
 
-export default function EncounterScreen({ encounters, playerSquadSize, onRun, onBack }) {
+export default function EncounterScreen({ encounters, playerSquadSize, onRun, onBack, encounterHistory }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
@@ -115,6 +125,7 @@ export default function EncounterScreen({ encounters, playerSquadSize, onRun, on
           encounter={enc}
           playerSquadSize={playerSquadSize}
           onRun={onRun}
+          history={encounterHistory}
         />
       ))}
     </div>

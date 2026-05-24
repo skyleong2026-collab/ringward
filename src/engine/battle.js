@@ -357,14 +357,28 @@ export function battle(squadA, squadB, seed) {
     }
   }
 
-  // Compute XP rewards for player squad (squadA)
+  // Compute XP rewards and survival tracking for player squad (squadA)
   const playerWon = winner === 'A';
   const xpRewards = {};
+  const survivalUpdates = {};
+  const battleUpdates = {};
+
   for (const unit of unitsA) {
     let xp = 15; // participation base
-    if (unit.alive) xp += 5; // survival bonus
+    if (unit.alive) {
+      xp += 5; // survival bonus
+      survivalUpdates[unit.instanceId] = 1; // increment survival count
+    }
     if (playerWon) xp += 5; // victory bonus
     xpRewards[unit.instanceId] = xp;
+
+    // Battle record: track count, wins, enemy names
+    battleUpdates[unit.instanceId] = {
+      battleCount: 1,
+      winCount: playerWon ? 1 : 0,
+      alive: unit.alive,
+      enemyNames: unitsB.map(e => e.name),
+    };
   }
 
   return {
@@ -376,5 +390,7 @@ export function battle(squadA, squadB, seed) {
     battleLog,
     seed,
     xpRewards,
+    survivalUpdates,
+    battleUpdates,
   };
 }
