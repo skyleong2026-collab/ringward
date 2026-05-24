@@ -26,6 +26,99 @@ function findDeathCause(unitName, battleLog) {
   return null;
 }
 
+function computeStats(squad, battleLog) {
+  const stats = {};
+  for (const unit of squad) {
+    let kills = 0;
+    let timesAttacked = 0;
+    if (battleLog) {
+      for (const { events } of battleLog) {
+        for (const e of events) {
+          if (e.actorName === unit.name && e.killed) kills += 1;
+          if (e.targetName === unit.name && e.damage > 0) timesAttacked += 1;
+        }
+      }
+    }
+    stats[unit.name] = { kills, timesAttacked };
+  }
+  return stats;
+}
+
+function findFirstElimination(battleLog) {
+  if (!battleLog) return null;
+  for (const { round, events } of battleLog) {
+    for (const e of events) {
+      if (e.killed) return { unitName: e.targetName, round };
+    }
+  }
+  return null;
+}
+
+function computeMVP(squad, battleLog) {
+  const stats = computeStats(squad, battleLog);
+  let mvp = null;
+  let maxScore = -1;
+  for (const unit of squad) {
+    const s = stats[unit.name];
+    const score = (unit.tel?.damageDealt || 0) + (s.kills * 80);
+    if (score > maxScore) {
+      maxScore = score;
+      mvp = { name: unit.name, damage: unit.tel?.damageDealt || 0, kills: s.kills };
+    }
+  }
+  return mvp;
+}
+
+function MatchStats({ squadA, squadB, battleLog, winner }) {
+  const mvp = computeMVP(squadA, battleLog);
+  const firstKill = findFirstElimination(battleLog);
+  const statsA = computeStats(squadA, battleLog);
+  const statsB = computeStats(squadB, battleLog);
+  const totalKillsA = Object.values(statsA).reduce((sum, s) => sum + s.kills, 0);
+  const totalKillsB = Object.values(statsB).reduce((sum, s) => sum + s.kills, 0);
+
+  return (
+    <div style={{ background: '#0a0a14', border: '1px solid #1a1a2a', borderRadius: 8, padding: '12px 14px' }}>
+      <div style={{ fontSize: 10, color: '#444', letterSpacing: 2, marginBottom: 10 }}>MATCH STATS</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {mvp && (
+          <div>
+            <div style={{ fontSize: 8, color: '#666' }}>MVP</div>
+            <div style={{ fontSize: 12, color: '#eee', marginTop: 3, fontWeight: 600 }}>
+              {mvp.name}
+            </div>
+            <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>
+              {Math.round(mvp.damage)} damage · {mvp.kills} kill{mvp.kills !== 1 ? 's' : ''}
+            </div>
+          </div>
+        )}
+        {firstKill && (
+          <div>
+            <div style={{ fontSize: 8, color: '#666' }}>FIRST ELIMINATION</div>
+            <div style={{ fontSize: 12, color: '#d0021b', marginTop: 3 }}>
+              {firstKill.unitName}
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: '1px solid #1a1a2a', paddingTop: 10 }}>
+          <div>
+            <div style={{ fontSize: 8, color: '#666' }}>SQUAD A</div>
+            <div style={{ fontSize: 11, color: '#7ed321', marginTop: 4, fontWeight: 600 }}>
+              {totalKillsA} kill{totalKillsA !== 1 ? 's' : ''}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 8, color: '#666' }}>SQUAD B</div>
+            <div style={{ fontSize: 11, color: '#d0021b', marginTop: 4, fontWeight: 600 }}>
+              {totalKillsB} kill{totalKillsB !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CombatLog({ battleLog }) {
   const [showAll, setShowAll] = useState(false);
 
@@ -134,6 +227,7 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
   const t = unit.tel;
   const survived = unit.alive;
   const deathCause = !survived ? findDeathCause(unit.name, battleLog) : null;
+  const stats = computeStats([unit], battleLog)[unit.name] || { kills: 0, timesAttacked: 0 };
 
   function archetypeDetail() {
     switch (unit.archetype) {
@@ -188,9 +282,11 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
           {survived ? '✓ survived' : `fell rnd ${t.fell ?? '?'}`}
         </span>
       </div>
-      <div style={{ fontSize: 11, color: '#888', display: 'flex', gap: 12, marginBottom: 3 }}>
+      <div style={{ fontSize: 11, color: '#888', display: 'flex', gap: 12, marginBottom: 3, flexWrap: 'wrap' }}>
         <span>Dealt <strong style={{ color: '#ccc' }}>{Math.round(t.damageDealt)}</strong></span>
         <span>Took <strong style={{ color: '#ccc' }}>{Math.round(t.damageTaken)}</strong></span>
+        <span>Kills <strong style={{ color: '#7ed321' }}>{stats.kills}</strong></span>
+        <span>Attacked <strong style={{ color: '#888' }}>{stats.timesAttacked}×</strong></span>
         {xpGain !== undefined && (
           <span style={{ marginLeft: 'auto', color: '#7ed321' }}>
             +{xpGain} XP
@@ -266,6 +362,9 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
           <span style={{ fontFamily: 'monospace', fontSize: 11 }}>seed:{seed.toString(16).toUpperCase().padStart(8, '0')}</span>
         </div>
       </div>
+
+      {/* Match stats */}
+      <MatchStats squadA={squadA} squadB={squadB} battleLog={battleLog} winner={winner} />
 
       {/* Carry highlight */}
       {carryHighlight && (
