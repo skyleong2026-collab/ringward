@@ -18,6 +18,7 @@ function inst(creature, instanceId) {
     enemyMemory: [],
     foundAt: null,
     coreId: null,
+    moduleId: null,
   };
 }
 

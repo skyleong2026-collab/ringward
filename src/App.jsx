@@ -120,6 +120,16 @@ function App() {
     });
   }
 
+  function equipModule(instanceId, moduleId) {
+    setCollection((prev) => {
+      const next = prev.map((u) =>
+        u.instanceId === instanceId ? { ...u, moduleId: moduleId ?? null } : u
+      );
+      persist(next, squadIds);
+      return next;
+    });
+  }
+
   function openFeed(unit) {
     setFeedTarget(unit);
   }
@@ -356,6 +366,7 @@ function App() {
             onWalk={() => setScreen('world')}
             justFedInstanceId={justFedInstanceId}
             onEquipCore={equipCore}
+            onEquipModule={equipModule}
           />
         )}
         {screen === 'encounters' && (

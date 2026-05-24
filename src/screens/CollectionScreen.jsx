@@ -1,5 +1,6 @@
 import { ARCHETYPES } from '../data/creatures.js';
 import { CORES } from '../data/cores.js';
+import { MODULES } from '../data/modules.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
 import { useState, useEffect } from 'react';
 
@@ -115,7 +116,76 @@ function CoreSelectModal({ unit, onEquipCore, onClose }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenCoreModal }) {
+function ModuleSelectModal({ unit, onEquipModule, onClose }) {
+  const allModules = Object.values(MODULES);
+  const modules = allModules.length > 0 ? allModules : [];
+
+  function renderModule(mod, i) {
+    const equipped = unit.moduleId === mod.id;
+    return (
+      <div
+        key={mod.id}
+        onClick={() => { onEquipModule(unit.instanceId, equipped ? null : mod.id); onClose(); }}
+        style={{
+          background: equipped ? mod.color + '18' : '#0d0d18',
+          border: `1px solid ${equipped ? mod.color + '55' : '#2a2a3a'}`,
+          borderRadius: 7,
+          padding: '10px 12px',
+          cursor: 'pointer',
+          marginBottom: 6,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontWeight: 700, fontSize: 12, color: mod.color, letterSpacing: 0.5 }}>{mod.name}</span>
+          {equipped && <span style={{ fontSize: 8, color: mod.color, letterSpacing: 1 }}>EQUIPPED</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 8, color: mod.color, background: mod.color + '18', border: `1px solid ${mod.color}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1, flexShrink: 0 }}>
+            {mod.category}
+          </span>
+          <div style={{ fontSize: 9, color: '#666' }}>{mod.description}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#0a0a14', border: '1px solid #2a2a3a', borderRadius: 10, padding: 16, maxWidth: 340, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP MODULE</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#eee', marginTop: 2 }}>{unit.name}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#444', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>×</button>
+        </div>
+
+        {modules.map((mod, i) => renderModule(mod, i))}
+
+        {unit.moduleId && (
+          <button
+            onClick={() => { onEquipModule(unit.instanceId, null); onClose(); }}
+            style={{
+              width: '100%', marginTop: 6, padding: '8px',
+              background: 'none', border: '1px solid #2a2a3a', borderRadius: 6,
+              color: '#444', fontSize: 11, cursor: 'pointer', letterSpacing: 1,
+            }}
+          >
+            Remove Module
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenCoreModal, onOpenModuleModal }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
@@ -191,23 +261,42 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
         )}
       </div>
 
-      <div
-        onClick={() => onOpenCoreModal(unit)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 0',
-          borderTop: '1px solid #111',
-          cursor: 'pointer',
-        }}
-      >
-        <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>CORE</span>
-        {unit.coreId ? (
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: CORES[unit.coreId]?.color || '#888' }}>
-            {CORES[unit.coreId]?.name || unit.coreId}
-          </span>
-        ) : (
-          <span style={{ fontSize: 9, color: '#222' }}>tap to equip</span>
-        )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #111', paddingTop: '4px' }}>
+        <div
+          onClick={() => onOpenCoreModal(unit)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '4px 0',
+            cursor: 'pointer',
+          }}
+        >
+          <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>CORE</span>
+          {unit.coreId ? (
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: CORES[unit.coreId]?.color || '#888' }}>
+              {CORES[unit.coreId]?.name || unit.coreId}
+            </span>
+          ) : (
+            <span style={{ fontSize: 9, color: '#222' }}>tap to equip</span>
+          )}
+        </div>
+
+        <div
+          onClick={() => onOpenModuleModal(unit)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '4px 0',
+            cursor: 'pointer',
+          }}
+        >
+          <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>MODULE</span>
+          {unit.moduleId ? (
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: MODULES[unit.moduleId]?.color || '#888' }}>
+              {MODULES[unit.moduleId]?.name || unit.moduleId}
+            </span>
+          ) : (
+            <span style={{ fontSize: 9, color: '#222' }}>tap to equip</span>
+          )}
+        </div>
       </div>
 
       <XpBar xp={unit.xp} />
@@ -259,8 +348,9 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, justFedInstanceId, onEquipCore }) {
+export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, justFedInstanceId, onEquipCore, onEquipModule }) {
   const [coreModalUnit, setCoreModalUnit] = useState(null);
+  const [moduleModalUnit, setModuleModalUnit] = useState(null);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
   const squadFull = squadIds.length >= 8;
@@ -334,6 +424,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
               canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
               justFed={justFedInstanceId === u.instanceId}
               onOpenCoreModal={(u) => setCoreModalUnit(u)}
+              onOpenModuleModal={(u) => setModuleModalUnit(u)}
             />
           ))}
         </div>
@@ -362,6 +453,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
                 canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
                 justFed={justFedInstanceId === u.instanceId}
                 onOpenCoreModal={(u) => setCoreModalUnit(u)}
+                onOpenModuleModal={(u) => setModuleModalUnit(u)}
               />
             ))}
           </div>
@@ -372,6 +464,13 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
           unit={coreModalUnit}
           onEquipCore={onEquipCore}
           onClose={() => setCoreModalUnit(null)}
+        />
+      )}
+      {moduleModalUnit && onEquipModule && (
+        <ModuleSelectModal
+          unit={moduleModalUnit}
+          onEquipModule={onEquipModule}
+          onClose={() => setModuleModalUnit(null)}
         />
       )}
     </div>
