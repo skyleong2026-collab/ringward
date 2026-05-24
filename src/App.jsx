@@ -7,16 +7,19 @@ import WildHunt from './screens/WildHunt.jsx';
 import CatchResult from './screens/CatchResult.jsx';
 import FeedModal from './screens/FeedModal.jsx';
 import Result from './screens/Result.jsx';
+import DungeonScreen from './screens/DungeonScreen.jsx';
+import DungeonResult from './screens/DungeonResult.jsx';
 import { battle } from './engine/battle.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
-import { ZONES } from './data/zones.js';
+import { DUNGEONS } from './data/dungeons.js';
+import { ARCHETYPES } from './data/creatures.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vG-C';
+const VERSION = 'vH-A';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -80,6 +83,10 @@ function App() {
   const [currentZone, setCurrentZone] = useState(null);
   const [currentWildTarget, setCurrentWildTarget] = useState(null);
   const [catchResult, setCatchResult] = useState(null);
+
+  // ── Dungeon run state ────────────────────────────────────────────────────
+  // { dungeon, nodeIndex, hpOverrides: {instanceId: hp}, runLog: [{encounterId, won, xpEarned, isBoss, hpSnapshot}], failed, failedAt }
+  const [dungeonRun, setDungeonRun] = useState(null);
 
   const [encounterHistory, setEncounterHistory] = useState(() => {
     try {
@@ -172,6 +179,21 @@ function App() {
     setScreen('wildhunt');
   }
 
+  function enterGpsSpawn(spawn) {
+    const color = ARCHETYPES[spawn.creature.archetype]?.color || '#6a6a8a';
+    const syntheticZone = {
+      id: spawn.cellKey,
+      name: spawn.zoneName,
+      description: spawn.creature.flavor,
+      nature: spawn.creature.archetype,
+      color,
+      pool: [spawn.creature],
+    };
+    setCurrentZone(syntheticZone);
+    setCurrentWildTarget(spawn.creature);
+    setScreen('wildhunt');
+  }
+
   function commitHunt() {
     const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
     const seed = randomSeed();
@@ -224,7 +246,13 @@ function App() {
   }
 
   function commitBattle() {
-    const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
+    let playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
+    if (dungeonRun) {
+      playerSquad = playerSquad.map((u) => {
+        const hp = dungeonRun.hpOverrides[u.instanceId];
+        return hp !== undefined ? { ...u, currentHP: hp } : u;
+      });
+    }
     const seed = randomSeed();
     const res = battle(playerSquad, currentEncounter.squad, seed);
     setResult(res);
@@ -317,6 +345,100 @@ function App() {
     setScreen('collection');
   }
 
+  // ── Dungeon functions ────────────────────────────────────────────────────
+
+  function startDungeon(dungeon) {
+    setDungeonRun({ dungeon, nodeIndex: 0, hpOverrides: {}, runLog: [], failed: false, failedAt: null });
+    setScreen('dungeon');
+  }
+
+  function selectDungeonEncounter(encounterId) {
+    const encounter = ENCOUNTERS.find((e) => e.id === encounterId);
+    setCurrentEncounter(encounter);
+    setScreen('prebattle');
+  }
+
+  function applyXpFromResult(res) {
+    if (!res?.xpRewards) return;
+    setCollection((prev) => {
+      const next = prev.map((u) => {
+        const xpGain = res.xpRewards[u.instanceId];
+        if (!xpGain) return u;
+        const newXp = u.xp + xpGain;
+        const battleUpdate = res.battleUpdates?.[u.instanceId];
+        const newSurvivalStreak = battleUpdate?.alive ? (u.survivalStreak || 0) + 1 : 0;
+        const newEnemyMemory = battleUpdate?.enemyNames
+          ? [...(u.enemyMemory || []), ...battleUpdate.enemyNames].filter((v, i, a) => a.indexOf(v) === i)
+          : u.enemyMemory;
+        return {
+          ...u,
+          xp: newXp,
+          level: getLevel(newXp),
+          survivalCount: (u.survivalCount || 0) + (res.survivalUpdates?.[u.instanceId] || 0),
+          battleCount: (u.battleCount || 0) + (battleUpdate?.battleCount || 0),
+          winCount: (u.winCount || 0) + (battleUpdate?.winCount || 0),
+          survivalStreak: newSurvivalStreak,
+          enemyMemory: newEnemyMemory,
+        };
+      });
+      persist(next, squadIds);
+      return next;
+    });
+  }
+
+  function handleDungeonContinue() {
+    if (!dungeonRun || !result || !currentEncounter) return;
+    applyXpFromResult(result);
+
+    const newHpOverrides = { ...dungeonRun.hpOverrides };
+    for (const unit of result.telemetry.squadA) {
+      newHpOverrides[unit.instanceId] = Math.max(1, Math.round(unit.currentHP));
+    }
+
+    const xpEarned = Object.values(result.xpRewards || {}).reduce((s, v) => s + v, 0);
+    const isBoss = dungeonRun.dungeon.nodes[dungeonRun.nodeIndex].type === 'boss';
+    const hpSnapshot = {};
+    for (const unit of result.telemetry.squadA) {
+      hpSnapshot[unit.instanceId] = { current: Math.round(unit.currentHP), max: unit.maxHP, pct: unit.currentHP / unit.maxHP };
+    }
+    const newLog = [...dungeonRun.runLog, { encounterId: currentEncounter.id, won: true, xpEarned, isBoss, hpSnapshot }];
+    const nextNodeIndex = dungeonRun.nodeIndex + 1;
+
+    setResult(null);
+    setCurrentEncounter(null);
+
+    if (nextNodeIndex >= dungeonRun.dungeon.nodes.length) {
+      setDungeonRun((prev) => ({ ...prev, nodeIndex: nextNodeIndex, hpOverrides: newHpOverrides, runLog: newLog, complete: true }));
+      setScreen('dungeonresult');
+    } else {
+      setDungeonRun((prev) => ({ ...prev, nodeIndex: nextNodeIndex, hpOverrides: newHpOverrides, runLog: newLog }));
+      setScreen('dungeon');
+    }
+  }
+
+  function handleDungeonFail() {
+    if (!dungeonRun) return;
+    const isBoss = currentEncounter && dungeonRun.dungeon.nodes[dungeonRun.nodeIndex]?.type === 'boss';
+    const newLog = currentEncounter
+      ? [...dungeonRun.runLog, { encounterId: currentEncounter.id, won: false, xpEarned: 0, isBoss: !!isBoss }]
+      : dungeonRun.runLog;
+    setDungeonRun((prev) => ({ ...prev, runLog: newLog, failed: true, failedAt: currentEncounter?.id || null }));
+    setResult(null);
+    setCurrentEncounter(null);
+    setScreen('dungeonresult');
+  }
+
+  function handleDungeonResultDone() {
+    setDungeonRun(null);
+    setScreen('collection');
+  }
+
+  function handleDungeonRunAgain() {
+    const dungeon = dungeonRun?.dungeon;
+    setDungeonRun(null);
+    if (dungeon) startDungeon(dungeon);
+  }
+
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
 
   return (
@@ -364,6 +486,7 @@ function App() {
             onFeed={openFeed}
             onEncounters={() => setScreen('encounters')}
             onWalk={() => setScreen('world')}
+            onDungeon={() => setScreen('dungeon')}
             justFedInstanceId={justFedInstanceId}
             onEquipCore={equipCore}
             onEquipModule={equipModule}
@@ -380,8 +503,7 @@ function App() {
         )}
         {screen === 'world' && (
           <WorldScreen
-            zones={ZONES}
-            onSelectZone={enterZone}
+            onSelectSpawn={enterGpsSpawn}
             onBack={() => setScreen('collection')}
           />
         )}
@@ -418,14 +540,38 @@ function App() {
             encounter={currentEncounter}
             playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
             onCommit={commitBattle}
-            onBack={() => setScreen('encounters')}
+            onBack={() => dungeonRun ? setScreen('dungeon') : setScreen('encounters')}
           />
         )}
         {screen === 'result' && result && (
           <Result
             result={result}
-            onTryAgain={handleTryAgain}
-            onNewBattle={handleNewBattle}
+            onTryAgain={dungeonRun ? null : handleTryAgain}
+            onNewBattle={dungeonRun ? null : handleNewBattle}
+            onDungeonContinue={dungeonRun ? handleDungeonContinue : null}
+            onDungeonFail={dungeonRun ? handleDungeonFail : null}
+          />
+        )}
+        {screen === 'dungeon' && (
+          <DungeonScreen
+            dungeons={DUNGEONS}
+            dungeonRun={dungeonRun}
+            collection={collection}
+            squadIds={squadIds}
+            onStart={startDungeon}
+            onSelectEncounter={selectDungeonEncounter}
+            onAbandon={handleDungeonFail}
+            onBack={() => setScreen('collection')}
+          />
+        )}
+        {screen === 'dungeonresult' && dungeonRun && (
+          <DungeonResult
+            dungeonRun={dungeonRun}
+            runLog={dungeonRun.runLog}
+            collection={collection}
+            squadIds={squadIds}
+            onRunAgain={handleDungeonRunAgain}
+            onReturn={handleDungeonResultDone}
           />
         )}
       </main>

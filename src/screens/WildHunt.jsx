@@ -1,10 +1,10 @@
 import { ARCHETYPES } from '../data/creatures.js';
 
 const ARCHETYPE_IMPLICATION = {
-  Anchor:   'Draws all incoming fire',
-  Predator: 'Hunts wounded targets',
-  Ember:    'Scales with each round survived',
-  Relay:    'Amplifies every allied action',
+  Guardian: 'Draws all incoming fire',
+  Swift:    'Hunts wounded targets',
+  Spark:    'Scales with each round survived',
+  Echo:     'Amplifies every allied action',
 };
 
 function SquadChip({ unit }) {

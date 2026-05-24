@@ -253,7 +253,7 @@ export function battle(squadA, squadB, seed) {
   const initUnit = (creature, squad) => ({
     ...creature,
     squad,
-    currentHP: creature.hp,
+    currentHP: creature.currentHP ?? creature.hp,
     maxHP: creature.hp,
     currentAttack: creature.attack,
     shield: 0,

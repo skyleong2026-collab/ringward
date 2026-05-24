@@ -334,7 +334,7 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
   );
 }
 
-export default function Result({ result, onTryAgain, onNewBattle }) {
+export default function Result({ result, onTryAgain, onNewBattle, onDungeonContinue, onDungeonFail }) {
   const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, coreProcs, battleLog } = result;
   const { squadA, squadB } = telemetry;
 
@@ -507,6 +507,46 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
 
       {/* Actions */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {onDungeonContinue ? (
+          // ── Dungeon mode ──
+          winner === 'A' ? (
+            <>
+              <button
+                onClick={onDungeonFail}
+                style={{
+                  padding: '12px', background: 'none', border: '1px solid #2a2a3a',
+                  borderRadius: 8, color: '#444', fontSize: 11, fontWeight: 700,
+                  letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+                }}
+              >
+                Abandon Run
+              </button>
+              <button
+                onClick={onDungeonContinue}
+                style={{
+                  padding: '12px', background: '#e86040', border: 'none',
+                  borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700,
+                  letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+                }}
+              >
+                Continue →
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onDungeonFail}
+              style={{
+                gridColumn: '1 / -1', padding: '12px', background: '#1a0d0d',
+                border: '1px solid #d0021b44', borderRadius: 8, color: '#d0021b',
+                fontSize: 13, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+              }}
+            >
+              End Run
+            </button>
+          )
+        ) : (
+          // ── Normal mode ──
+          <>
         <button
           onClick={onTryAgain}
           style={{
@@ -541,6 +581,8 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
         >
           New Battle
         </button>
+          </>
+        )}
       </div>
     </div>
   );
