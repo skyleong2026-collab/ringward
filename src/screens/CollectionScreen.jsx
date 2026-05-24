@@ -26,7 +26,7 @@ function XpBar({ xp }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, feedDisabled }) {
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
@@ -90,24 +90,31 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, feedDisable
           {inSquad ? 'Remove' : squadFull ? 'Full' : 'Squad →'}
         </button>
         <button
-          onClick={() => !feedDisabled && onFeed(unit)}
-          disabled={feedDisabled}
+          onClick={() => canFeed && onFeed(unit)}
+          disabled={!canFeed}
           style={{
             padding: '6px 4px',
-            background: feedDisabled ? '#0d0d18' : '#1a2a1a',
-            border: `1px solid ${feedDisabled ? '#1e1e2e' : '#2a4a2a'}`,
+            background: canFeed ? '#1a2a1a' : '#0d0d18',
+            border: `1px solid ${canFeed ? '#2a4a2a' : '#1e1e2e'}`,
             borderRadius: 5,
-            color: feedDisabled ? '#333' : '#7ed321',
+            color: canFeed ? '#7ed321' : '#333',
             fontSize: 9,
             fontWeight: 700,
             letterSpacing: 0.5,
-            cursor: feedDisabled ? 'default' : 'pointer',
+            cursor: canFeed ? 'pointer' : 'default',
           }}
         >
-          Feed
+          Level up
         </button>
       </div>
     </div>
+  );
+}
+
+function hasSameSpeciesToFeed(unit, collection, squadIds) {
+  // A unit can level up if at least one OTHER unit of the same creature id exists in reserve
+  return collection.some(
+    (u) => u.id === unit.id && u.instanceId !== unit.instanceId && !squadIds.includes(u.instanceId)
   );
 }
 
@@ -163,7 +170,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
               squadFull={squadFull}
               onToggleSquad={onToggleSquad}
               onFeed={onFeed}
-              feedDisabled={reserve.length === 0}
+              canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
             />
           ))}
         </div>
@@ -189,7 +196,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
                 squadFull={squadFull}
                 onToggleSquad={onToggleSquad}
                 onFeed={onFeed}
-                feedDisabled={reserve.length <= 1}
+                canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
               />
             ))}
           </div>

@@ -38,7 +38,7 @@ function FodderCard({ unit, selected, onToggle, isLastCopy }) {
   );
 }
 
-export default function FeedModal({ target, availableFodder, allCollection, onConfirm, onClose }) {
+export default function FeedModal({ target, availableFodder, allCollection, squadIds, onConfirm, onClose }) {
   const [selectedIds, setSelectedIds] = useState([]);
 
   const countInCollection = (creatureId) =>
@@ -65,7 +65,10 @@ export default function FeedModal({ target, availableFodder, allCollection, onCo
   const gainXp = selectedIds.length * XP_PER_FEED;
   const newXp = target.xp + gainXp;
   const newProg = xpProgress(newXp);
-  const dominated = availableFodder.filter((u) => u.instanceId !== target.instanceId);
+  // Same-species only, from reserve (not squad), excluding the target itself
+  const dominated = availableFodder.filter(
+    (u) => u.instanceId !== target.instanceId && u.id === target.id && !squadIds.includes(u.instanceId)
+  );
   const hasLastCopySelected = selectedIds.some((id) => {
     const u = availableFodder.find((f) => f.instanceId === id);
     return u && isLastCopy(u);
@@ -90,7 +93,7 @@ export default function FeedModal({ target, availableFodder, allCollection, onCo
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>
-              Feed into {target.name}
+              Level up {target.name}
             </div>
             <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
               Lv.{prog.level}
@@ -129,11 +132,11 @@ export default function FeedModal({ target, availableFodder, allCollection, onCo
 
         {/* Fodder grid */}
         <div style={{ fontSize: 10, color: '#444', letterSpacing: 2, marginBottom: 8 }}>
-          SELECT FODDER — FROM RESERVE
+          SACRIFICE — SAME SPECIES FROM RESERVE
         </div>
         {dominated.length === 0 ? (
           <div style={{ color: '#333', fontSize: 12, textAlign: 'center', padding: '20px 0' }}>
-            No reserve units available to feed.
+            No duplicate {target.name}s in reserve to sacrifice.
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>

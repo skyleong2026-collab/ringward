@@ -180,6 +180,7 @@ function App() {
           target={feedTarget}
           availableFodder={collection}
           allCollection={collection}
+          squadIds={squadIds}
           onConfirm={confirmFeed}
           onClose={() => setFeedTarget(null)}
         />
