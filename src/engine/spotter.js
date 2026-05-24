@@ -3,34 +3,34 @@ function count(squad, archetype) {
 }
 
 export function generateSpotterRead(playerSquad, enemySquad) {
-  const myAnchor    = count(playerSquad, 'Anchor');
-  const myRelay     = count(playerSquad, 'Relay');
-  const myPredator  = count(playerSquad, 'Predator');
-  const myEmber     = count(playerSquad, 'Ember');
+  const myGuardian = count(playerSquad, 'Guardian');
+  const myEcho     = count(playerSquad, 'Echo');
+  const mySwift    = count(playerSquad, 'Swift');
+  const mySpark    = count(playerSquad, 'Spark');
 
-  const theirAnchor   = count(enemySquad, 'Anchor');
-  const theirPredator = count(enemySquad, 'Predator');
-  const theirEmber    = count(enemySquad, 'Ember');
+  const theirGuardian = count(enemySquad, 'Guardian');
+  const theirSwift    = count(enemySquad, 'Swift');
+  const theirSpark    = count(enemySquad, 'Spark');
 
   const lines = [];
 
   // Line 1 — what YOUR squad is built to do
-  if (myAnchor > 0 && myEmber > 0) {
-    lines.push('Anchor buys time. Ember climbs behind it. This comp rewards fights that go long.');
-  } else if (myEmber > 0 && myAnchor === 0) {
-    lines.push('Your Ember needs time to scale. Nothing is buying it. Early pressure cuts the payoff short.');
-  } else if (myPredator >= 2 && myAnchor > 0) {
-    lines.push('Execute pressure is high here. Anchor covers the open flank.');
-  } else if (myPredator >= 2 && myAnchor === 0) {
+  if (myGuardian > 0 && mySpark > 0) {
+    lines.push('Guardian buys time. Spark climbs behind it. This comp rewards fights that go long.');
+  } else if (mySpark > 0 && myGuardian === 0) {
+    lines.push('Your Spark needs time to scale. Nothing is buying it. Early pressure cuts the payoff short.');
+  } else if (mySwift >= 2 && myGuardian > 0) {
+    lines.push('Execute pressure is high here. Guardian covers the open flank.');
+  } else if (mySwift >= 2 && myGuardian === 0) {
     lines.push('High execute potential. No stabilizer — first casualty opens a gap.');
-  } else if (myRelay > 0 && playerSquad.length - myRelay >= 4) {
+  } else if (myEcho > 0 && playerSquad.length - myEcho >= 4) {
     lines.push(
-      `Your Relay has ${playerSquad.length - myRelay} units to amplify. Echo chains should fire consistently.`
+      `Your Echo has ${playerSquad.length - myEcho} units to amplify. Echo chains should fire consistently.`
     );
-  } else if (myAnchor >= 2) {
-    lines.push('Double Anchor. Hard to break. You need sustained damage output or this stalls.');
-  } else if (myAnchor === 0) {
-    lines.push('No Anchor in your lineup. Damage lands directly. Expect early casualties.');
+  } else if (myGuardian >= 2) {
+    lines.push('Double Guardian. Hard to break. You need sustained damage output or this stalls.');
+  } else if (myGuardian === 0) {
+    lines.push('No Guardian in your lineup. Damage lands directly. Expect early casualties.');
   } else {
     lines.push('Balanced composition. No clear spike — output will be consistent, not explosive.');
   }
@@ -38,18 +38,18 @@ export function generateSpotterRead(playerSquad, enemySquad) {
   // Line 2 — matchup-specific read (intentionally silent sometimes)
   let line2 = null;
 
-  if (theirPredator >= 2 && myAnchor === 0) {
-    line2 = 'Their Predators find exposed targets immediately.';
-  } else if (myEmber > 0 && theirAnchor >= 2) {
-    line2 = 'Your Ember may outscale their wall — if it survives long enough.';
-  } else if (myPredator > 0 && theirAnchor >= 2) {
-    line2 = 'Their Anchors absorb early execute pressure. Predators need to be patient.';
-  } else if (myEmber > 0 && theirEmber > 0) {
+  if (theirSwift >= 2 && myGuardian === 0) {
+    line2 = 'Their Swifts find exposed targets immediately.';
+  } else if (mySpark > 0 && theirGuardian >= 2) {
+    line2 = 'Your Spark may outscale their wall — if it survives long enough.';
+  } else if (mySwift > 0 && theirGuardian >= 2) {
+    line2 = 'Their Guardians absorb early execute pressure. Swifts need to be patient.';
+  } else if (mySpark > 0 && theirSpark > 0) {
     line2 = 'Both sides are scaling. Who survives longer decides it.';
-  } else if (theirEmber >= 3) {
+  } else if (theirSpark >= 3) {
     line2 = 'Multiple scaling threats on their side. Individually fragile. Collectively unpredictable.';
-  } else if (myRelay > 0 && theirPredator >= 2) {
-    line2 = 'Their Predators will find your Relay once the frontline thins.';
+  } else if (myEcho > 0 && theirSwift >= 2) {
+    line2 = 'Their Swifts will find your Echo once the frontline thins.';
   }
 
   if (line2) lines.push(line2);
@@ -57,25 +57,24 @@ export function generateSpotterRead(playerSquad, enemySquad) {
   // Threat labels — relative to YOUR squad composition
   const threatLabels = {};
 
-  if (theirEmber >= 3) {
-    // Swarm: one UNSTABLE marker is enough; spotter line covers the rest
-    const idx = enemySquad.findIndex((u) => u.archetype === 'Ember');
+  if (theirSpark >= 3) {
+    const idx = enemySquad.findIndex((u) => u.archetype === 'Spark');
     if (idx >= 0) threatLabels[idx] = 'UNSTABLE';
-  } else if (theirEmber > 0 && myPredator === 0 && myAnchor === 0) {
-    const idx = enemySquad.findIndex((u) => u.archetype === 'Ember');
+  } else if (theirSpark > 0 && mySwift === 0 && myGuardian === 0) {
+    const idx = enemySquad.findIndex((u) => u.archetype === 'Spark');
     if (idx >= 0) threatLabels[idx] = 'PRIMARY THREAT';
-  } else if (theirPredator > 0 && myAnchor === 0) {
-    const idx = enemySquad.findIndex((u) => u.archetype === 'Predator');
+  } else if (theirSwift > 0 && myGuardian === 0) {
+    const idx = enemySquad.findIndex((u) => u.archetype === 'Swift');
     if (idx >= 0) threatLabels[idx] = 'PRIMARY THREAT';
-  } else if (theirEmber > 0) {
-    const eIdx = enemySquad.findIndex((u) => u.archetype === 'Ember');
+  } else if (theirSpark > 0) {
+    const eIdx = enemySquad.findIndex((u) => u.archetype === 'Spark');
     if (eIdx >= 0) threatLabels[eIdx] = 'PRIMARY THREAT';
-    if (theirAnchor > 0 && myPredator > 0) {
-      const aIdx = enemySquad.findIndex((u) => u.archetype === 'Anchor');
+    if (theirGuardian > 0 && mySwift > 0) {
+      const aIdx = enemySquad.findIndex((u) => u.archetype === 'Guardian');
       if (aIdx >= 0 && aIdx !== eIdx) threatLabels[aIdx] = 'WATCHLIST';
     }
-  } else if (theirAnchor > 0 && myPredator > 0) {
-    const idx = enemySquad.findIndex((u) => u.archetype === 'Anchor');
+  } else if (theirGuardian > 0 && mySwift > 0) {
+    const idx = enemySquad.findIndex((u) => u.archetype === 'Guardian');
     if (idx >= 0) threatLabels[idx] = 'WATCHLIST';
   }
 

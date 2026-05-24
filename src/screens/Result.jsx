@@ -1,5 +1,95 @@
+import { useState } from 'react';
 import { ARCHETYPES } from '../data/creatures.js';
 import { CORES } from '../data/cores.js';
+
+const CORE_COLORS = {
+  quickstrike: '#d0021b',
+  ironhide:    '#4a90d9',
+  lastwall:    '#ff6b35',
+  resonator:   '#7ed321',
+  chainlink:   '#a0d060',
+  kindling:    '#f5a623',
+};
+
+function findDeathCause(unitName, battleLog) {
+  if (!battleLog) return null;
+  for (let r = battleLog.length - 1; r >= 0; r--) {
+    const { events } = battleLog[r];
+    const killIdx = events.findIndex((e) => e.killed && e.targetName === unitName);
+    if (killIdx < 0) continue;
+    const killEvent = events[killIdx];
+    const preceding = events
+      .slice(Math.max(0, killIdx - 2), killIdx)
+      .filter((e) => e.targetName === unitName);
+    return { killEvent, preceding };
+  }
+  return null;
+}
+
+function CombatLog({ battleLog }) {
+  const [showAll, setShowAll] = useState(false);
+
+  function isSignificant(e) {
+    return e.killed || e.type === 'core_proc' || e.isExecute;
+  }
+
+  return (
+    <div style={{ background: '#0a0a14', border: '1px solid #1a1a2a', borderRadius: 8, padding: '12px 14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>COMBAT LOG</div>
+        <button
+          onClick={() => setShowAll((s) => !s)}
+          style={{ background: 'none', border: 'none', color: '#333', fontSize: 9, cursor: 'pointer', letterSpacing: 1, padding: 0 }}
+        >
+          {showAll ? 'KEY EVENTS' : 'ALL EVENTS'}
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {battleLog.map(({ round, events }) => {
+          const display = showAll ? events : events.filter(isSignificant);
+          if (display.length === 0) return null;
+          return (
+            <div key={round}>
+              <div style={{ fontSize: 8, color: '#1a1a3a', letterSpacing: 1.5, marginBottom: 3 }}>RND {round}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {display.map((e, i) => {
+                  const isProc = e.type === 'core_proc';
+                  const isEcho = e.type === 'echo';
+                  const procColor = isProc ? (CORE_COLORS[e.coreId] || '#888') : null;
+                  const actorColor = e.actorSquad === 'A' ? '#5a5aee' : '#ee4444';
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10 }}>
+                      {isProc && (
+                        <span style={{
+                          fontSize: 8, color: procColor,
+                          background: procColor + '18', border: `1px solid ${procColor}35`,
+                          borderRadius: 3, padding: '0 4px', letterSpacing: 0.5, flexShrink: 0,
+                        }}>
+                          {e.callout}
+                        </span>
+                      )}
+                      {isEcho && !isProc && (
+                        <span style={{ fontSize: 8, color: '#7ed32166', letterSpacing: 0.5, flexShrink: 0 }}>ECHO</span>
+                      )}
+                      {!isProc && !isEcho && e.isExecute && (
+                        <span style={{ fontSize: 8, color: '#d0021b', letterSpacing: 0.5, flexShrink: 0 }}>EXEC</span>
+                      )}
+                      <span style={{ color: actorColor, fontWeight: 600 }}>{e.actorName}</span>
+                      <span style={{ color: '#222' }}>→</span>
+                      <span style={{ color: '#555' }}>{e.targetName}</span>
+                      {e.damage > 0 && <span style={{ color: '#2a2a3a' }}>{Math.round(e.damage)}</span>}
+                      {e.killed && <span style={{ color: '#d0021b', fontWeight: 700, marginLeft: 2 }}>KILL</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function computeCarryHighlight(squadA) {
   for (const u of squadA) {
@@ -39,10 +129,11 @@ function computeCarryHighlight(squadA) {
   return null;
 }
 
-function UnitRow({ unit, isWinnerSquad, xpGain }) {
+function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
   const color = ARCHETYPES[unit.archetype].color;
   const t = unit.tel;
   const survived = unit.alive;
+  const deathCause = !survived ? findDeathCause(unit.name, battleLog) : null;
 
   function archetypeDetail() {
     switch (unit.archetype) {
@@ -107,12 +198,36 @@ function UnitRow({ unit, isWinnerSquad, xpGain }) {
         )}
       </div>
       <div style={{ fontSize: 10, color: '#555' }}>{archetypeDetail()}</div>
+      {deathCause && (
+        <div style={{ fontSize: 9, color: '#554040', marginTop: 4, lineHeight: 1.5 }}>
+          {[...deathCause.preceding, deathCause.killEvent].map((e, i) => (
+            <span key={i}>
+              {i > 0 && <span style={{ color: '#3a2a2a', margin: '0 3px' }}>→</span>}
+              <span style={{ color: '#886060' }}>
+                {e.actorName}
+                {e.callout && (
+                  <span style={{
+                    marginLeft: 4, fontSize: 8,
+                    color: CORE_COLORS[e.coreId] || '#aa6060',
+                    background: (CORE_COLORS[e.coreId] || '#aa6060') + '18',
+                    border: `1px solid ${(CORE_COLORS[e.coreId] || '#aa6060')}35`,
+                    borderRadius: 3, padding: '0 3px',
+                  }}>
+                    {e.callout}
+                  </span>
+                )}
+                {e.killed && <span style={{ color: '#d0021b', marginLeft: 4 }}>✕</span>}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function Result({ result, onTryAgain, onNewBattle }) {
-  const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, coreProcs } = result;
+  const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, coreProcs, battleLog } = result;
   const { squadA, squadB } = telemetry;
 
   const groupedProcs = (() => {
@@ -209,6 +324,9 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
         </div>
       )}
 
+      {/* Combat log */}
+      {battleLog && battleLog.length > 0 && <CombatLog battleLog={battleLog} />}
+
       {/* Per-unit breakdown */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {(['A', 'B']).map((side) => {
@@ -235,6 +353,7 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
                     unit={u}
                     isWinnerSquad={isWinner}
                     xpGain={side === 'A' ? xpRewards?.[u.instanceId] : undefined}
+                    battleLog={battleLog}
                   />
                 ))}
               </div>

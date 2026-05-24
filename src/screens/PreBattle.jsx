@@ -8,10 +8,17 @@ const THREAT_STYLE = {
 };
 
 const ARCHETYPE_IMPLICATION = {
-  Anchor:   'Draws all incoming fire',
-  Predator: 'Hunts wounded targets',
-  Ember:    'Scales with each round survived',
-  Relay:    'Amplifies every allied action',
+  Guardian: 'Draws all incoming fire',
+  Swift:    'Hunts wounded targets',
+  Spark:    'Scales with each round survived',
+  Echo:     'Amplifies every allied action',
+};
+
+const ARCHETYPE_MECHANIC = {
+  Guardian: 'Shield triggers at 50% HP',
+  Swift:    '2× execute vs targets < 30% HP',
+  Spark:    '+12% attack per round survived',
+  Echo:     'Echoes every allied attack at 50%',
 };
 
 function SquadChip({ unit }) {
@@ -61,6 +68,11 @@ function EnemyRow({ unit, threatLabel, isLast }) {
         <span style={{ fontSize: 10, color: '#333' }}>
           {ARCHETYPE_IMPLICATION[unit.archetype] || ''}
         </span>
+        {ARCHETYPE_MECHANIC[unit.archetype] && (
+          <span style={{ fontSize: 9, color: '#1e2e3e', letterSpacing: 0.3 }}>
+            {ARCHETYPE_MECHANIC[unit.archetype]}
+          </span>
+        )}
       </div>
 
       {ts && (
