@@ -12,7 +12,7 @@ export const CREATURES = [
   // ── Guardians: High HP, High Armor, Low Attack ──
   {
     id: 'vault',
-    name: 'VAULT',
+    name: 'Stoneback',
     archetype: 'Guardian',
     hp: 480,
     attack: 12,
@@ -22,7 +22,7 @@ export const CREATURES = [
   },
   {
     id: 'bastion',
-    name: 'BASTION',
+    name: 'Ironscale',
     archetype: 'Guardian',
     hp: 440,
     attack: 14,
@@ -32,7 +32,7 @@ export const CREATURES = [
   },
   {
     id: 'bulwark',
-    name: 'BULWARK',
+    name: 'Mosshorn',
     archetype: 'Guardian',
     hp: 400,
     attack: 16,
@@ -44,7 +44,7 @@ export const CREATURES = [
   // ── Echos: Moderate everything ──
   {
     id: 'conduit',
-    name: 'CONDUIT',
+    name: 'Buzzline',
     archetype: 'Echo',
     hp: 260,
     attack: 26,
@@ -54,7 +54,7 @@ export const CREATURES = [
   },
   {
     id: 'nexus',
-    name: 'NEXUS',
+    name: 'Tanglewing',
     archetype: 'Echo',
     hp: 240,
     attack: 28,
@@ -64,7 +64,7 @@ export const CREATURES = [
   },
   {
     id: 'link',
-    name: 'LINK',
+    name: 'Threadbit',
     archetype: 'Echo',
     hp: 280,
     attack: 24,
@@ -76,7 +76,7 @@ export const CREATURES = [
   // ── Swifts: High Attack, Low HP, Low Armor ──
   {
     id: 'fang',
-    name: 'FANG',
+    name: 'Zipsnap',
     archetype: 'Swift',
     hp: 140,
     attack: 50,
@@ -86,7 +86,7 @@ export const CREATURES = [
   },
   {
     id: 'striker',
-    name: 'STRIKER',
+    name: 'Quicktalon',
     archetype: 'Swift',
     hp: 160,
     attack: 46,
@@ -96,7 +96,7 @@ export const CREATURES = [
   },
   {
     id: 'claw',
-    name: 'CLAW',
+    name: 'Skitter',
     archetype: 'Swift',
     hp: 180,
     attack: 42,
@@ -108,7 +108,7 @@ export const CREATURES = [
   // ── Sparks: Low HP, Low starting Attack — dangerous late ──
   {
     id: 'spark',
-    name: 'SPARK',
+    name: 'Fizzpop',
     archetype: 'Spark',
     hp: 110,
     attack: 14,
@@ -118,7 +118,7 @@ export const CREATURES = [
   },
   {
     id: 'flicker',
-    name: 'FLICKER',
+    name: 'Glowtail',
     archetype: 'Spark',
     hp: 130,
     attack: 12,
@@ -128,7 +128,7 @@ export const CREATURES = [
   },
   {
     id: 'cinder',
-    name: 'CINDER',
+    name: 'Ashwing',
     archetype: 'Spark',
     hp: 150,
     attack: 10,

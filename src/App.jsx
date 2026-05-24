@@ -16,7 +16,7 @@ import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vG-A';
+const VERSION = 'vG-B';
 
 function createCaughtInstance(creature, zoneName) {
   const instanceId = `w${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
