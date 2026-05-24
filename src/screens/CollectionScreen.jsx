@@ -1,5 +1,6 @@
 import { ARCHETYPES } from '../data/creatures.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
+import { useState, useEffect } from 'react';
 
 const ARCHETYPE_ABBR = { Anchor: 'ANC', Relay: 'REL', Predator: 'PRE', Ember: 'EMB' };
 
@@ -26,10 +27,19 @@ function XpBar({ xp }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed }) {
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
+  const [bouncing, setBouncing] = useState(false);
+
+  useEffect(() => {
+    if (justFed) {
+      setBouncing(true);
+      const timer = setTimeout(() => setBouncing(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [justFed]);
 
   return (
     <div style={{
@@ -42,6 +52,7 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed }) 
       gap: 7,
       position: 'relative',
       ...aura,
+      animation: bouncing ? 'card-bounce 0.4s ease-out' : 'none',
     }}>
       {inSquad && (
         <div style={{
@@ -118,7 +129,7 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters }) {
+export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, justFedInstanceId }) {
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
   const squadFull = squadIds.length >= 8;
@@ -171,6 +182,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
               onToggleSquad={onToggleSquad}
               onFeed={onFeed}
               canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
+              justFed={justFedInstanceId === u.instanceId}
             />
           ))}
         </div>
@@ -197,6 +209,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
                 onToggleSquad={onToggleSquad}
                 onFeed={onFeed}
                 canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
+                justFed={justFedInstanceId === u.instanceId}
               />
             ))}
           </div>

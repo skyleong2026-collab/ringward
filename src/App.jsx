@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import CollectionScreen from './screens/CollectionScreen.jsx';
 import EncounterScreen from './screens/EncounterScreen.jsx';
 import FeedModal from './screens/FeedModal.jsx';
@@ -9,14 +9,21 @@ import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
+import { animationStyles } from './ui/animations.js';
 
 const VERSION = 'vB-A';
 
 function App() {
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = animationStyles;
+    document.head.appendChild(style);
+  }, []);
   const [screen, setScreen] = useState('collection');
   const [result, setResult] = useState(null);
   const [currentEncounter, setCurrentEncounter] = useState(null);
   const [feedTarget, setFeedTarget] = useState(null);
+  const [justFedInstanceId, setJustFedInstanceId] = useState(null);
 
   const [collection, setCollection] = useState(() => {
     try {
@@ -60,6 +67,7 @@ function App() {
   }
 
   function confirmFeed(targetInstanceId, fodderInstanceIds) {
+    setJustFedInstanceId(targetInstanceId);
     setCollection((prev) => {
       const fodderUnits = fodderInstanceIds.map((id) => prev.find((u) => u.instanceId === id));
       const next = prev
@@ -85,6 +93,7 @@ function App() {
       });
       return next;
     });
+    setTimeout(() => setJustFedInstanceId(null), 400);
     setFeedTarget(null);
   }
 
@@ -156,6 +165,7 @@ function App() {
             onToggleSquad={toggleSquad}
             onFeed={openFeed}
             onEncounters={() => setScreen('encounters')}
+            justFedInstanceId={justFedInstanceId}
           />
         )}
         {screen === 'encounters' && (

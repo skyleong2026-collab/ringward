@@ -1,6 +1,6 @@
 import { ARCHETYPES } from '../data/creatures.js';
 import { xpProgress, getAuraStyle, XP_PER_FEED } from '../engine/progression.js';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 function FodderCard({ unit, selected, onToggle, isLastCopy }) {
   const color = ARCHETYPES[unit.archetype].color;
@@ -40,6 +40,8 @@ function FodderCard({ unit, selected, onToggle, isLastCopy }) {
 
 export default function FeedModal({ target, availableFodder, allCollection, squadIds, onConfirm, onClose }) {
   const [selectedIds, setSelectedIds] = useState([]);
+  const containerRef = useRef(null);
+  const levelUpRef = useRef(null);
 
   const countInCollection = (creatureId) =>
     allCollection.filter((u) => u.id === creatureId).length;
@@ -73,6 +75,14 @@ export default function FeedModal({ target, availableFodder, allCollection, squa
     const u = availableFodder.find((f) => f.instanceId === id);
     return u && isLastCopy(u);
   });
+  const hasLevelUp = newProg.level > prog.level;
+
+  useEffect(() => {
+    if (hasLevelUp && levelUpRef.current) {
+      levelUpRef.current.offsetHeight;
+      levelUpRef.current.classList.add('level-up-text');
+    }
+  }, [hasLevelUp]);
 
   return (
     <div style={{
@@ -124,7 +134,7 @@ export default function FeedModal({ target, availableFodder, allCollection, squa
             }} />
           </div>
           {newProg.level > prog.level && (
-            <div style={{ fontSize: 10, color: '#7ed321', marginTop: 4 }}>
+            <div ref={levelUpRef} style={{ fontSize: 10, color: '#7ed321', marginTop: 4 }}>
               ↑ Level up: Lv.{prog.level} → Lv.{newProg.level}
             </div>
           )}
