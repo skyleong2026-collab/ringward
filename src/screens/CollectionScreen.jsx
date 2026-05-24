@@ -117,8 +117,7 @@ function CoreSelectModal({ unit, onEquipCore, onClose }) {
 }
 
 function ModuleSelectModal({ unit, onEquipModule, onClose }) {
-  const allModules = Object.values(MODULES);
-  const modules = allModules.length > 0 ? allModules : [];
+  const modules = Object.values(MODULES).filter((m) => !m.hidden);
 
   function renderModule(mod, i) {
     const equipped = unit.moduleId === mod.id;

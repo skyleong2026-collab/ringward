@@ -1,4 +1,5 @@
 import { createRng } from './rng.js';
+import { MODULES_BY_ID } from '../data/modules.js';
 
 // ─── Damage formula ──────────────────────────────────────────────────────────
 // Armor is flat subtraction; cannot reduce a hit below 50% of raw damage.
@@ -68,13 +69,57 @@ function applyDamage(unit, damage, round) {
 // ─── Targeting ────────────────────────────────────────────────────────────────
 // Taunt: if any enemy Guardian is alive, attacker must target a Guardian.
 // Among eligible targets, each archetype picks by its own rule.
-function pickTarget(actor, enemies, lastSquadTarget) {
+// Modules bias behavior: bias chance ~70%, fallback to archetype default ~30%.
+function pickTarget(actor, enemies, lastSquadTarget, rng) {
   const alive = enemies.filter((u) => u.alive);
   if (alive.length === 0) return null;
 
   const guardians = alive.filter((u) => u.archetype === 'Guardian');
   const pool = guardians.length > 0 ? guardians : alive;
 
+  // Module-based biasing
+  const module = actor.moduleId ? MODULES_BY_ID[actor.moduleId] : null;
+  const useBias = rng && rng() < 0.7; // 70% chance to use module bias if equipped
+
+  if (module && useBias) {
+    if (actor.moduleId === 'weakpoint') {
+      // Hunt lowest-health enemies
+      const lowestHP = pool.reduce((best, u) =>
+        u.currentHP < best.currentHP ? u : best
+      );
+      if (lowestHP) return lowestHP;
+    }
+
+    if (actor.moduleId === 'echoHunter') {
+      // Prioritize Echo-class enemies
+      const echoes = pool.filter((u) => u.archetype === 'Echo');
+      if (echoes.length > 0) {
+        return echoes.reduce((best, u) =>
+          u.currentHP < best.currentHP ? u : best
+        );
+      }
+    }
+
+    if (actor.moduleId === 'packCall') {
+      // Focus on targets allies are already attacking
+      if (lastSquadTarget) {
+        const allyTarget = pool.find((u) => u.id === lastSquadTarget);
+        if (allyTarget) return allyTarget;
+      }
+    }
+
+    if (actor.moduleId === 'protector') {
+      // Intercept threats to allies (pick highest-threat enemy)
+      const allies = actor.squad === 'A' ? actor.allies : actor.allies;
+      if (allies && allies.length > 0) {
+        return pool.reduce((best, u) =>
+          u.currentAttack > best.currentAttack ? u : best
+        );
+      }
+    }
+  }
+
+  // Fallback to archetype default behavior
   switch (actor.archetype) {
     case 'Guardian':
       return pool.reduce((best, u) =>
@@ -214,6 +259,7 @@ export function battle(squadA, squadB, seed) {
     shield: 0,
     hasShielded: false,
     stokeStacks: 0,
+    slowBurnStacks: 0,
     alive: true,
     threat: computeThreat(creature),
     lastProc: null,
@@ -221,6 +267,9 @@ export function battle(squadA, squadB, seed) {
     lastwallUsed: false,
     quickstrikeUsedThisRound: false,
     firstEchoFiredThisRound: false,
+    fastStartUsed: false,
+    lastAttackedTargetId: null,
+    dartActive: false,
     tel: {
       damageDealt: 0,
       damageTaken: 0,
@@ -276,7 +325,9 @@ export function battle(squadA, squadB, seed) {
       const aliveEnemies = enemies.filter((u) => u.alive);
       if (aliveEnemies.length === 0) break;
 
-      const target = pickTarget(actor, enemies, lastSquadTarget[actor.squad]);
+      // Pass allies to actor for module-based targeting (protector module)
+      actor.allies = allies;
+      const target = pickTarget(actor, enemies, lastSquadTarget[actor.squad], rng);
       if (!target) continue;
 
       lastSquadTarget[actor.squad] = target.id;
@@ -289,9 +340,30 @@ export function battle(squadA, squadB, seed) {
         isExecute = true;
       }
 
-      const damage = calcDamage(rawAttack, target.armor);
+      // ── Module attack bonuses ──
+      let fastStartProc = false;
+      let rootedProc = false;
+      if (actor.moduleId === 'fastStart' && !actor.fastStartUsed) {
+        rawAttack = Math.floor(rawAttack * 1.5);
+        actor.fastStartUsed = true;
+        fastStartProc = true;
+      }
+      if (actor.moduleId === 'rooted' && actor.lastAttackedTargetId === target.id) {
+        rawAttack = Math.floor(rawAttack * 1.25);
+        rootedProc = true;
+      }
+
+      // ── Dart: target takes 20% less damage if they attacked last (dashed away) ──
+      let dartProc = false;
+      let effectiveDamage = calcDamage(rawAttack, target.armor);
+      if (target.moduleId === 'dart' && target.dartActive) {
+        effectiveDamage = Math.floor(effectiveDamage * 0.8);
+        target.dartActive = false;
+        dartProc = true;
+      }
+
       const targetWasAlive = target.alive;
-      const actualDmg = applyDamage(target, damage, round);
+      const actualDmg = applyDamage(target, effectiveDamage, round);
 
       actor.tel.damageDealt += actualDmg;
       if (actualDmg > actor.tel.largestHit) actor.tel.largestHit = actualDmg;
@@ -346,16 +418,46 @@ export function battle(squadA, squadB, seed) {
         });
       }
 
+      // ── Module proc events ──
+      if (fastStartProc) {
+        roundEvents.push({
+          actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
+          type: 'module_proc', moduleId: 'fastStart', callout: 'FAST START',
+        });
+      }
+      if (rootedProc) {
+        roundEvents.push({
+          actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
+          type: 'module_proc', moduleId: 'rooted', callout: 'ROOTED',
+        });
+      }
+      if (dartProc) {
+        roundEvents.push({
+          actorId: target.id, actorName: target.name, actorSquad: target.squad,
+          type: 'module_proc', moduleId: 'dart', callout: 'DART',
+        });
+      }
+
+      // ── Update actor tracking (must happen before Quickstrike/Echo) ──
+      actor.lastAttackedTargetId = target.id;
+      if (actor.moduleId === 'dart') actor.dartActive = true;
+
       // ── Quickstrike: bonus attack on kill (once per round) ──
       if (killed && actor.coreId === 'quickstrike' && !actor.quickstrikeUsedThisRound && actor.alive) {
         actor.quickstrikeUsedThisRound = true;
-        const bonusTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad]);
+        const bonusTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad], rng);
         if (bonusTarget && bonusTarget.alive) {
           let bonusRaw = actor.currentAttack;
           if (actor.archetype === 'Swift' && bonusTarget.currentHP < bonusTarget.maxHP * 0.3) bonusRaw *= 2;
-          const bonusDmg = calcDamage(bonusRaw, bonusTarget.armor);
+          let bonusEff = calcDamage(bonusRaw, bonusTarget.armor);
+          let bonusDartProc = false;
+          if (bonusTarget.moduleId === 'dart' && bonusTarget.dartActive) {
+            bonusEff = Math.floor(bonusEff * 0.8);
+            bonusTarget.dartActive = false;
+            bonusDartProc = true;
+          }
           const bonusWasAlive = bonusTarget.alive;
-          const bonusActual = applyDamage(bonusTarget, bonusDmg, round);
+          const bonusActual = applyDamage(bonusTarget, bonusEff, round);
           actor.tel.damageDealt += bonusActual;
           if (bonusActual > actor.tel.largestHit) actor.tel.largestHit = bonusActual;
           const bonusKilled = bonusWasAlive && !bonusTarget.alive;
@@ -366,6 +468,14 @@ export function battle(squadA, squadB, seed) {
             damage: bonusActual, killed: bonusKilled,
             type: 'core_proc', coreId: 'quickstrike', callout: 'EXTRA ACTION',
           });
+          if (bonusDartProc) {
+            roundEvents.push({
+              actorId: bonusTarget.id, actorName: bonusTarget.name, actorSquad: bonusTarget.squad,
+              type: 'module_proc', moduleId: 'dart', callout: 'DART',
+            });
+          }
+          actor.lastAttackedTargetId = bonusTarget.id;
+          if (actor.moduleId === 'dart') actor.dartActive = true;
         }
       }
 
@@ -375,7 +485,7 @@ export function battle(squadA, squadB, seed) {
         for (const sp of deadSquad) {
           if (sp.alive && sp.archetype === 'Spark' && sp.coreId === 'kindling' && sp !== target) {
             sp.stokeStacks += 2;
-            sp.currentAttack = sp.attack * (1 + 0.12 * sp.stokeStacks);
+            sp.currentAttack = sp.attack * (1 + 0.12 * sp.stokeStacks + 0.08 * (sp.slowBurnStacks || 0));
             roundEvents.push({
               actorId: sp.id, actorName: sp.name, actorSquad: sp.squad,
               type: 'core_proc', coreId: 'kindling', callout: 'Flame Inherited',
@@ -449,13 +559,22 @@ export function battle(squadA, squadB, seed) {
 
     if (winner) break;
 
-    // ── End of round: Spark Stoke (+12% base attack per round survived) ──
+    // ── End of round: Stoke (Spark) + SlowBurn (module) ──
     for (const unit of [...unitsA, ...unitsB]) {
-      if (unit.alive && unit.archetype === 'Spark') {
+      if (!unit.alive) continue;
+      let bonus = 0;
+      if (unit.archetype === 'Spark') {
         unit.stokeStacks += 1;
-        unit.currentAttack = unit.attack * (1 + 0.12 * unit.stokeStacks);
         unit.tel.peakStacks = unit.stokeStacks;
         unit.tel.roundReachedPeak = round;
+        bonus += 0.12 * unit.stokeStacks;
+      }
+      if (unit.moduleId === 'slowBurn') {
+        unit.slowBurnStacks += 1;
+        bonus += 0.08 * unit.slowBurnStacks;
+      }
+      if (bonus > 0) {
+        unit.currentAttack = unit.attack * (1 + bonus);
       }
     }
 

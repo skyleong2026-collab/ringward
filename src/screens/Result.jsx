@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ARCHETYPES } from '../data/creatures.js';
 import { CORES } from '../data/cores.js';
+import { MODULES_BY_ID } from '../data/modules.js';
 
 const CORE_COLORS = {
   quickstrike: '#d0021b',
@@ -123,7 +124,7 @@ function CombatLog({ battleLog }) {
   const [showAll, setShowAll] = useState(false);
 
   function isSignificant(e) {
-    return e.killed || e.type === 'core_proc' || e.isExecute;
+    return e.killed || e.type === 'core_proc' || e.type === 'module_proc' || e.isExecute;
   }
 
   return (
@@ -147,8 +148,10 @@ function CombatLog({ battleLog }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {display.map((e, i) => {
                   const isProc = e.type === 'core_proc';
+                  const isModuleProc = e.type === 'module_proc';
                   const isEcho = e.type === 'echo';
                   const procColor = isProc ? (CORE_COLORS[e.coreId] || '#888') : null;
+                  const modColor = isModuleProc ? (MODULES_BY_ID[e.moduleId]?.color || '#888') : null;
                   const actorColor = e.actorSquad === 'A' ? '#5a5aee' : '#ee4444';
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10 }}>
@@ -161,10 +164,19 @@ function CombatLog({ battleLog }) {
                           {e.callout}
                         </span>
                       )}
+                      {isModuleProc && (
+                        <span style={{
+                          fontSize: 8, color: modColor,
+                          background: modColor + '18', border: `1px solid ${modColor}35`,
+                          borderRadius: 3, padding: '0 4px', letterSpacing: 0.5, flexShrink: 0,
+                        }}>
+                          {e.callout}
+                        </span>
+                      )}
                       {isEcho && !isProc && (
                         <span style={{ fontSize: 8, color: '#7ed32166', letterSpacing: 0.5, flexShrink: 0 }}>ECHO</span>
                       )}
-                      {!isProc && !isEcho && e.isExecute && (
+                      {!isProc && !isModuleProc && !isEcho && e.isExecute && (
                         <span style={{ fontSize: 8, color: '#d0021b', letterSpacing: 0.5, flexShrink: 0 }}>EXEC</span>
                       )}
                       <span style={{ color: actorColor, fontWeight: 600 }}>{e.actorName}</span>

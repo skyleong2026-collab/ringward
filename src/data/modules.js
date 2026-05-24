@@ -1,61 +1,64 @@
 export const MODULES = {
-  // Targeting Modules — highest-value early category
-  executionerLens: {
-    id: 'executionerLens',
-    name: 'Executioner Lens',
-    description: 'Prioritize lowest-health target.',
+  // Targeting Modules — visible behavior
+  weakpoint: {
+    id: 'weakpoint',
+    name: 'Weakpoint',
+    description: 'Hunts weakened enemies.',
     category: 'Targeting',
     color: '#d0021b',
-    archetype: null, // available to all
+    archetype: null,
   },
   echoHunter: {
     id: 'echoHunter',
     name: 'Echo Hunter',
-    description: 'Prioritize Echo-class enemies first.',
+    description: 'Targets Echoes first.',
     category: 'Targeting',
     color: '#7ed321',
     archetype: null,
   },
-  packInstinct: {
-    id: 'packInstinct',
-    name: 'Pack Instinct',
-    description: 'Focus targets allies are already attacking.',
+  packCall: {
+    id: 'packCall',
+    name: 'Pack Call',
+    description: 'Friends attack the same target.',
     category: 'Targeting',
     color: '#4a90d9',
     archetype: null,
   },
-  bulwarkProtocol: {
-    id: 'bulwarkProtocol',
-    name: 'Bulwark Protocol',
-    description: 'Always target highest-attack enemy.',
+  protector: {
+    id: 'protector',
+    name: 'Protector',
+    description: 'Intercepts threats to allies.',
     category: 'Targeting',
     color: '#ff6b35',
     archetype: null,
   },
 
   // Positioning Modules
-  anchor: {
-    id: 'anchor',
-    name: 'Anchor',
-    description: 'Unit cannot be displaced. Gain defense while stationary.',
+  rooted: {
+    id: 'rooted',
+    name: 'Rooted',
+    description: 'Stands firm. Stronger while in place.',
+    callout: 'ROOTED',
     category: 'Positioning',
     color: '#4a90d9',
     archetype: null,
   },
-  skirmisher: {
-    id: 'skirmisher',
-    name: 'Skirmisher',
-    description: 'Reposition after attacking.',
+  dart: {
+    id: 'dart',
+    name: 'Dart',
+    description: 'Dashes away after attacking.',
+    callout: 'DART',
     category: 'Positioning',
     color: '#d0021b',
     archetype: null,
   },
 
   // Tempo Modules
-  openingGambit: {
-    id: 'openingGambit',
-    name: 'Opening Gambit',
-    description: 'First attack deals bonus damage.',
+  fastStart: {
+    id: 'fastStart',
+    name: 'Fast Start',
+    description: 'First hit hits harder.',
+    callout: 'FAST START',
     category: 'Tempo',
     color: '#f5a623',
     archetype: null,
@@ -63,36 +66,31 @@ export const MODULES = {
   slowBurn: {
     id: 'slowBurn',
     name: 'Slow Burn',
-    description: 'Gain attack each round alive.',
+    description: 'Gets stronger each round.',
+    callout: 'SLOW BURN',
     category: 'Tempo',
     color: '#f5a623',
     archetype: null,
   },
 
-  // Information Modules — comprehension before complexity
-  threatScanner: {
-    id: 'threatScanner',
-    name: 'Threat Scanner',
-    description: 'Reveal enemy targeting priority.',
+  // Information Modules — reserved for future phases, hidden from equip UI
+  exposed: {
+    id: 'exposed',
+    name: 'Exposed',
+    description: '[Reserved]',
     category: 'Information',
     color: '#7ed321',
     archetype: null,
+    hidden: true,
   },
-  weakpointAnalysis: {
-    id: 'weakpointAnalysis',
-    name: 'Weakpoint Analysis',
-    description: 'Show execute thresholds visually.',
+  synchronized: {
+    id: 'synchronized',
+    name: 'Synchronized',
+    description: '[Reserved]',
     category: 'Information',
     color: '#7ed321',
     archetype: null,
-  },
-  pulseTracker: {
-    id: 'pulseTracker',
-    name: 'Pulse Tracker',
-    description: 'Display upcoming Echo timings.',
-    category: 'Information',
-    color: '#7ed321',
-    archetype: null,
+    hidden: true,
   },
 };
 

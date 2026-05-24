@@ -23,10 +23,10 @@ export function xpProgress(xp) {
 }
 
 const AURA = {
-  Anchor:   '#4a90d9',
-  Relay:    '#7ed321',
-  Predator: '#d0021b',
-  Ember:    '#f5a623',
+  Guardian: '#4a90d9',
+  Echo:     '#7ed321',
+  Swift:    '#d0021b',
+  Spark:    '#f5a623',
 };
 
 export function computeVisualProfile(feedHistory) {
