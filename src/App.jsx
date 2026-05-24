@@ -108,6 +108,23 @@ function App() {
 
   function handleTryAgain() {
     if (!currentEncounter) return;
+    // Apply XP from previous battle before running next
+    if (result?.xpRewards) {
+      setCollection((prev) => {
+        const nextCollection = prev.map((u) => {
+          const xpGain = result.xpRewards[u.instanceId];
+          if (!xpGain) return u;
+          const newXp = u.xp + xpGain;
+          return {
+            ...u,
+            xp: newXp,
+            level: getLevel(newXp),
+          };
+        });
+        persist(nextCollection, squadIds);
+        return nextCollection;
+      });
+    }
     const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
     const seed = randomSeed();
     const res = battle(playerSquad, currentEncounter.squad, seed);
@@ -115,6 +132,23 @@ function App() {
   }
 
   function handleNewBattle() {
+    // Apply XP rewards to collection before leaving result screen
+    if (result?.xpRewards) {
+      setCollection((prev) => {
+        const nextCollection = prev.map((u) => {
+          const xpGain = result.xpRewards[u.instanceId];
+          if (!xpGain) return u;
+          const newXp = u.xp + xpGain;
+          return {
+            ...u,
+            xp: newXp,
+            level: getLevel(newXp),
+          };
+        });
+        persist(nextCollection, squadIds);
+        return nextCollection;
+      });
+    }
     setResult(null);
     setCurrentEncounter(null);
     setScreen('collection');

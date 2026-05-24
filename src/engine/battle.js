@@ -357,6 +357,16 @@ export function battle(squadA, squadB, seed) {
     }
   }
 
+  // Compute XP rewards for player squad (squadA)
+  const playerWon = winner === 'A';
+  const xpRewards = {};
+  for (const unit of unitsA) {
+    let xp = 15; // participation base
+    if (unit.alive) xp += 5; // survival bonus
+    if (playerWon) xp += 5; // victory bonus
+    xpRewards[unit.instanceId] = xp;
+  }
+
   return {
     winner,
     rounds: finalRound,
@@ -365,5 +375,6 @@ export function battle(squadA, squadB, seed) {
     coachingLine: generateCoaching(winner, finalRound, unitsA, unitsB),
     battleLog,
     seed,
+    xpRewards,
   };
 }

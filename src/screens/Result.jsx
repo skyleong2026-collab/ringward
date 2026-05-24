@@ -1,6 +1,6 @@
 import { ARCHETYPES } from '../data/creatures.js';
 
-function UnitRow({ unit, isWinnerSquad }) {
+function UnitRow({ unit, isWinnerSquad, xpGain }) {
   const color = ARCHETYPES[unit.archetype].color;
   const t = unit.tel;
   const survived = unit.alive;
@@ -61,6 +61,11 @@ function UnitRow({ unit, isWinnerSquad }) {
       <div style={{ fontSize: 11, color: '#888', display: 'flex', gap: 12, marginBottom: 3 }}>
         <span>Dealt <strong style={{ color: '#ccc' }}>{Math.round(t.damageDealt)}</strong></span>
         <span>Took <strong style={{ color: '#ccc' }}>{Math.round(t.damageTaken)}</strong></span>
+        {xpGain !== undefined && (
+          <span style={{ marginLeft: 'auto', color: '#7ed321' }}>
+            +{xpGain} XP
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 10, color: '#555' }}>{archetypeDetail()}</div>
     </div>
@@ -68,7 +73,7 @@ function UnitRow({ unit, isWinnerSquad }) {
 }
 
 export default function Result({ result, onTryAgain, onNewBattle }) {
-  const { winner, rounds, telemetry, outcomeText, coachingLine, seed } = result;
+  const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards } = result;
   const { squadA, squadB } = telemetry;
 
   const winnerLabel = winner === 'A' ? 'SQUAD A' : 'SQUAD B';
@@ -117,7 +122,12 @@ export default function Result({ result, onTryAgain, onNewBattle }) {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {units.map((u, i) => (
-                  <UnitRow key={`${u.id}-${i}`} unit={u} isWinnerSquad={isWinner} />
+                  <UnitRow
+                    key={`${u.id}-${i}`}
+                    unit={u}
+                    isWinnerSquad={isWinner}
+                    xpGain={side === 'A' ? xpRewards?.[u.instanceId] : undefined}
+                  />
                 ))}
               </div>
             </div>
