@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { CREATURES, ARCHETYPES } from '../data/creatures.js';
 import {
   getNearbySpawns, offsetPosition, formatDistance,
-  ENCOUNTER_RADIUS,
+  ENCOUNTER_RADIUS, RARITIES,
 } from '../engine/gps.js';
 
 const STEP = 50; // meters per simulate step
@@ -24,20 +24,25 @@ const COMPASS = [
 function SpawnRow({ spawn, onEngage }) {
   const color = ARCHETYPES[spawn.creature.archetype]?.color || '#888';
   const near = spawn.inRange;
+  const rarity = RARITIES[spawn.rarity] || RARITIES.Common;
+  const isElite = spawn.rarity === 'Elite';
+  const isRare = spawn.rarity === 'Rare';
+
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
       padding: '10px 12px',
-      background: near ? '#0d1a0d' : '#0a0a14',
-      border: `1px solid ${near ? '#7ed32133' : '#1a1a2a'}`,
-      borderLeft: `3px solid ${near ? '#7ed321' : color + '55'}`,
+      background: near ? (isElite ? '#1a1200' : isRare ? '#0a0f1a' : '#0d1a0d') : '#0a0a14',
+      border: `1px solid ${near ? rarity.color + '44' : isElite ? '#f5a62322' : isRare ? '#4a9eff18' : '#1a1a2a'}`,
+      borderLeft: `3px solid ${near ? rarity.color : isElite ? '#f5a62366' : isRare ? '#4a9eff44' : color + '55'}`,
       borderRadius: 6,
       gap: 10,
+      boxShadow: near && isElite ? '0 0 12px #f5a62318' : 'none',
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: near ? '#eee' : '#888', letterSpacing: 0.5 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: near ? '#eee' : (isElite ? '#a07020' : isRare ? '#3a6ea0' : '#888'), letterSpacing: 0.5 }}>
             {spawn.creature.name}
           </span>
           <span style={{
@@ -47,11 +52,18 @@ function SpawnRow({ spawn, onEngage }) {
           }}>
             {spawn.creature.archetype.toUpperCase()}
           </span>
+          <span style={{
+            fontSize: 8, color: rarity.color,
+            background: rarity.color + '15', border: `1px solid ${rarity.color}30`,
+            borderRadius: 3, padding: '1px 5px', letterSpacing: 1, flexShrink: 0,
+          }}>
+            {spawn.rarity.toUpperCase()}
+          </span>
         </div>
         <div style={{ fontSize: 9, color: '#2a2a3a', letterSpacing: 0.5 }}>{spawn.zoneName}</div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: near ? '#7ed321' : '#444', letterSpacing: 0.5 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: near ? rarity.engageColor : (isElite ? '#6a4a10' : isRare ? '#1a3a6a' : '#444'), letterSpacing: 0.5 }}>
           {formatDistance(spawn.distance)} {spawn.arrow}
         </div>
         {near && (
@@ -60,7 +72,7 @@ function SpawnRow({ spawn, onEngage }) {
             style={{
               marginTop: 5,
               padding: '4px 10px',
-              background: '#7ed321',
+              background: rarity.engageColor,
               border: 'none',
               borderRadius: 4,
               color: '#0a0a14',

@@ -6,6 +6,19 @@ const CELL_SIZE = 0.0016; // ~177m per cell (latitude); ~135m at 40° latitude
 export const ENCOUNTER_RADIUS = 100; // meters — engage threshold
 export const SPAWN_RADIUS = 600;     // meters — visibility radius
 
+// Rarity tiers — weighted distribution per cell, seeded independently from creature assignment
+export const RARITIES = {
+  Common: { color: '#3a3a5a', engageColor: '#7ed321' },
+  Rare:   { color: '#4a9eff', engageColor: '#4a9eff' },
+  Elite:  { color: '#f5a623', engageColor: '#f5a623' },
+};
+
+const RARITY_THRESHOLDS = [
+  { tier: 'Common', max: 70 },
+  { tier: 'Rare',   max: 92 },
+  { tier: 'Elite',  max: 100 },
+];
+
 // ── Geometry ──────────────────────────────────────────────────────────────────
 
 export function getDistance(lat1, lng1, lat2, lng2) {
@@ -67,7 +80,9 @@ export function cellToSpawn(cellKey, creatures) {
   const h = intHash(cellKey);
   const creature = creatures[h % creatures.length];
   const zoneName = `${ZONE_DIRS[(h >> 4) % ZONE_DIRS.length]} ${ZONE_TERRAIN[(h >> 8) % ZONE_TERRAIN.length]}`;
-  return { cellKey, creature, zoneName };
+  const rarityRoll = intHash(cellKey + ':r') % 100;
+  const { tier: rarity } = RARITY_THRESHOLDS.find(r => rarityRoll < r.max);
+  return { cellKey, creature, zoneName, rarity };
 }
 
 // Returns up to 8 nearby spawns sorted by distance, including user's current cell.
