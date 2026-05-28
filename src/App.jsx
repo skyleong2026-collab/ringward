@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import CollectionScreen from './screens/CollectionScreen.jsx';
 import EncounterScreen from './screens/EncounterScreen.jsx';
 import PreBattle from './screens/PreBattle.jsx';
@@ -9,6 +9,7 @@ import FeedModal from './screens/FeedModal.jsx';
 import Result from './screens/Result.jsx';
 import DungeonScreen from './screens/DungeonScreen.jsx';
 import DungeonResult from './screens/DungeonResult.jsx';
+import BattleScreen from './screens/BattleScreen.jsx';
 import { battle } from './engine/battle.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
@@ -80,6 +81,7 @@ function App() {
     }
   });
 
+  const [battleSeed, setBattleSeed] = useState(null);
   const [currentZone, setCurrentZone] = useState(null);
   const [currentWildTarget, setCurrentWildTarget] = useState(null);
   const [catchResult, setCatchResult] = useState(null);
@@ -246,18 +248,14 @@ function App() {
   }
 
   function commitBattle() {
-    let playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
-    if (dungeonRun) {
-      playerSquad = playerSquad.map((u) => {
-        const hp = dungeonRun.hpOverrides[u.instanceId];
-        return hp !== undefined ? { ...u, currentHP: hp } : u;
-      });
-    }
-    const seed = randomSeed();
-    const res = battle(playerSquad, currentEncounter.squad, seed);
+    setBattleSeed(randomSeed());
+    setScreen('battle');
+  }
+
+  const handleBattleComplete = useCallback((res) => {
     setResult(res);
     setScreen('result');
-  }
+  }, []);
 
   function handleTryAgain() {
     if (!currentEncounter) return;
@@ -541,6 +539,18 @@ function App() {
             playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
             onCommit={commitBattle}
             onBack={() => dungeonRun ? setScreen('dungeon') : setScreen('encounters')}
+          />
+        )}
+        {screen === 'battle' && currentEncounter && battleSeed !== null && (
+          <BattleScreen
+            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId)).map((u) => {
+              if (!dungeonRun) return u;
+              const hp = dungeonRun.hpOverrides[u.instanceId];
+              return hp !== undefined ? { ...u, currentHP: hp } : u;
+            })}
+            enemySquad={currentEncounter.squad}
+            seed={battleSeed}
+            onComplete={handleBattleComplete}
           />
         )}
         {screen === 'result' && result && (
