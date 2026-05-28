@@ -2,6 +2,7 @@ import { ARCHETYPES } from '../data/creatures.js';
 import { CORES } from '../data/cores.js';
 import { MODULES } from '../data/modules.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
+import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { useState, useEffect } from 'react';
 
 const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'SPK' };
@@ -218,6 +219,11 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
           background: arch.color,
         }} />
       )}
+
+      {/* Creature sprite */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
+        <AnimationPlayer creature={unit} size="small" scale={1.2} animate="idle" />
+      </div>
 
       <div>
         <div style={{

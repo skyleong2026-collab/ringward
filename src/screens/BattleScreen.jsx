@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useBattleRunner } from '../hooks/useBattleRunner.js';
+import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { ARCHETYPES } from '../data/creatures.js';
 
 // ─── HP Bar ───────────────────────────────────────────────────────────────────
@@ -66,8 +67,15 @@ function UnitRow({ unit, isActive, isTarget, isRedirectOption, onRedirect }) {
         transition: 'all 0.2s',
       }}
     >
-      {/* Archetype pip */}
-      <div style={{ width: 6, height: 6, borderRadius: '50%', background: dead ? '#333' : color, flexShrink: 0 }} />
+      {/* Creature sprite */}
+      <div style={{ width: 48, height: 48, flexShrink: 0, opacity: dead ? 0.35 : 1 }}>
+        <AnimationPlayer
+          creature={unit}
+          size="small"
+          scale={0.6}
+          animate={isActive ? 'attack' : dead ? 'defeated' : 'idle'}
+        />
+      </div>
 
       {/* Name + archetype */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, flex: 1 }}>
