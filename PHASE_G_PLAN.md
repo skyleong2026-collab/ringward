@@ -26,7 +26,10 @@ In `startingCollection.js` and everywhere `coreId`/`moduleId` are read (`Collect
 - Two–three **Module** slots.
 - Show each item's one-sentence behavior. No raw stat numbers in the slot UI.
 
-### Step 4 — Wire gear behaviors into `battleStepEngine.js`
+### Step 4 — Wire gear behaviors into `battleStepEngine.js` ✅ DONE (vG-A)
+> Status: the 6 starter behaviors were already native in `battleStepEngine.js` (it reads `gearId` directly post Step 2 — lastwall, ironhide, quickstrike, kindling, resonator, chainlink). The 5 launch gear below are now implemented. Balance numbers are first-pass (gear.js marks them TBD; Modules tune them in Step 5). Verified by `scripts/phaseg-smoke.mjs` — all 5 launch procs fire + starters still pass in both engines.
+> NOTE: wild-hunt/retry still run on `battle.js`, which does NOT know the launch gear. Acceptance criterion "BOTH wild captures and encounters" is fully met only after Step 6 swaps `battle.js` for `resolveBattle`.
+
 The step engine currently handles only fastStart/rooted/dart + the old core procs. Re-implement the 6 starter behaviors here (they exist in `battle.js` — port them) and add the 5 launch gear via the Trigger×Effect hooks:
 - **Mirrorplate** (Guardian): store absorbed dmg; on shield break → reflect burst.
 - **Killing Momentum** (Swift): On Kill → Reset action + raise execute threshold this round.

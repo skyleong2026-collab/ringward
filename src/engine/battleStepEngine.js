@@ -30,6 +30,13 @@ function applyDamage(unit, damage, round) {
     unit.lastProc = 'lastwall';
   }
 
+  // Pyre Heart: does NOT survive — captures its Stoke to pass on + detonate as it falls.
+  if (unit.currentHP <= 0 && unit.gearId === 'pyreHeart' && !unit.pyreHeartUsed) {
+    unit.pyreHeartUsed = true;
+    unit.pyreHeartPending = unit.stokeStacks;
+    unit.lastProc = 'pyreHeart';
+  }
+
   if (unit.currentHP <= 0) {
     unit.alive = false;
     if (unit.tel.fell === null) unit.tel.fell = round;
@@ -56,6 +63,20 @@ function applyDamage(unit, damage, round) {
     unit.shield = Math.floor(unit.maxHP * 0.1);
     unit.ironhideUsed = true;
     unit.lastProc = 'ironhide';
+  }
+
+  // Mirrorplate: on first shield break, release half the damage absorbed so far
+  // as a burst back at the attacker (applied by the caller, which has the actor).
+  if (
+    unit.gearId === 'mirrorplate' &&
+    !unit.mirrorBurstUsed &&
+    unit.hasShielded &&
+    prevShield > 0 &&
+    unit.shield === 0
+  ) {
+    unit.mirrorBurstUsed = true;
+    unit.mirrorBurstPending = Math.max(1, Math.floor(unit.tel.shieldAbsorbed * 0.5));
+    unit.lastProc = 'mirrorplate';
   }
 
   return realHpDmg;
@@ -217,6 +238,13 @@ function initUnit(creature, squad) {
     fastStartUsed: false,
     lastAttackedTargetId: null,
     dartActive: false,
+    mirrorBurstUsed: false,
+    mirrorBurstPending: 0,
+    pyreHeartUsed: false,
+    pyreHeartPending: 0,
+    openChannelMark: false,
+    killMomentumCountThisRound: 0,
+    execThreshWideThisRound: false,
     tel: {
       damageDealt: 0,
       damageTaken: 0,
@@ -274,6 +302,19 @@ export function* battleStepEngine(squadA, squadB, seed) {
   let finalRound = 10;
   const battleLog = [];
 
+  // Glasswork Core: convert all armor into raw attack at init (a glass cannon).
+  const initEvents = [];
+  for (const u of [...unitsA, ...unitsB]) {
+    if (u.gearId === 'glassworkCore' && u.armor > 0) {
+      const converted = u.armor;
+      u.attack += converted;
+      u.currentAttack += converted;
+      u.armor = 0;
+      initEvents.push({ actorId: u.id, actorName: u.name, actorSquad: u.squad, type: 'gear_proc', gearId: 'glassworkCore', callout: 'GLASSWORK' });
+    }
+  }
+  if (initEvents.length) battleLog.push({ round: 0, events: initEvents });
+
   for (let round = 1; round <= 10; round++) {
     finalRound = round;
     const aliveA = unitsA.filter((u) => u.alive);
@@ -283,6 +324,8 @@ export function* battleStepEngine(squadA, squadB, seed) {
     for (const unit of [...unitsA, ...unitsB]) {
       unit.quickstrikeUsedThisRound = false;
       unit.firstEchoFiredThisRound = false;
+      unit.killMomentumCountThisRound = 0;
+      unit.execThreshWideThisRound = false;
     }
 
     const turnOrder = [...aliveA, ...aliveB].sort((a, b) => {
@@ -351,11 +394,20 @@ export function* battleStepEngine(squadA, squadB, seed) {
       // ── Resolve the action ────────────────────────────────────────────────
       lastSquadTarget[actor.squad] = target.id;
 
+      const execT = actor.execThreshWideThisRound ? 0.45 : 0.3;
       let rawAttack = actor.currentAttack;
       let isExecute = false;
-      if (actor.archetype === 'Swift' && target.currentHP < target.maxHP * 0.3) {
+      if (actor.archetype === 'Swift' && target.currentHP < target.maxHP * execT) {
         rawAttack *= 2;
         isExecute = true;
+      }
+
+      // Open Channel: a marked target makes the next ally hit on it empowered.
+      let openChannelProc = false;
+      if (target.openChannelMark) {
+        rawAttack = Math.floor(rawAttack * 1.3);
+        target.openChannelMark = false;
+        openChannelProc = true;
       }
 
       let fastStartProc = false;
@@ -422,6 +474,19 @@ export function* battleStepEngine(squadA, squadB, seed) {
         roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, targetId: actor.id, targetName: actor.name, damage: reflection, type: 'gear_proc', gearId: 'lastwall', callout: 'LAST STAND' });
       }
 
+      if (target.lastProc === 'mirrorplate' && target.mirrorBurstPending > 0 && actor.alive) {
+        const burst = target.mirrorBurstPending;
+        target.mirrorBurstPending = 0;
+        actor.currentHP = Math.max(0, actor.currentHP - burst);
+        actor.tel.damageTaken += burst;
+        if (actor.currentHP <= 0 && actor.alive) {
+          actor.alive = false;
+          if (actor.tel.fell === null) actor.tel.fell = round;
+        }
+        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, targetId: actor.id, targetName: actor.name, damage: burst, type: 'gear_proc', gearId: 'mirrorplate', callout: 'MIRROR BURST' });
+      }
+
+      if (openChannelProc) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: target.id, targetName: target.name, type: 'gear_proc', gearId: 'openChannel', callout: 'OPEN CHANNEL' });
       if (fastStartProc) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'fastStart', callout: 'FAST START' });
       if (rootedProc)    roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'rooted', callout: 'ROOTED' });
       if (dartProc)      roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'module_proc', moduleId: 'dart', callout: 'DART' });
@@ -456,6 +521,27 @@ export function* battleStepEngine(squadA, squadB, seed) {
         }
       }
 
+      // Killing Momentum: each kill refunds an action (cap 2/round) and widens
+      // this unit's execute window for the rest of the round.
+      if (killed && actor.gearId === 'killingMomentum' && actor.killMomentumCountThisRound < 2 && actor.alive) {
+        actor.killMomentumCountThisRound += 1;
+        actor.execThreshWideThisRound = true;
+        const bonusTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad], rng);
+        if (bonusTarget && bonusTarget.alive) {
+          let bonusRaw = actor.currentAttack;
+          if (actor.archetype === 'Swift' && bonusTarget.currentHP < bonusTarget.maxHP * 0.45) bonusRaw *= 2;
+          const bonusEff = calcDamage(bonusRaw, bonusTarget.armor);
+          const bonusWasAlive = bonusTarget.alive;
+          const bonusActual = applyDamage(bonusTarget, bonusEff, round);
+          actor.tel.damageDealt += bonusActual;
+          if (bonusActual > actor.tel.largestHit) actor.tel.largestHit = bonusActual;
+          const bonusKilled = bonusWasAlive && !bonusTarget.alive;
+          if (bonusKilled) actor.tel.standardKills += 1;
+          roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: bonusTarget.id, targetName: bonusTarget.name, damage: bonusActual, killed: bonusKilled, type: 'gear_proc', gearId: 'killingMomentum', callout: 'MOMENTUM' });
+          actor.lastAttackedTargetId = bonusTarget.id;
+        }
+      }
+
       // Kindling
       if (killed) {
         const deadSquad = target.squad === 'A' ? unitsA : unitsB;
@@ -466,6 +552,27 @@ export function* battleStepEngine(squadA, squadB, seed) {
             roundEvents.push({ actorId: sp.id, actorName: sp.name, actorSquad: sp.squad, type: 'gear_proc', gearId: 'kindling', callout: 'Flame Inherited' });
           }
         }
+      }
+
+      // Pyre Heart: when it falls, pass its built-up Stoke to the highest-Stoke
+      // ally and detonate for AoE on the enemy squad.
+      if (target.lastProc === 'pyreHeart') {
+        const allySquad = target.squad === 'A' ? unitsA : unitsB;
+        const enemySquad = target.squad === 'A' ? unitsB : unitsA;
+        const heirs = allySquad.filter((u) => u.alive && u !== target);
+        if (heirs.length && target.pyreHeartPending > 0) {
+          heirs.sort((a, b) => b.stokeStacks - a.stokeStacks);
+          const heir = heirs[0];
+          heir.stokeStacks += target.pyreHeartPending;
+          heir.currentAttack = heir.attack * (1 + 0.12 * heir.stokeStacks + 0.08 * (heir.slowBurnStacks || 0));
+        }
+        const burst = Math.max(1, 8 + 4 * target.pyreHeartPending);
+        for (const e of enemySquad.filter((u) => u.alive)) {
+          e.currentHP = Math.max(0, e.currentHP - burst);
+          e.tel.damageTaken += burst;
+          if (e.currentHP <= 0 && e.alive) { e.alive = false; if (e.tel.fell === null) e.tel.fell = round; }
+        }
+        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, damage: burst, type: 'gear_proc', gearId: 'pyreHeart', callout: 'PASS THE FLAME' });
       }
 
       // Echo
@@ -485,7 +592,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
           echo.tel.damageDealt += echoActual;
           if (!target.alive) echo.tel.standardKills += 1;
           roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: target.id, targetName: target.name, damage: echoActual, isExecute: false, killed: !target.alive, type: resonatorActive ? 'gear_proc' : 'echo', gearId: resonatorActive ? 'resonator' : null, callout: resonatorActive ? 'Resonance' : null });
-          if (echo.gearId === 'chainlink') {
+          if (echo.gearId === 'chainlink' || echo.gearId === 'openChannel') {
             const jumpTarget = enemies.filter((u) => u.alive && u !== target)[0];
             if (jumpTarget) {
               const jumpRaw = actor.currentAttack * 0.5;
@@ -495,7 +602,9 @@ export function* battleStepEngine(squadA, squadB, seed) {
               echo.tel.echoDamage += jumpActual;
               echo.tel.damageDealt += jumpActual;
               if (!jumpTarget.alive) echo.tel.standardKills += 1;
-              roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: jumpTarget.id, targetName: jumpTarget.name, damage: jumpActual, killed: !jumpTarget.alive, type: 'gear_proc', gearId: 'chainlink', callout: 'Echo Jump' });
+              // Open Channel marks the chained target: next ally hit on it is empowered.
+              if (echo.gearId === 'openChannel' && jumpTarget.alive) jumpTarget.openChannelMark = true;
+              roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: jumpTarget.id, targetName: jumpTarget.name, damage: jumpActual, killed: !jumpTarget.alive, type: 'gear_proc', gearId: echo.gearId, callout: echo.gearId === 'openChannel' ? 'OPEN CHANNEL' : 'Echo Jump' });
             }
           }
         }

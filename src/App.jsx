@@ -20,7 +20,7 @@ import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vI-A';
+const VERSION = 'vG-A';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
