@@ -1,6 +1,5 @@
 import { CREATURES } from '../src/data/creatures.js';
-import { battle } from '../src/engine/battle.js';
-import { battleStepEngine as stepRun } from '../src/engine/battleStepEngine.js';
+import { battleStepEngine as stepRun, resolveBattle } from '../src/engine/battleStepEngine.js';
 
 const c = (id) => CREATURES.find((u) => u.id === id);
 const mk = (id, instanceId, gearId, moduleIds = []) => ({
@@ -36,15 +35,17 @@ function check(label, cond) {
   if (!cond) pass = false;
 }
 
-// ── 1. Starters still fire in BOTH engines (regression net for Step 2) ──
+// ── 1. Starters fire in the canonical engine (regression net for Step 2) ──
 {
   const A = () => [mk('fang', 'a1', 'quickstrike'), mk('striker', 'a2', 'quickstrike')];
   const B = () => [mk('vault', 'b1', 'lastwall'), mk('bastion', 'b2', 'lastwall')];
-  const r1 = battle(A(), B(), 7);
-  const r2 = drainStep(A(), B(), 7);
+  const r = drainStep(A(), B(), 7);
   console.log('\n[starters]');
-  check('battle.js returns gearProcs with ids', r1.gearProcs?.length > 0 && r1.gearProcs.every((p) => p.gearId));
-  check('battleStepEngine returns gearProcs with ids', r2.gearProcs?.length > 0 && r2.gearProcs.every((p) => p.gearId));
+  check('battleStepEngine returns gearProcs with ids', r.gearProcs?.length > 0 && r.gearProcs.every((p) => p.gearId));
+  // resolveBattle (the synchronous driver App.jsx uses) matches the generator drain.
+  const rResolve = resolveBattle(A(), B(), 7);
+  check('resolveBattle matches generator drain (winner+rounds)',
+    rResolve.winner === r.winner && rResolve.rounds === r.rounds);
 }
 
 // ── 2. Each launch gear procs in battleStepEngine (canonical engine) ──

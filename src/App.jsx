@@ -10,7 +10,7 @@ import Result from './screens/Result.jsx';
 import DungeonScreen from './screens/DungeonScreen.jsx';
 import DungeonResult from './screens/DungeonResult.jsx';
 import BattleScreen from './screens/BattleScreen.jsx';
-import { battle } from './engine/battle.js';
+import { resolveBattle } from './engine/battleStepEngine.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
@@ -20,7 +20,7 @@ import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vG-A';
+const VERSION = 'vG-B';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -206,7 +206,7 @@ function App() {
   function commitHunt() {
     const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
     const seed = randomSeed();
-    const res = battle(playerSquad, [currentWildTarget], seed);
+    const res = resolveBattle(playerSquad, [currentWildTarget], seed);
     const caught = res.winner === 'A';
 
     // Apply XP to player squad
@@ -296,7 +296,7 @@ function App() {
     }
     const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
     const seed = randomSeed();
-    const res = battle(playerSquad, currentEncounter.squad, seed);
+    const res = resolveBattle(playerSquad, currentEncounter.squad, seed);
     setResult(res);
   }
 

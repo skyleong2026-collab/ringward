@@ -50,7 +50,9 @@ Each proc must emit a `core_proc`/`gear_proc` event so telemetry + callouts surf
 
 Cut from the proposed set (designer call, restraint): **Quick Cycle** (redundant universal "mandatory glue" risk). Standalone-behavior modules (rooted, dart, weakpoint, echoHunter, packCall, protector) and the flat-% Phase I modules are **parked as future GEAR candidates / deleted**, not dials.
 
-### Step 6 — Retire `battle.js` + tests (ONLY after Steps 4–5)
+### Step 6 — Retire `battle.js` + tests (ONLY after Steps 4–5) ✅ DONE (vG-B)
+> Status: `battle.js` is deleted — one combat source of truth. `resolveBattle(squadA, squadB, seed)` added to `battleStepEngine.js`: drains the generator with `null` interventions and returns the same result object shape (verified identical to the retired `battle.js` return). App.jsx's two call sites (commitHunt wild-capture + handleTryAgain retry) now call `resolveBattle`, so wild-hunt/retry honor launch gear + dials — closing the documented Step 4/5 gap. Seeded golden tests added (`scripts/phaseg-golden.mjs`, 3 fixed scenarios × {winner, rounds, survivor set, determinism}). npm scripts wired: `test:smoke`, `test:golden`, `test`. Build stamped **vG-B**; bundle dropped 323KB→304KB. Verified: `npm test` all PASS, `vite build` clean, app renders vG-B with no console errors.
+
 - Add `resolveBattle(squadA, squadB, seed)` that drives `battleStepEngine` to completion with `null` interventions and returns the final result object.
 - Point `App.jsx` (the two `battle(...)` calls, ~lines 202 & 292) at `resolveBattle`.
 - Delete `battle.js`. Now there is one combat source of truth.

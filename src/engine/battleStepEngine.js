@@ -283,6 +283,16 @@ function snap(units) {
 //
 // To advance without intervening: gen.next(null)
 // To redirect: gen.next({ type: 'redirect', actorId, newTargetId })
+// Drive the step engine to completion with no interventions and return the
+// final result object. The single synchronous entry point for non-interactive
+// battles (wild captures, retry) — interactive play uses the generator directly.
+export function resolveBattle(squadA, squadB, seed) {
+  const gen = battleStepEngine(squadA, squadB, seed);
+  let step = gen.next();
+  while (!step.done) step = gen.next(null);
+  return step.value;
+}
+
 export function* battleStepEngine(squadA, squadB, seed) {
   const rng = createRng(seed);
 
