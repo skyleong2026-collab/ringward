@@ -17,8 +17,8 @@ function inst(creature, instanceId) {
     survivalStreak: 0,
     enemyMemory: [],
     foundAt: null,
-    coreId: null,
-    moduleId: null,
+    gearId: null,
+    moduleIds: [],
   };
 }
 

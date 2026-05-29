@@ -12,6 +12,7 @@ function calcDamage(rawAttack, targetArmor) {
 function applyDamage(unit, damage, round) {
   let hpDmg = damage;
   unit.lastProc = null;
+  unit.wasAttackedThisRound = true;
   const prevShield = unit.shield;
 
   if (unit.shield > 0) {
@@ -71,7 +72,7 @@ function applyDamage(unit, damage, round) {
 // Among eligible targets, each archetype picks by its own rule.
 // Modules bias behavior: bias chance ~70%, fallback to archetype default ~30%.
 function pickTarget(actor, enemies, lastSquadTarget, rng) {
-  const alive = enemies.filter((u) => u.alive);
+  const alive = enemies.filter((u) => u.alive && !u.untargetable);
   if (alive.length === 0) return null;
 
   const guardians = alive.filter((u) => u.archetype === 'Guardian');
@@ -234,12 +235,12 @@ function computeThreat(unit) {
 }
 
 // ─── Collect Core proc callouts for result summary ────────────────────────────
-function gatherCoreProcs(battleLog) {
+function gatherGearProcs(battleLog) {
   const procs = [];
   for (const { round, events } of battleLog) {
     for (const e of events) {
-      if (e.type === 'core_proc') {
-        procs.push({ unitName: e.actorName, callout: e.callout, round, coreId: e.coreId });
+      if (e.type === 'gear_proc') {
+        procs.push({ unitName: e.actorName, callout: e.callout, round, gearId: e.gearId });
       }
     }
   }
@@ -253,6 +254,11 @@ export function battle(squadA, squadB, seed) {
   const initUnit = (creature, squad) => ({
     ...creature,
     squad,
+    // Bridge new data model → battle.js's legacy internal field names.
+    // battle.js is single-module and dies in PHASE_G Step 6; this keeps wild-hunt
+    // and retry battles behaving correctly until the step engine fully replaces it.
+    coreId: creature.gearId ?? null,
+    moduleId: creature.moduleIds?.[0] ?? null,
     currentHP: creature.currentHP ?? creature.hp,
     maxHP: creature.hp,
     currentAttack: creature.attack,
@@ -270,6 +276,28 @@ export function battle(squadA, squadB, seed) {
     fastStartUsed: false,
     lastAttackedTargetId: null,
     dartActive: false,
+    // Phase I module tracking
+    wasAttackedThisRound: false,
+    consecutiveAttackerId: null,
+    voidFractureStacks: 0,
+    geologicalR3Done: false,
+    geologicalR6Done: false,
+    compressionStacks: 0,
+    ruptureTargetId: null,
+    ruptureConsecutive: 0,
+    tensionRoundsBelow50: 0,
+    tensionReady: false,
+    chargingStacks: 0,
+    territorialStacks: 0,
+    arcTargetId: null,
+    arcConsecutive: 0,
+    voidPatienceStacks: 0,
+    debrisFragmentsSpawned: false,
+    debrisFragments: 0,
+    debrisFragmentShield: 0,
+    untargetable: false,
+    pendulumPhase: 0,
+    speedDebuffs: [],
     tel: {
       damageDealt: 0,
       damageTaken: 0,
@@ -297,11 +325,71 @@ export function battle(squadA, squadB, seed) {
   let finalRound = 10;
   const battleLog = [];
 
+  // Sacred Resonance: armor bonus applied before round 1, logged as round 0
+  const startEvents = [];
+  for (const unit of [...unitsA, ...unitsB]) {
+    if (unit.moduleId === 'sacredResonance') {
+      unit.armor += 10;
+      startEvents.push({ type: 'module_proc', moduleId: 'sacredResonance', actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, callout: 'Sacred Resonance → +10 Armor' });
+      const squadmates = (unit.squad === 'A' ? unitsA : unitsB).filter(a => a !== unit);
+      for (const ally of squadmates) {
+        ally.armor += 4;
+        startEvents.push({ type: 'module_proc', moduleId: 'sacredResonance', actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, targetId: ally.id, targetName: ally.name, callout: `Sacred Resonance → ${ally.name} +4 Armor (formation)` });
+      }
+    }
+  }
+  if (startEvents.length > 0) battleLog.push({ round: 0, events: startEvents });
+
   for (let round = 1; round <= 10; round++) {
     finalRound = round;
     const aliveA = unitsA.filter((u) => u.alive);
     const aliveB = unitsB.filter((u) => u.alive);
     if (aliveA.length === 0 || aliveB.length === 0) break;
+
+    const roundEvents = [];
+
+    // ── Round-start module effects ────────────────────────────────────────
+    for (const unit of [...unitsA, ...unitsB]) {
+      unit.wasAttackedThisRound = false;
+
+      // Speed debuff decay (from ruptureTiming)
+      for (const d of unit.speedDebuffs) d.roundsLeft -= 1;
+      const expired = unit.speedDebuffs.filter(d => d.roundsLeft <= 0);
+      unit.speedDebuffs = unit.speedDebuffs.filter(d => d.roundsLeft > 0);
+      for (const d of expired) unit.speed = Math.min(unit.speed + d.amount, unit.speed + d.amount);
+
+      if (!unit.alive) continue;
+
+      // Geological Inertia
+      if (unit.moduleId === 'geologicalInertia') {
+        if (round === 3 && !unit.geologicalR3Done) {
+          unit.armor += 6;
+          unit.speed += 2;
+          unit.geologicalR3Done = true;
+          roundEvents.push({ type: 'module_proc', moduleId: 'geologicalInertia', actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, callout: 'Geological Inertia (Round 3) → +6 Armor +2 Speed' });
+        }
+        if (round === 6 && !unit.geologicalR6Done) {
+          unit.armor += 6;
+          unit.geologicalR6Done = true;
+          roundEvents.push({ type: 'module_proc', moduleId: 'geologicalInertia', actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, callout: 'Geological Inertia (Round 6) → +12 Armor total' });
+        }
+      }
+
+      // Pendulum Timing: advance phase each round
+      if (unit.moduleId === 'pendulumTiming') {
+        if (round % 2 === 0 && unit.pendulumPhase === 0) {
+          unit.pendulumPhase = 1;
+          unit.untargetable = true;
+          roundEvents.push({ type: 'module_proc', moduleId: 'pendulumTiming', actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, callout: 'Pendulum Timing → untargetable this round' });
+        } else if (unit.pendulumPhase === 1) {
+          unit.pendulumPhase = 2;
+          unit.untargetable = false;
+          roundEvents.push({ type: 'module_proc', moduleId: 'pendulumTiming', actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, callout: 'Pendulum Timing → empowered return (+40% damage)' });
+        } else if (unit.pendulumPhase === 2) {
+          unit.pendulumPhase = 0;
+        }
+      }
+    }
 
     // Reset per-round Core flags
     for (const unit of [...unitsA, ...unitsB]) {
@@ -314,8 +402,6 @@ export function battle(squadA, squadB, seed) {
       if (b.speed !== a.speed) return b.speed - a.speed;
       return rng() - 0.5;
     });
-
-    const roundEvents = [];
 
     for (const actor of turnOrder) {
       if (!actor.alive) continue;
@@ -353,6 +439,84 @@ export function battle(squadA, squadB, seed) {
         rootedProc = true;
       }
 
+      // ── Phase I attack modifiers ──────────────────────────────────────────
+      let ruptureTimingProc = false;
+      let geometricApexProc = false;
+      let voidPatienceProc = false;
+      let compressionPatienceProc = false;
+      let perpetualArcProc = false;
+      let tensionReleaseProc = false;
+      let pendulumEmpoweredProc = false;
+      let chargingMomentumProc = false;
+      const actorAtFullHP = actor.currentHP === actor.maxHP;
+
+      if (actor.moduleId === 'ruptureTiming') {
+        if (actor.ruptureTargetId !== target.id) {
+          actor.ruptureConsecutive = 0;
+          actor.ruptureTargetId = target.id;
+        }
+        actor.ruptureConsecutive += 1;
+        if (actor.ruptureConsecutive >= 3) {
+          rawAttack = Math.floor(rawAttack * 1.3);
+          ruptureTimingProc = true;
+          target.speed = Math.max(1, target.speed - 2);
+          target.speedDebuffs.push({ amount: 2, roundsLeft: 2 });
+          actor.ruptureConsecutive = 0;
+        }
+      }
+
+      if (actor.moduleId === 'geometricApex' && target.currentHP < target.maxHP * 0.3) {
+        rawAttack = Math.floor(rawAttack * 1.3);
+        geometricApexProc = true;
+      }
+
+      let voidPatienceReleasedStacks = 0;
+      if (actor.moduleId === 'voidPatience' && actor.voidPatienceStacks > 0) {
+        voidPatienceReleasedStacks = Math.min(actor.voidPatienceStacks, 4);
+        rawAttack = Math.floor(rawAttack * (1 + 0.15 * voidPatienceReleasedStacks));
+        voidPatienceProc = true;
+        actor.voidPatienceStacks = 0;
+      }
+
+      let compressionReleasedStacks = 0;
+      if (actor.moduleId === 'compressionPatience' && actor.compressionStacks > 0) {
+        compressionReleasedStacks = actor.compressionStacks;
+        rawAttack = Math.floor(rawAttack * (1 + 0.2 * compressionReleasedStacks));
+        compressionPatienceProc = true;
+        actor.compressionStacks = 0;
+      }
+
+      if (actor.moduleId === 'perpetualArc') {
+        if (actor.arcTargetId !== target.id) {
+          actor.arcConsecutive = 0;
+          actor.arcTargetId = target.id;
+        }
+        actor.arcConsecutive += 1;
+        if (actor.arcConsecutive >= 3) {
+          rawAttack = Math.floor(rawAttack * 1.5);
+          perpetualArcProc = true;
+          actor.arcConsecutive = 0;
+        }
+      }
+
+      if (actor.moduleId === 'tensionRelease' && actor.tensionReady) {
+        rawAttack = Math.floor(rawAttack * 2);
+        tensionReleaseProc = true;
+        actor.tensionReady = false;
+        actor.tensionRoundsBelow50 = 0;
+      }
+
+      if (actor.moduleId === 'pendulumTiming' && actor.pendulumPhase === 2) {
+        rawAttack = Math.floor(rawAttack * 1.4);
+        pendulumEmpoweredProc = true;
+        actor.pendulumPhase = 0;
+      }
+
+      if (actor.moduleId === 'chargingMomentum' && actor.chargingStacks > 0) {
+        rawAttack = Math.floor(rawAttack * (1 + 0.04 * actor.chargingStacks));
+        chargingMomentumProc = true;
+      }
+
       // ── Dart: target takes 20% less damage if they attacked last (dashed away) ──
       let dartProc = false;
       let effectiveDamage = calcDamage(rawAttack, target.armor);
@@ -362,6 +526,25 @@ export function battle(squadA, squadB, seed) {
         dartProc = true;
       }
 
+      // Debris Orbit: spawn fragment shield before damage lands (if below 75% HP)
+      if (
+        target.moduleId === 'debrisOrbit' &&
+        !target.debrisFragmentsSpawned &&
+        target.currentHP < target.maxHP * 0.75
+      ) {
+        target.debrisFragmentsSpawned = true;
+        target.debrisFragments = 2;
+        target.debrisFragmentShield = 50;
+        target.shield += 50;
+        roundEvents.push({
+          type: 'module_proc', moduleId: 'debrisOrbit',
+          actorId: target.id, actorName: target.name, actorSquad: target.squad,
+          callout: 'Debris Orbit → 2 fragments spawned (25 HP each)',
+        });
+      }
+
+      const preHitShield = target.shield;
+      const preHitHP = target.currentHP;
       const targetWasAlive = target.alive;
       const actualDmg = applyDamage(target, effectiveDamage, round);
 
@@ -391,13 +574,13 @@ export function battle(squadA, squadB, seed) {
       if (target.lastProc === 'ironhide') {
         roundEvents.push({
           actorId: target.id, actorName: target.name, actorSquad: target.squad,
-          type: 'core_proc', coreId: 'ironhide', callout: 'Shield Reformed',
+          type: 'gear_proc', gearId: 'ironhide', callout: 'Shield Reformed',
         });
       }
       if (target.lastProc === 'lastwall') {
         roundEvents.push({
           actorId: target.id, actorName: target.name, actorSquad: target.squad,
-          type: 'core_proc', coreId: 'lastwall', callout: 'LAST STAND',
+          type: 'gear_proc', gearId: 'lastwall', callout: 'LAST STAND',
         });
       }
 
@@ -414,7 +597,120 @@ export function battle(squadA, squadB, seed) {
           actorId: target.id, actorName: target.name, actorSquad: target.squad,
           targetId: actor.id, targetName: actor.name,
           damage: reflection,
-          type: 'core_proc', coreId: 'lastwall', callout: 'LAST STAND',
+          type: 'gear_proc', gearId: 'lastwall', callout: 'LAST STAND',
+        });
+      }
+
+      // ── Phase I post-damage effects ──────────────────────────────────────
+
+      // Debris Orbit: check fragment destruction
+      if (target.moduleId === 'debrisOrbit' && target.debrisFragments > 0) {
+        const shieldConsumed = preHitShield - target.shield;
+        const debrisConsumed = Math.min(shieldConsumed, target.debrisFragmentShield);
+        if (debrisConsumed > 0) {
+          target.debrisFragmentShield = Math.max(0, target.debrisFragmentShield - debrisConsumed);
+          const fragmentsNow = Math.ceil(target.debrisFragmentShield / 25);
+          const fragmentsDestroyed = target.debrisFragments - fragmentsNow;
+          if (fragmentsDestroyed > 0 && actor.alive) {
+            target.debrisFragments = fragmentsNow;
+            const reflectDmg = fragmentsDestroyed * 15;
+            actor.currentHP = Math.max(0, actor.currentHP - reflectDmg);
+            actor.tel.damageTaken += reflectDmg;
+            if (actor.currentHP <= 0 && actor.alive) {
+              actor.alive = false;
+              if (actor.tel.fell === null) actor.tel.fell = round;
+            }
+            roundEvents.push({
+              type: 'module_proc', moduleId: 'debrisOrbit',
+              actorId: target.id, actorName: target.name, actorSquad: target.squad,
+              targetId: actor.id, targetName: actor.name,
+              damage: reflectDmg,
+              callout: `Debris Orbit fragment destroyed → ${reflectDmg} damage to ${actor.name}`,
+            });
+          }
+        }
+      }
+
+      // Void Fracture Stack: build armor when hit by same attacker consecutively
+      if (target.moduleId === 'voidFractureStack' && target.alive && actualDmg > 0) {
+        const oldBonus = target.voidFractureStacks * 3;
+        if (target.consecutiveAttackerId === actor.id) {
+          target.voidFractureStacks = Math.min(5, target.voidFractureStacks + 1);
+        } else {
+          target.consecutiveAttackerId = actor.id;
+          target.voidFractureStacks = 1;
+        }
+        const newBonus = target.voidFractureStacks * 3;
+        target.armor += newBonus - oldBonus;
+        roundEvents.push({
+          type: 'module_proc', moduleId: 'voidFractureStack',
+          actorId: target.id, actorName: target.name, actorSquad: target.squad,
+          callout: `Void Fracture Stack (×${target.voidFractureStacks}) → +${newBonus} Armor`,
+        });
+      }
+
+      // Territorial Claim: reset speed bonus when the module-holder takes damage
+      if (target.moduleId === 'territorialClaim' && target.territorialStacks > 0 && actualDmg > 0) {
+        target.speed = Math.max(1, target.speed - target.territorialStacks);
+        target.territorialStacks = 0;
+        roundEvents.push({
+          type: 'module_proc', moduleId: 'territorialClaim',
+          actorId: target.id, actorName: target.name, actorSquad: target.squad,
+          callout: 'Territorial Claim reset (took damage)',
+        });
+      }
+
+      // Geometric Apex overkill splash
+      if (killed && geometricApexProc) {
+        const overkill = Math.max(0, effectiveDamage - preHitHP);
+        if (overkill > 0) {
+          const splashDmg = Math.floor(overkill * 0.2);
+          const enemies2 = actor.squad === 'A' ? unitsB : unitsA;
+          const splashTarget = enemies2.find(u => u.alive && u !== target);
+          if (splashTarget && splashDmg > 0) {
+            const splashActual = applyDamage(splashTarget, splashDmg, round);
+            actor.tel.damageDealt += splashActual;
+            if (!splashTarget.alive) actor.tel.standardKills += 1;
+            roundEvents.push({
+              type: 'module_proc', moduleId: 'geometricApex',
+              actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
+              targetId: splashTarget.id, targetName: splashTarget.name,
+              damage: splashActual, killed: !splashTarget.alive,
+              callout: `Geometric Apex (overkill) → ${splashActual} splash to ${splashTarget.name}`,
+            });
+          }
+        }
+      }
+
+      // Lateral Sweep: 40% secondary AoE to all other alive enemies (when 2+ allies alive)
+      if (actor.moduleId === 'lateralSweep') {
+        const actorAllies = (actor.squad === 'A' ? unitsA : unitsB).filter(u => u.alive && u !== actor);
+        if (actorAllies.length >= 2) {
+          const sweepEnemies = (actor.squad === 'A' ? unitsB : unitsA).filter(u => u.alive && u !== target);
+          for (const sw of sweepEnemies) {
+            const sweepEff = Math.floor(calcDamage(rawAttack, sw.armor) * 0.4);
+            const sweepActual = applyDamage(sw, sweepEff, round);
+            actor.tel.damageDealt += sweepActual;
+            if (!sw.alive) actor.tel.standardKills += 1;
+            roundEvents.push({
+              type: 'module_proc', moduleId: 'lateralSweep',
+              actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
+              targetId: sw.id, targetName: sw.name,
+              damage: sweepActual, killed: !sw.alive,
+              callout: `Lateral Sweep → ${sweepActual} to ${sw.name}`,
+            });
+          }
+        }
+      }
+
+      // Territorial Claim: +1 Speed on kill while at full HP
+      if (killed && actor.moduleId === 'territorialClaim' && actorAtFullHP) {
+        actor.territorialStacks += 1;
+        actor.speed += 1;
+        roundEvents.push({
+          type: 'module_proc', moduleId: 'territorialClaim',
+          actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
+          callout: `Territorial Claim → +${actor.territorialStacks} Speed (${actor.territorialStacks} clean kill${actor.territorialStacks > 1 ? 's' : ''})`,
         });
       }
 
@@ -436,6 +732,30 @@ export function battle(squadA, squadB, seed) {
           actorId: target.id, actorName: target.name, actorSquad: target.squad,
           type: 'module_proc', moduleId: 'dart', callout: 'DART',
         });
+      }
+      if (ruptureTimingProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'ruptureTiming', callout: `Rupture Timing (3rd consecutive hit) → +30% damage, ${target.name} −2 Speed for 2 rounds` });
+      }
+      if (geometricApexProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'geometricApex', callout: 'Geometric Apex (execute range) → +30% damage' });
+      }
+      if (voidPatienceProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'voidPatience', callout: `Void Patience (${voidPatienceReleasedStacks} stacks) → +${voidPatienceReleasedStacks * 15}% damage` });
+      }
+      if (compressionPatienceProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'compressionPatience', callout: `Compression Patience (${compressionReleasedStacks} stacks) → +${compressionReleasedStacks * 20}% damage released` });
+      }
+      if (perpetualArcProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'perpetualArc', callout: 'Perpetual Arc (3rd consecutive hit) → +50% damage' });
+      }
+      if (tensionReleaseProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'tensionRelease', callout: 'Tension Release → 2× damage' });
+      }
+      if (pendulumEmpoweredProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'pendulumTiming', callout: 'Pendulum Timing (return) → +40% damage' });
+      }
+      if (chargingMomentumProc) {
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'chargingMomentum', callout: `Charging Momentum (${actor.chargingStacks} stacks) → +${actor.chargingStacks * 4}% ATK` });
       }
 
       // ── Update actor tracking (must happen before Quickstrike/Echo) ──
@@ -466,7 +786,7 @@ export function battle(squadA, squadB, seed) {
             actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
             targetId: bonusTarget.id, targetName: bonusTarget.name,
             damage: bonusActual, killed: bonusKilled,
-            type: 'core_proc', coreId: 'quickstrike', callout: 'EXTRA ACTION',
+            type: 'gear_proc', gearId: 'quickstrike', callout: 'EXTRA ACTION',
           });
           if (bonusDartProc) {
             roundEvents.push({
@@ -488,7 +808,7 @@ export function battle(squadA, squadB, seed) {
             sp.currentAttack = sp.attack * (1 + 0.12 * sp.stokeStacks + 0.08 * (sp.slowBurnStacks || 0));
             roundEvents.push({
               actorId: sp.id, actorName: sp.name, actorSquad: sp.squad,
-              type: 'core_proc', coreId: 'kindling', callout: 'Flame Inherited',
+              type: 'gear_proc', gearId: 'kindling', callout: 'Flame Inherited',
             });
           }
         }
@@ -521,7 +841,7 @@ export function battle(squadA, squadB, seed) {
             actorId: echo.id, actorName: echo.name, actorSquad: echo.squad,
             targetId: target.id, targetName: target.name,
             damage: echoActual, isExecute: false, killed: !target.alive,
-            type: resonatorActive ? 'core_proc' : 'echo',
+            type: resonatorActive ? 'gear_proc' : 'echo',
             coreId: resonatorActive ? 'resonator' : null,
             callout: resonatorActive ? 'Resonance' : null,
           });
@@ -541,7 +861,7 @@ export function battle(squadA, squadB, seed) {
                 actorId: echo.id, actorName: echo.name, actorSquad: echo.squad,
                 targetId: jumpTarget.id, targetName: jumpTarget.name,
                 damage: jumpActual, killed: !jumpTarget.alive,
-                type: 'core_proc', coreId: 'chainlink', callout: 'Echo Jump',
+                type: 'gear_proc', gearId: 'chainlink', callout: 'Echo Jump',
               });
             }
           }
@@ -575,6 +895,35 @@ export function battle(squadA, squadB, seed) {
       }
       if (bonus > 0) {
         unit.currentAttack = unit.attack * (1 + bonus);
+      }
+
+      // Compression Patience: build 1 stack per round (max 3)
+      if (unit.moduleId === 'compressionPatience') {
+        unit.compressionStacks = Math.min(3, unit.compressionStacks + 1);
+      }
+
+      // Void Patience: build 1 stack per round not targeted (max 4)
+      if (unit.moduleId === 'voidPatience' && !unit.wasAttackedThisRound) {
+        unit.voidPatienceStacks = Math.min(4, unit.voidPatienceStacks + 1);
+      }
+
+      // Tension Release: track rounds survived below 50% HP
+      if (unit.moduleId === 'tensionRelease' && !unit.tensionReady) {
+        if (unit.currentHP < unit.maxHP * 0.5) {
+          unit.tensionRoundsBelow50 += 1;
+          if (unit.tensionRoundsBelow50 >= 2) unit.tensionReady = true;
+        } else {
+          unit.tensionRoundsBelow50 = 0;
+        }
+      }
+
+      // Charging Momentum: build stacks if not hit; reset if hit
+      if (unit.moduleId === 'chargingMomentum') {
+        if (unit.wasAttackedThisRound) {
+          unit.chargingStacks = 0;
+        } else {
+          unit.chargingStacks = Math.min(4, unit.chargingStacks + 1);
+        }
       }
     }
 
@@ -634,6 +983,6 @@ export function battle(squadA, squadB, seed) {
     xpRewards,
     survivalUpdates,
     battleUpdates,
-    coreProcs: gatherCoreProcs(battleLog),
+    gearProcs: gatherGearProcs(battleLog),
   };
 }

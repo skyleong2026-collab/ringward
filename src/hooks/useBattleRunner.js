@@ -15,10 +15,10 @@ function buildLogLine(step) {
 function buildProcLines(step) {
   if (step.type !== 'action_resolved') return [];
   return (step.events || [])
-    .filter((e) => e.type === 'core_proc' || e.type === 'module_proc' || e.type === 'echo')
+    .filter((e) => e.type === 'gear_proc' || e.type === 'module_proc' || e.type === 'echo')
     .map((e) => {
       if (e.type === 'echo')       return `  ↳ ${e.actorName} echoes for ${Math.round(e.damage)} dmg`;
-      if (e.type === 'core_proc')  return `  ◆ ${e.actorName}: ${e.callout}`;
+      if (e.type === 'gear_proc')  return `  ◆ ${e.actorName}: ${e.callout}`;
       if (e.type === 'module_proc') return `  ◈ ${e.actorName}: ${e.callout}`;
       return null;
     })

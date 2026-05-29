@@ -24,7 +24,7 @@ function applyDamage(unit, damage, round) {
   const realHpDmg = prevHP - unit.currentHP;
   unit.tel.damageTaken += realHpDmg;
 
-  if (unit.currentHP <= 0 && unit.coreId === 'lastwall' && !unit.lastwallUsed) {
+  if (unit.currentHP <= 0 && unit.gearId === 'lastwall' && !unit.lastwallUsed) {
     unit.currentHP = 1;
     unit.lastwallUsed = true;
     unit.lastProc = 'lastwall';
@@ -47,7 +47,7 @@ function applyDamage(unit, damage, round) {
   }
 
   if (
-    unit.coreId === 'ironhide' &&
+    unit.gearId === 'ironhide' &&
     !unit.ironhideUsed &&
     unit.hasShielded &&
     prevShield > 0 &&
@@ -175,12 +175,12 @@ function generateCoaching(winner, rounds, unitsA, unitsB) {
   return '';
 }
 
-function gatherCoreProcs(battleLog) {
+function gatherGearProcs(battleLog) {
   const procs = [];
   for (const { round, events } of battleLog) {
     for (const e of events) {
-      if (e.type === 'core_proc')
-        procs.push({ unitName: e.actorName, callout: e.callout, round, coreId: e.coreId });
+      if (e.type === 'gear_proc')
+        procs.push({ unitName: e.actorName, callout: e.callout, round, gearId: e.gearId });
     }
   }
   return procs;
@@ -251,8 +251,8 @@ function snap(units) {
     alive: u.alive,
     stokeStacks: u.stokeStacks,
     currentAttack: Math.round(u.currentAttack),
-    coreId: u.coreId ?? null,
-    moduleId: u.moduleId ?? null,
+    gearId: u.gearId ?? null,
+    moduleIds: u.moduleIds ?? [],
   }));
 }
 
@@ -405,10 +405,10 @@ export function* battleStepEngine(squadA, squadB, seed) {
       });
 
       if (target.lastProc === 'ironhide') {
-        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'core_proc', coreId: 'ironhide', callout: 'Shield Reformed' });
+        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'gear_proc', gearId: 'ironhide', callout: 'Shield Reformed' });
       }
       if (target.lastProc === 'lastwall') {
-        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'core_proc', coreId: 'lastwall', callout: 'LAST STAND' });
+        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'gear_proc', gearId: 'lastwall', callout: 'LAST STAND' });
       }
 
       if (target.lastwallUsed && actor.alive) {
@@ -419,7 +419,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
           actor.alive = false;
           if (actor.tel.fell === null) actor.tel.fell = round;
         }
-        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, targetId: actor.id, targetName: actor.name, damage: reflection, type: 'core_proc', coreId: 'lastwall', callout: 'LAST STAND' });
+        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, targetId: actor.id, targetName: actor.name, damage: reflection, type: 'gear_proc', gearId: 'lastwall', callout: 'LAST STAND' });
       }
 
       if (fastStartProc) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'fastStart', callout: 'FAST START' });
@@ -430,7 +430,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
       if (actor.moduleId === 'dart') actor.dartActive = true;
 
       // Quickstrike
-      if (killed && actor.coreId === 'quickstrike' && !actor.quickstrikeUsedThisRound && actor.alive) {
+      if (killed && actor.gearId === 'quickstrike' && !actor.quickstrikeUsedThisRound && actor.alive) {
         actor.quickstrikeUsedThisRound = true;
         const bonusTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad], rng);
         if (bonusTarget && bonusTarget.alive) {
@@ -449,7 +449,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
           if (bonusActual > actor.tel.largestHit) actor.tel.largestHit = bonusActual;
           const bonusKilled = bonusWasAlive && !bonusTarget.alive;
           if (bonusKilled) actor.tel.standardKills += 1;
-          roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: bonusTarget.id, targetName: bonusTarget.name, damage: bonusActual, killed: bonusKilled, type: 'core_proc', coreId: 'quickstrike', callout: 'EXTRA ACTION' });
+          roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: bonusTarget.id, targetName: bonusTarget.name, damage: bonusActual, killed: bonusKilled, type: 'gear_proc', gearId: 'quickstrike', callout: 'EXTRA ACTION' });
           if (bonusDartProc) roundEvents.push({ actorId: bonusTarget.id, actorName: bonusTarget.name, actorSquad: bonusTarget.squad, type: 'module_proc', moduleId: 'dart', callout: 'DART' });
           actor.lastAttackedTargetId = bonusTarget.id;
           if (actor.moduleId === 'dart') actor.dartActive = true;
@@ -460,10 +460,10 @@ export function* battleStepEngine(squadA, squadB, seed) {
       if (killed) {
         const deadSquad = target.squad === 'A' ? unitsA : unitsB;
         for (const sp of deadSquad) {
-          if (sp.alive && sp.archetype === 'Spark' && sp.coreId === 'kindling' && sp !== target) {
+          if (sp.alive && sp.archetype === 'Spark' && sp.gearId === 'kindling' && sp !== target) {
             sp.stokeStacks += 2;
             sp.currentAttack = sp.attack * (1 + 0.12 * sp.stokeStacks + 0.08 * (sp.slowBurnStacks || 0));
-            roundEvents.push({ actorId: sp.id, actorName: sp.name, actorSquad: sp.squad, type: 'core_proc', coreId: 'kindling', callout: 'Flame Inherited' });
+            roundEvents.push({ actorId: sp.id, actorName: sp.name, actorSquad: sp.squad, type: 'gear_proc', gearId: 'kindling', callout: 'Flame Inherited' });
           }
         }
       }
@@ -474,7 +474,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
         for (const echo of echoAllies) {
           if (!target.alive) continue;
           const isFirstEcho = !echo.firstEchoFiredThisRound;
-          const resonatorActive = echo.coreId === 'resonator' && isFirstEcho;
+          const resonatorActive = echo.gearId === 'resonator' && isFirstEcho;
           const echoPower = resonatorActive ? 1.0 : 0.5;
           echo.firstEchoFiredThisRound = true;
           const echoRaw = actor.currentAttack * echoPower;
@@ -484,8 +484,8 @@ export function* battleStepEngine(squadA, squadB, seed) {
           echo.tel.echoDamage += echoActual;
           echo.tel.damageDealt += echoActual;
           if (!target.alive) echo.tel.standardKills += 1;
-          roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: target.id, targetName: target.name, damage: echoActual, isExecute: false, killed: !target.alive, type: resonatorActive ? 'core_proc' : 'echo', coreId: resonatorActive ? 'resonator' : null, callout: resonatorActive ? 'Resonance' : null });
-          if (echo.coreId === 'chainlink') {
+          roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: target.id, targetName: target.name, damage: echoActual, isExecute: false, killed: !target.alive, type: resonatorActive ? 'gear_proc' : 'echo', gearId: resonatorActive ? 'resonator' : null, callout: resonatorActive ? 'Resonance' : null });
+          if (echo.gearId === 'chainlink') {
             const jumpTarget = enemies.filter((u) => u.alive && u !== target)[0];
             if (jumpTarget) {
               const jumpRaw = actor.currentAttack * 0.5;
@@ -495,7 +495,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
               echo.tel.echoDamage += jumpActual;
               echo.tel.damageDealt += jumpActual;
               if (!jumpTarget.alive) echo.tel.standardKills += 1;
-              roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: jumpTarget.id, targetName: jumpTarget.name, damage: jumpActual, killed: !jumpTarget.alive, type: 'core_proc', coreId: 'chainlink', callout: 'Echo Jump' });
+              roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: jumpTarget.id, targetName: jumpTarget.name, damage: jumpActual, killed: !jumpTarget.alive, type: 'gear_proc', gearId: 'chainlink', callout: 'Echo Jump' });
             }
           }
         }
@@ -590,6 +590,6 @@ export function* battleStepEngine(squadA, squadB, seed) {
     xpRewards,
     survivalUpdates,
     battleUpdates,
-    coreProcs: gatherCoreProcs(battleLog),
+    gearProcs: gatherGearProcs(battleLog),
   };
 }

@@ -1,16 +1,7 @@
 import { useState } from 'react';
 import { ARCHETYPES } from '../data/creatures.js';
-import { CORES } from '../data/cores.js';
+import { GEAR } from '../data/gear.js';
 import { MODULES_BY_ID } from '../data/modules.js';
-
-const CORE_COLORS = {
-  quickstrike: '#d0021b',
-  ironhide:    '#4a90d9',
-  lastwall:    '#ff6b35',
-  resonator:   '#7ed321',
-  chainlink:   '#a0d060',
-  kindling:    '#f5a623',
-};
 
 function findDeathCause(unitName, battleLog) {
   if (!battleLog) return null;
@@ -124,7 +115,7 @@ function CombatLog({ battleLog }) {
   const [showAll, setShowAll] = useState(false);
 
   function isSignificant(e) {
-    return e.killed || e.type === 'core_proc' || e.type === 'module_proc' || e.isExecute;
+    return e.killed || e.type === 'gear_proc' || e.type === 'module_proc' || e.isExecute;
   }
 
   return (
@@ -147,10 +138,10 @@ function CombatLog({ battleLog }) {
               <div style={{ fontSize: 8, color: '#1a1a3a', letterSpacing: 1.5, marginBottom: 3 }}>RND {round}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {display.map((e, i) => {
-                  const isProc = e.type === 'core_proc';
+                  const isProc = e.type === 'gear_proc';
                   const isModuleProc = e.type === 'module_proc';
                   const isEcho = e.type === 'echo';
-                  const procColor = isProc ? (CORE_COLORS[e.coreId] || '#888') : null;
+                  const procColor = isProc ? (GEAR[e.gearId]?.color || '#888') : null;
                   const modColor = isModuleProc ? (MODULES_BY_ID[e.moduleId]?.color || '#888') : null;
                   const actorColor = e.actorSquad === 'A' ? '#5a5aee' : '#ee4444';
                   return (
@@ -316,9 +307,9 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
                 {e.callout && (
                   <span style={{
                     marginLeft: 4, fontSize: 8,
-                    color: CORE_COLORS[e.coreId] || '#aa6060',
-                    background: (CORE_COLORS[e.coreId] || '#aa6060') + '18',
-                    border: `1px solid ${(CORE_COLORS[e.coreId] || '#aa6060')}35`,
+                    color: GEAR[e.gearId]?.color || '#aa6060',
+                    background: (GEAR[e.gearId]?.color || '#aa6060') + '18',
+                    border: `1px solid ${(GEAR[e.gearId]?.color || '#aa6060')}35`,
                     borderRadius: 3, padding: '0 3px',
                   }}>
                     {e.callout}
@@ -335,15 +326,15 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
 }
 
 export default function Result({ result, onTryAgain, onNewBattle, onDungeonContinue, onDungeonFail }) {
-  const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, coreProcs, battleLog } = result;
+  const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, gearProcs, battleLog } = result;
   const { squadA, squadB } = telemetry;
 
   const groupedProcs = (() => {
-    if (!coreProcs || coreProcs.length === 0) return [];
+    if (!gearProcs || gearProcs.length === 0) return [];
     const map = {};
-    for (const p of coreProcs) {
+    for (const p of gearProcs) {
       const key = `${p.unitName}|${p.callout}`;
-      if (!map[key]) map[key] = { unitName: p.unitName, callout: p.callout, coreId: p.coreId, count: 0 };
+      if (!map[key]) map[key] = { unitName: p.unitName, callout: p.callout, gearId: p.gearId, count: 0 };
       map[key].count += 1;
     }
     return Object.values(map);
@@ -417,14 +408,14 @@ export default function Result({ result, onTryAgain, onNewBattle, onDungeonConti
           <div style={{ fontSize: 10, color: '#444', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' }}>Core Activations</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {groupedProcs.map((e, i) => {
-              const coreColor = CORES[e.coreId]?.color || '#888';
+              const gearColor = GEAR[e.gearId]?.color || '#888';
               return (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
                     <span style={{ color: '#666' }}>{e.unitName}</span>
                     <span style={{
-                      fontSize: 8, color: coreColor, background: coreColor + '18',
-                      border: `1px solid ${coreColor}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1,
+                      fontSize: 8, color: gearColor, background: gearColor + '18',
+                      border: `1px solid ${gearColor}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1,
                     }}>{e.callout}</span>
                   </div>
                   {e.count > 1 && <span style={{ fontSize: 10, color: '#444' }}>×{e.count}</span>}

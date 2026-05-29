@@ -47,7 +47,8 @@ function createCaughtInstance(creature, zoneName) {
     survivalStreak: 0,
     enemyMemory: [],
     foundAt: zoneName,
-    coreId: null,
+    gearId: null,
+    moduleIds: [],
   };
 }
 
@@ -119,10 +120,10 @@ function App() {
     });
   }
 
-  function equipCore(instanceId, coreId) {
+  function equipGear(instanceId, gearId) {
     setCollection((prev) => {
       const next = prev.map((u) =>
-        u.instanceId === instanceId ? { ...u, coreId: coreId ?? null } : u
+        u.instanceId === instanceId ? { ...u, gearId: gearId ?? null } : u
       );
       persist(next, squadIds);
       return next;
@@ -130,10 +131,16 @@ function App() {
   }
 
   function equipModule(instanceId, moduleId) {
+    if (!moduleId) return;
     setCollection((prev) => {
-      const next = prev.map((u) =>
-        u.instanceId === instanceId ? { ...u, moduleId: moduleId ?? null } : u
-      );
+      const next = prev.map((u) => {
+        if (u.instanceId !== instanceId) return u;
+        const ids = u.moduleIds || [];
+        const nextIds = ids.includes(moduleId)
+          ? ids.filter((id) => id !== moduleId)
+          : [...ids, moduleId].slice(0, 3);
+        return { ...u, moduleIds: nextIds };
+      });
       persist(next, squadIds);
       return next;
     });
@@ -486,7 +493,7 @@ function App() {
             onWalk={() => setScreen('world')}
             onDungeon={() => setScreen('dungeon')}
             justFedInstanceId={justFedInstanceId}
-            onEquipCore={equipCore}
+            onEquipGear={equipGear}
             onEquipModule={equipModule}
           />
         )}
