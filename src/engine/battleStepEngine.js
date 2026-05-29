@@ -1,9 +1,13 @@
 import { createRng } from './rng.js';
-import { MODULES_BY_ID } from '../data/modules.js';
 
 // ─── Damage formula ───────────────────────────────────────────────────────────
 function calcDamage(rawAttack, targetArmor) {
   return Math.max(rawAttack - targetArmor, rawAttack * 0.5);
+}
+
+// Spark per-stack scaling. Backdraft (Stronger dial) steepens it 0.12 → 0.15.
+function sparkCoeff(u) {
+  return u.dials?.has('backdraft') ? 0.15 : 0.12;
 }
 
 // ─── Apply damage (mutates unit) ──────────────────────────────────────────────
@@ -11,6 +15,8 @@ function applyDamage(unit, damage, round) {
   let hpDmg = damage;
   unit.lastProc = null;
   const prevShield = unit.shield;
+  // Hair Trigger (Repeat dial): once-per-battle survival gear may fire twice.
+  const oneShotCap = unit.dials?.has('hairTrigger') ? 2 : 1;
 
   if (unit.shield > 0) {
     const absorbed = Math.min(unit.shield, damage);
@@ -24,10 +30,11 @@ function applyDamage(unit, damage, round) {
   const realHpDmg = prevHP - unit.currentHP;
   unit.tel.damageTaken += realHpDmg;
 
-  if (unit.currentHP <= 0 && unit.gearId === 'lastwall' && !unit.lastwallUsed) {
+  if (unit.currentHP <= 0 && unit.gearId === 'lastwall' && unit.lastwallUses < oneShotCap) {
     unit.currentHP = 1;
-    unit.lastwallUsed = true;
+    unit.lastwallUses += 1;
     unit.lastProc = 'lastwall';
+    if (unit.lastwallUses > 1) unit.hairTriggerFired = true;
   }
 
   // Pyre Heart: does NOT survive — captures its Stoke to pass on + detonate as it falls.
@@ -42,41 +49,51 @@ function applyDamage(unit, damage, round) {
     if (unit.tel.fell === null) unit.tel.fell = round;
   }
 
+  // Early Wall (Earlier dial): widen the shield trigger from 50% to 60% HP.
+  // Hardplate (Stronger dial): shield absorbs 28% maxHP instead of 20%.
+  const shieldThreshold = unit.dials?.has('earlyWall') ? 0.6 : 0.5;
+  const shieldFrac = unit.dials?.has('hardplate') ? 0.28 : 0.2;
   if (
     unit.archetype === 'Guardian' &&
     !unit.hasShielded &&
     unit.alive &&
-    unit.currentHP <= unit.maxHP * 0.5
+    unit.currentHP <= unit.maxHP * shieldThreshold
   ) {
-    unit.shield = Math.floor(unit.maxHP * 0.2);
+    unit.shield = Math.floor(unit.maxHP * shieldFrac);
     unit.hasShielded = true;
     unit.tel.shieldTriggers += 1;
+    // Early Wall only "did something" if the wall came up in the 50–60% band.
+    if (unit.dials?.has('earlyWall') && unit.currentHP > unit.maxHP * 0.5) unit.earlyWallPending = true;
+    if (unit.dials?.has('hardplate')) unit.hardplatePending = true;
   }
 
   if (
     unit.gearId === 'ironhide' &&
-    !unit.ironhideUsed &&
+    unit.ironhideUses < oneShotCap &&
     unit.hasShielded &&
     prevShield > 0 &&
     unit.shield === 0
   ) {
-    unit.shield = Math.floor(unit.maxHP * 0.1);
-    unit.ironhideUsed = true;
+    unit.shield = Math.floor(unit.maxHP * (unit.dials?.has('hardplate') ? 0.15 : 0.1));
+    unit.ironhideUses += 1;
     unit.lastProc = 'ironhide';
+    if (unit.ironhideUses > 1) unit.hairTriggerFired = true;
   }
 
   // Mirrorplate: on first shield break, release half the damage absorbed so far
   // as a burst back at the attacker (applied by the caller, which has the actor).
   if (
     unit.gearId === 'mirrorplate' &&
-    !unit.mirrorBurstUsed &&
+    unit.mirrorBurstUses < oneShotCap &&
     unit.hasShielded &&
     prevShield > 0 &&
     unit.shield === 0
   ) {
-    unit.mirrorBurstUsed = true;
-    unit.mirrorBurstPending = Math.max(1, Math.floor(unit.tel.shieldAbsorbed * 0.5));
+    const burstFrac = unit.dials?.has('hardplate') ? 0.7 : 0.5;
+    unit.mirrorBurstUses += 1;
+    unit.mirrorBurstPending = Math.max(1, Math.floor(unit.tel.shieldAbsorbed * burstFrac));
     unit.lastProc = 'mirrorplate';
+    if (unit.mirrorBurstUses > 1) unit.hairTriggerFired = true;
   }
 
   return realHpDmg;
@@ -89,31 +106,6 @@ function pickTarget(actor, enemies, lastSquadTarget, rng) {
 
   const guardians = alive.filter((u) => u.archetype === 'Guardian');
   const pool = guardians.length > 0 ? guardians : alive;
-
-  const module = actor.moduleId ? MODULES_BY_ID[actor.moduleId] : null;
-  const useBias = rng && rng() < 0.7;
-
-  if (module && useBias) {
-    if (actor.moduleId === 'weakpoint') {
-      const lowestHP = pool.reduce((best, u) => (u.currentHP < best.currentHP ? u : best));
-      if (lowestHP) return lowestHP;
-    }
-    if (actor.moduleId === 'echoHunter') {
-      const echoes = pool.filter((u) => u.archetype === 'Echo');
-      if (echoes.length > 0)
-        return echoes.reduce((best, u) => (u.currentHP < best.currentHP ? u : best));
-    }
-    if (actor.moduleId === 'packCall') {
-      if (lastSquadTarget) {
-        const allyTarget = pool.find((u) => u.id === lastSquadTarget);
-        if (allyTarget) return allyTarget;
-      }
-    }
-    if (actor.moduleId === 'protector') {
-      if (actor.allies && actor.allies.length > 0)
-        return pool.reduce((best, u) => (u.currentAttack > best.currentAttack ? u : best));
-    }
-  }
 
   switch (actor.archetype) {
     case 'Guardian':
@@ -227,18 +219,18 @@ function initUnit(creature, squad) {
     shield: 0,
     hasShielded: false,
     stokeStacks: 0,
-    slowBurnStacks: 0,
     alive: true,
     threat: computeThreat(creature),
     lastProc: null,
-    ironhideUsed: false,
-    lastwallUsed: false,
-    quickstrikeUsedThisRound: false,
+    dials: new Set(creature.moduleIds ?? []),
+    ironhideUses: 0,
+    lastwallUses: 0,
+    mirrorBurstUses: 0,
+    hairTriggerFired: false,
+    earlyWallPending: false,
+    hardplatePending: false,
+    quickstrikeCountThisRound: 0,
     firstEchoFiredThisRound: false,
-    fastStartUsed: false,
-    lastAttackedTargetId: null,
-    dartActive: false,
-    mirrorBurstUsed: false,
     mirrorBurstPending: 0,
     pyreHeartUsed: false,
     pyreHeartPending: 0,
@@ -322,7 +314,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
     if (aliveA.length === 0 || aliveB.length === 0) break;
 
     for (const unit of [...unitsA, ...unitsB]) {
-      unit.quickstrikeUsedThisRound = false;
+      unit.quickstrikeCountThisRound = 0;
       unit.firstEchoFiredThisRound = false;
       unit.killMomentumCountThisRound = 0;
       unit.execThreshWideThisRound = false;
@@ -394,12 +386,17 @@ export function* battleStepEngine(squadA, squadB, seed) {
       // ── Resolve the action ────────────────────────────────────────────────
       lastSquadTarget[actor.squad] = target.id;
 
-      const execT = actor.execThreshWideThisRound ? 0.45 : 0.3;
+      // Deep Cut (Wider dial): execute window widens 30% → 42% of target HP.
+      const baseExecT = actor.dials.has('deepCut') ? 0.42 : 0.3;
+      const execT = actor.execThreshWideThisRound ? Math.max(0.45, baseExecT) : baseExecT;
       let rawAttack = actor.currentAttack;
       let isExecute = false;
+      let deepCutProc = false;
       if (actor.archetype === 'Swift' && target.currentHP < target.maxHP * execT) {
         rawAttack *= 2;
         isExecute = true;
+        // Deep Cut "did something" when the target sat in the 30–42% band.
+        if (actor.dials.has('deepCut') && target.currentHP >= target.maxHP * 0.3) deepCutProc = true;
       }
 
       // Open Channel: a marked target makes the next ally hit on it empowered.
@@ -410,25 +407,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
         openChannelProc = true;
       }
 
-      let fastStartProc = false;
-      let rootedProc = false;
-      if (actor.moduleId === 'fastStart' && !actor.fastStartUsed) {
-        rawAttack = Math.floor(rawAttack * 1.5);
-        actor.fastStartUsed = true;
-        fastStartProc = true;
-      }
-      if (actor.moduleId === 'rooted' && actor.lastAttackedTargetId === target.id) {
-        rawAttack = Math.floor(rawAttack * 1.25);
-        rootedProc = true;
-      }
-
-      let dartProc = false;
-      let effectiveDamage = calcDamage(rawAttack, target.armor);
-      if (target.moduleId === 'dart' && target.dartActive) {
-        effectiveDamage = Math.floor(effectiveDamage * 0.8);
-        target.dartActive = false;
-        dartProc = true;
-      }
+      const effectiveDamage = calcDamage(rawAttack, target.armor);
 
       const targetWasAlive = target.alive;
       const actualDmg = applyDamage(target, effectiveDamage, round);
@@ -463,7 +442,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
         roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'gear_proc', gearId: 'lastwall', callout: 'LAST STAND' });
       }
 
-      if (target.lastwallUsed && actor.alive) {
+      if (target.lastwallUses > 0 && actor.alive) {
         const reflection = Math.max(1, Math.floor(actualDmg * 0.3));
         actor.currentHP = Math.max(0, actor.currentHP - reflection);
         actor.tel.damageTaken += reflection;
@@ -487,43 +466,40 @@ export function* battleStepEngine(squadA, squadB, seed) {
       }
 
       if (openChannelProc) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: target.id, targetName: target.name, type: 'gear_proc', gearId: 'openChannel', callout: 'OPEN CHANNEL' });
-      if (fastStartProc) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'fastStart', callout: 'FAST START' });
-      if (rootedProc)    roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'rooted', callout: 'ROOTED' });
-      if (dartProc)      roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'module_proc', moduleId: 'dart', callout: 'DART' });
+      if (deepCutProc) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: target.id, targetName: target.name, type: 'module_proc', moduleId: 'deepCut', callout: 'DEEP CUT' });
+      // Early Wall / Hardplate fired inside applyDamage(target); surface them now.
+      if (target.earlyWallPending) { target.earlyWallPending = false; roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'module_proc', moduleId: 'earlyWall', callout: 'EARLY WALL' }); }
+      if (target.hardplatePending) { target.hardplatePending = false; roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'module_proc', moduleId: 'hardplate', callout: 'HARDPLATE' }); }
+      if (target.hairTriggerFired) { target.hairTriggerFired = false; roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'module_proc', moduleId: 'hairTrigger', callout: 'HAIR TRIGGER' }); }
 
-      actor.lastAttackedTargetId = target.id;
-      if (actor.moduleId === 'dart') actor.dartActive = true;
-
-      // Quickstrike
-      if (killed && actor.gearId === 'quickstrike' && !actor.quickstrikeUsedThisRound && actor.alive) {
-        actor.quickstrikeUsedThisRound = true;
+      // Quickstrike: a kill refunds an action. Second Wind lets the chain extend
+      // to a 2nd bonus action when the first one also kills.
+      const quickstrikeCap = actor.dials.has('secondWind') ? 2 : 1;
+      let quickstrikeChainKilled = killed;
+      while (quickstrikeChainKilled && actor.gearId === 'quickstrike' && actor.quickstrikeCountThisRound < quickstrikeCap && actor.alive) {
+        actor.quickstrikeCountThisRound += 1;
+        if (actor.quickstrikeCountThisRound > 1) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'secondWind', callout: 'SECOND WIND' });
         const bonusTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad], rng);
-        if (bonusTarget && bonusTarget.alive) {
-          let bonusRaw = actor.currentAttack;
-          if (actor.archetype === 'Swift' && bonusTarget.currentHP < bonusTarget.maxHP * 0.3) bonusRaw *= 2;
-          let bonusEff = calcDamage(bonusRaw, bonusTarget.armor);
-          let bonusDartProc = false;
-          if (bonusTarget.moduleId === 'dart' && bonusTarget.dartActive) {
-            bonusEff = Math.floor(bonusEff * 0.8);
-            bonusTarget.dartActive = false;
-            bonusDartProc = true;
-          }
-          const bonusWasAlive = bonusTarget.alive;
-          const bonusActual = applyDamage(bonusTarget, bonusEff, round);
-          actor.tel.damageDealt += bonusActual;
-          if (bonusActual > actor.tel.largestHit) actor.tel.largestHit = bonusActual;
-          const bonusKilled = bonusWasAlive && !bonusTarget.alive;
-          if (bonusKilled) actor.tel.standardKills += 1;
-          roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: bonusTarget.id, targetName: bonusTarget.name, damage: bonusActual, killed: bonusKilled, type: 'gear_proc', gearId: 'quickstrike', callout: 'EXTRA ACTION' });
-          if (bonusDartProc) roundEvents.push({ actorId: bonusTarget.id, actorName: bonusTarget.name, actorSquad: bonusTarget.squad, type: 'module_proc', moduleId: 'dart', callout: 'DART' });
-          actor.lastAttackedTargetId = bonusTarget.id;
-          if (actor.moduleId === 'dart') actor.dartActive = true;
-        }
+        if (!bonusTarget || !bonusTarget.alive) break;
+        let bonusRaw = actor.currentAttack;
+        if (actor.archetype === 'Swift' && bonusTarget.currentHP < bonusTarget.maxHP * baseExecT) bonusRaw *= 2;
+        const bonusEff = calcDamage(bonusRaw, bonusTarget.armor);
+        const bonusWasAlive = bonusTarget.alive;
+        const bonusActual = applyDamage(bonusTarget, bonusEff, round);
+        actor.tel.damageDealt += bonusActual;
+        if (bonusActual > actor.tel.largestHit) actor.tel.largestHit = bonusActual;
+        const bonusKilled = bonusWasAlive && !bonusTarget.alive;
+        if (bonusKilled) actor.tel.standardKills += 1;
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: bonusTarget.id, targetName: bonusTarget.name, damage: bonusActual, killed: bonusKilled, type: 'gear_proc', gearId: 'quickstrike', callout: 'EXTRA ACTION' });
+        lastSquadTarget[actor.squad] = bonusTarget.id;
+        quickstrikeChainKilled = bonusKilled;
       }
 
-      // Killing Momentum: each kill refunds an action (cap 2/round) and widens
-      // this unit's execute window for the rest of the round.
-      if (killed && actor.gearId === 'killingMomentum' && actor.killMomentumCountThisRound < 2 && actor.alive) {
+      // Killing Momentum: each kill refunds an action and widens this unit's
+      // execute window for the round. Second Wind raises the cap 2 → 3.
+      const momentumCap = actor.dials.has('secondWind') ? 3 : 2;
+      if (killed && actor.gearId === 'killingMomentum' && actor.killMomentumCountThisRound < momentumCap && actor.alive) {
+        if (actor.killMomentumCountThisRound >= 2) roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, type: 'module_proc', moduleId: 'secondWind', callout: 'SECOND WIND' });
         actor.killMomentumCountThisRound += 1;
         actor.execThreshWideThisRound = true;
         const bonusTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad], rng);
@@ -538,7 +514,6 @@ export function* battleStepEngine(squadA, squadB, seed) {
           const bonusKilled = bonusWasAlive && !bonusTarget.alive;
           if (bonusKilled) actor.tel.standardKills += 1;
           roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: bonusTarget.id, targetName: bonusTarget.name, damage: bonusActual, killed: bonusKilled, type: 'gear_proc', gearId: 'killingMomentum', callout: 'MOMENTUM' });
-          actor.lastAttackedTargetId = bonusTarget.id;
         }
       }
 
@@ -547,9 +522,11 @@ export function* battleStepEngine(squadA, squadB, seed) {
         const deadSquad = target.squad === 'A' ? unitsA : unitsB;
         for (const sp of deadSquad) {
           if (sp.alive && sp.archetype === 'Spark' && sp.gearId === 'kindling' && sp !== target) {
-            sp.stokeStacks += 2;
-            sp.currentAttack = sp.attack * (1 + 0.12 * sp.stokeStacks + 0.08 * (sp.slowBurnStacks || 0));
+            const gain = sp.dials.has('bankedHeat') ? 3 : 2;
+            sp.stokeStacks += gain;
+            sp.currentAttack = sp.attack * (1 + sparkCoeff(sp) * sp.stokeStacks);
             roundEvents.push({ actorId: sp.id, actorName: sp.name, actorSquad: sp.squad, type: 'gear_proc', gearId: 'kindling', callout: 'Flame Inherited' });
+            if (sp.dials.has('bankedHeat')) roundEvents.push({ actorId: sp.id, actorName: sp.name, actorSquad: sp.squad, type: 'module_proc', moduleId: 'bankedHeat', callout: 'BANKED HEAT' });
           }
         }
       }
@@ -563,10 +540,13 @@ export function* battleStepEngine(squadA, squadB, seed) {
         if (heirs.length && target.pyreHeartPending > 0) {
           heirs.sort((a, b) => b.stokeStacks - a.stokeStacks);
           const heir = heirs[0];
-          heir.stokeStacks += target.pyreHeartPending;
-          heir.currentAttack = heir.attack * (1 + 0.12 * heir.stokeStacks + 0.08 * (heir.slowBurnStacks || 0));
+          heir.stokeStacks += target.pyreHeartPending + (heir.dials.has('bankedHeat') ? 1 : 0);
+          heir.currentAttack = heir.attack * (1 + sparkCoeff(heir) * heir.stokeStacks);
         }
-        const burst = Math.max(1, 8 + 4 * target.pyreHeartPending);
+        // Backdraft (Stronger dial): Pyre detonation hits wider.
+        const burst = target.dials.has('backdraft')
+          ? Math.max(1, 12 + 6 * target.pyreHeartPending)
+          : Math.max(1, 8 + 4 * target.pyreHeartPending);
         for (const e of enemySquad.filter((u) => u.alive)) {
           e.currentHP = Math.max(0, e.currentHP - burst);
           e.tel.damageTaken += burst;
@@ -582,7 +562,11 @@ export function* battleStepEngine(squadA, squadB, seed) {
           if (!target.alive) continue;
           const isFirstEcho = !echo.firstEchoFiredThisRound;
           const resonatorActive = echo.gearId === 'resonator' && isFirstEcho;
-          const echoPower = resonatorActive ? 1.0 : 0.5;
+          // Pure Tone (Stronger dial): echoes ring louder — base 0.5 → 0.65, resonator 1.0 → 1.15.
+          const pureTone = echo.dials.has('pureTone');
+          const echoPower = resonatorActive ? (pureTone ? 1.15 : 1.0) : (pureTone ? 0.65 : 0.5);
+          const jumpPower = pureTone ? 0.65 : 0.5;
+          if (isFirstEcho && pureTone) roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, type: 'module_proc', moduleId: 'pureTone', callout: 'PURE TONE' });
           echo.firstEchoFiredThisRound = true;
           const echoRaw = actor.currentAttack * echoPower;
           const echoDmg = calcDamage(echoRaw, target.armor);
@@ -593,9 +577,12 @@ export function* battleStepEngine(squadA, squadB, seed) {
           if (!target.alive) echo.tel.standardKills += 1;
           roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: target.id, targetName: target.name, damage: echoActual, isExecute: false, killed: !target.alive, type: resonatorActive ? 'gear_proc' : 'echo', gearId: resonatorActive ? 'resonator' : null, callout: resonatorActive ? 'Resonance' : null });
           if (echo.gearId === 'chainlink' || echo.gearId === 'openChannel') {
-            const jumpTarget = enemies.filter((u) => u.alive && u !== target)[0];
-            if (jumpTarget) {
-              const jumpRaw = actor.currentAttack * 0.5;
+            // Long Echo (Wider dial): chains jump to one additional target.
+            const jumpCount = echo.dials.has('longEcho') ? 2 : 1;
+            const jumpTargets = enemies.filter((u) => u.alive && u !== target).slice(0, jumpCount);
+            jumpTargets.forEach((jumpTarget, jumpIdx) => {
+              if (!jumpTarget.alive) return;
+              const jumpRaw = actor.currentAttack * jumpPower;
               const jumpDmg = calcDamage(jumpRaw, jumpTarget.armor);
               const jumpActual = applyDamage(jumpTarget, jumpDmg, round);
               echo.tel.echoEvents += 1;
@@ -605,7 +592,8 @@ export function* battleStepEngine(squadA, squadB, seed) {
               // Open Channel marks the chained target: next ally hit on it is empowered.
               if (echo.gearId === 'openChannel' && jumpTarget.alive) jumpTarget.openChannelMark = true;
               roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: jumpTarget.id, targetName: jumpTarget.name, damage: jumpActual, killed: !jumpTarget.alive, type: 'gear_proc', gearId: echo.gearId, callout: echo.gearId === 'openChannel' ? 'OPEN CHANNEL' : 'Echo Jump' });
-            }
+              if (jumpIdx === 1) roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, targetId: jumpTarget.id, targetName: jumpTarget.name, type: 'module_proc', moduleId: 'longEcho', callout: 'LONG ECHO' });
+            });
           }
         }
       }
@@ -640,18 +628,16 @@ export function* battleStepEngine(squadA, squadB, seed) {
     // End-of-round scaling
     for (const unit of [...unitsA, ...unitsB]) {
       if (!unit.alive) continue;
-      let bonus = 0;
       if (unit.archetype === 'Spark') {
-        unit.stokeStacks += 1;
+        // Banked Heat (Stronger dial): every Stoke gain comes with an extra stack.
+        const gain = unit.dials.has('bankedHeat') ? 2 : 1;
+        unit.stokeStacks += gain;
         unit.tel.peakStacks = unit.stokeStacks;
         unit.tel.roundReachedPeak = round;
-        bonus += 0.12 * unit.stokeStacks;
+        unit.currentAttack = unit.attack * (1 + sparkCoeff(unit) * unit.stokeStacks);
+        if (unit.dials.has('bankedHeat')) roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, type: 'module_proc', moduleId: 'bankedHeat', callout: 'BANKED HEAT' });
+        if (unit.dials.has('backdraft')) roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, type: 'module_proc', moduleId: 'backdraft', callout: 'BACKDRAFT' });
       }
-      if (unit.moduleId === 'slowBurn') {
-        unit.slowBurnStacks += 1;
-        bonus += 0.08 * unit.slowBurnStacks;
-      }
-      if (bonus > 0) unit.currentAttack = unit.attack * (1 + bonus);
     }
 
     if (unitsA.every((u) => !u.alive)) { winner = 'B'; break; }

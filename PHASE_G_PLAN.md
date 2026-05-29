@@ -38,9 +38,17 @@ The step engine currently handles only fastStart/rooted/dart + the old core proc
 - **Glasswork Core**: Convert Armor→Attack at init.
 Each proc must emit a `core_proc`/`gear_proc` event so telemetry + callouts surface it (readability is a pillar).
 
-### Step 5 — Module rework (tuning dials only)
-- Delete/replace the flat-% Phase I modules in `modules.js`. Survivors must be **dials** on existing behaviors (e.g. "execute threshold 30%→40%", "chain jumps +1", "trigger one round earlier").
-- Remove their bespoke logic from `battle.js`; express dials as parameters the step engine reads.
+### Step 5 — Module rework (tuning dials only) ✅ DONE (vG-A)
+> Status: `modules.js` now holds **9 dials** replacing all Phase I + legacy modules. Doctrine: *a dial does nothing on its own* — each tunes a parameter of a behavior the unit already has (archetype mechanic or gear). Vocabulary categories: **Earlier · Wider · Stronger · Repeat**. Implemented in the canonical `battleStepEngine.js`:
+> - Early Wall (Guardian): shield trigger 50%→60% HP. · Hardplate (Guardian): shield 20%→28% maxHP, ironhide reform & mirror burst scale up.
+> - Deep Cut (Swift): execute window 30%→42%. · Second Wind (Swift): quickstrike chains to a 2nd bonus action; killingMomentum cap 2→3.
+> - Long Echo (Echo): chains jump +1 target. · Pure Tone (Echo): echo power 0.5→0.65, resonator 1.0→1.15.
+> - Banked Heat (Spark): every Stoke gain +1 stack. · Backdraft (Spark): Spark scaling 0.12→0.15, Pyre detonation wider.
+> - Hair Trigger (Any): lastwall/ironhide/mirrorplate may fire a 2nd time.
+> Each dial emits a `module_proc` so telemetry/callouts surface it. `MODULE_POOLS` remapped to the new ids. Verified by `scripts/phaseg-smoke.mjs` — every dial fires its proc WITH the dial and stays silent WITHOUT (18 dial checks + 5 launch + 2 starter = 25... checks all PASS). Build clean; app renders with no console errors.
+> NOTE: the dead `actor.moduleId` reads in the canonical engine were a latent Step-2 bug (units carry `moduleIds`), so modules never functioned there — the dial rebuild is purely additive. `battle.js` still contains the old bespoke Phase I branches; rather than surgically strip ~25 branches from a file being **deleted whole in Step 6**, they are left inert (no unit can equip those ids) and removed wholesale at deletion. Wild-hunt/retry won't honor dials until Step 6 swaps `battle.js` for `resolveBattle` — same documented gap as the launch gear.
+
+Cut from the proposed set (designer call, restraint): **Quick Cycle** (redundant universal "mandatory glue" risk). Standalone-behavior modules (rooted, dart, weakpoint, echoHunter, packCall, protector) and the flat-% Phase I modules are **parked as future GEAR candidates / deleted**, not dials.
 
 ### Step 6 — Retire `battle.js` + tests (ONLY after Steps 4–5)
 - Add `resolveBattle(squadA, squadB, seed)` that drives `battleStepEngine` to completion with `null` interventions and returns the final result object.
