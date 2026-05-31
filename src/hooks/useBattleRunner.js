@@ -23,12 +23,13 @@ function buildLogLine(step) {
 function buildProcLines(step) {
   if (step.type !== 'action_resolved') return [];
   return (step.events || [])
-    .filter((e) => e.type === 'gear_proc' || e.type === 'module_proc' || e.type === 'echo' || e.type === 'resonance')
+    .filter((e) => e.type === 'gear_proc' || e.type === 'module_proc' || e.type === 'echo' || e.type === 'resonance' || e.type === 'signature_proc')
     .map((e) => {
       if (e.type === 'echo')       return `  ↳ ${e.actorName} echoes for ${Math.round(e.damage)} dmg`;
       if (e.type === 'resonance')  return `  ◇ ${e.actorName} resonates for ${Math.round(e.damage)} dmg${e.killed ? ' — DEFEATED' : ''}`;
       if (e.type === 'gear_proc')  return `  ◆ ${e.actorName}: ${e.callout}`;
       if (e.type === 'module_proc') return `  ◈ ${e.actorName}: ${e.callout}`;
+      if (e.type === 'signature_proc') return `  ✦ ${e.actorName}: ${e.callout}`;
       return null;
     })
     .filter(Boolean);

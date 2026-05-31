@@ -133,6 +133,18 @@ function pickTarget(actor, enemies, lastSquadTarget, rng) {
   const guardians = alive.filter((u) => u.archetype === 'Guardian');
   const pool = guardians.length > 0 ? guardians : alive;
 
+  // ── Signature targeting (vC-F) — these override the archetype taunt rule ──
+  // Flank (Fang): bypass the taunt, dive the protected backline (non-Guardians).
+  if (actor.sig === 'flank') {
+    const backline = alive.filter((u) => u.archetype !== 'Guardian');
+    const flankPool = backline.length > 0 ? backline : alive;
+    return flankPool.reduce((best, u) => (u.currentHP < best.currentHP ? u : best));
+  }
+  // Bloodscent (Claw): ignore taunt, always hunt the globally lowest-HP enemy.
+  if (actor.sig === 'bloodscent') {
+    return alive.reduce((best, u) => (u.currentHP < best.currentHP ? u : best));
+  }
+
   switch (actor.archetype) {
     case 'Guardian':
       return pool.reduce((best, u) => (u.currentAttack > best.currentAttack ? u : best));
@@ -251,7 +263,14 @@ function initUnit(creature, squad) {
     alive: true,
     threat: computeThreat(eff),
     lastProc: null,
-    dials: new Set(creature.moduleIds ?? []),
+    // Creature signature (vC-F). `bankedHeat` is implemented as an existing dial,
+    // so Cinder's innate version just seeds that dial; all others read sig below.
+    signature: creature.signature ?? null,
+    sig: creature.signature?.live ? creature.signature.id : null,
+    dials: new Set([
+      ...(creature.moduleIds ?? []),
+      ...(creature.signature?.live && creature.signature.id === 'bankedHeat' ? ['bankedHeat'] : []),
+    ]),
     ironhideUses: 0,
     lastwallUses: 0,
     mirrorBurstUses: 0,
@@ -370,6 +389,7 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
       unit.killMomentumCountThisRound = 0;
       unit.execThreshWideThisRound = false;
       unit.sentinelUsedThisRound = false;
+      unit.interceptUsedThisRound = false;
       unit.actedThisRound = false;
       unit.resonateSpent = false;
     }
@@ -504,6 +524,26 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
         }
       }
 
+      // Intercept (Bastion signature, vC-F): the dedicated bodyguard. Once per
+      // round, the first hit aimed at a wounded ally is pulled onto a living
+      // Bastion. Same reaction-taunt shape as Sentinel, but creature-innate.
+      if (!wasPlayerRedirect) {
+        const defenders = target.squad === 'A' ? unitsA : unitsB;
+        const bastion = defenders.find(
+          (u) => u.alive && u.sig === 'intercept' && u._uid !== target._uid && !u.interceptUsedThisRound,
+        );
+        if (bastion) {
+          bastion.interceptUsedThisRound = true;
+          const guarded = target;
+          target = bastion;
+          roundEvents.push({
+            actorId: bastion.id, actorName: bastion.name, actorSquad: bastion.squad,
+            targetId: guarded.id, targetName: guarded.name,
+            type: 'signature_proc', sig: 'intercept', callout: 'INTERCEPT',
+          });
+        }
+      }
+
       // ── Resolve the action ────────────────────────────────────────────────
       lastSquadTarget[actor.squad] = target.id;
 
@@ -545,6 +585,22 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
         if (isExecute) actor.tel.executeKills += 1;
         else actor.tel.standardKills += 1;
       }
+
+      // Sunder (Striker signature, vC-F): the shield-breaker. Each hit strips a
+      // chunk of the target's armor (permanent) and shaves remaining shield —
+      // cracks enemy tanks open for the rest of the squad.
+      let sunderProc = false;
+      if (actor.sig === 'sunder' && target.alive) {
+        const before = target.armor;
+        target.armor = Math.max(0, target.armor - 6);
+        if (target.shield > 0) target.shield = Math.floor(target.shield * 0.5);
+        if (target.armor < before) sunderProc = true;
+      }
+      if (sunderProc) roundEvents.push({
+        actorId: actor.id, actorName: actor.name, actorSquad: actor.squad,
+        targetId: target.id, targetName: target.name,
+        type: 'signature_proc', sig: 'sunder', callout: 'SUNDER',
+      });
 
       roundEvents.push({
         actorId: actor.id,
@@ -688,7 +744,12 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
           const resonatorActive = echo.gearId === 'resonator' && isFirstEcho;
           // Pure Tone (Stronger dial): echoes ring louder — base 0.5 → 0.65, resonator 1.0 → 1.15.
           const pureTone = echo.dials.has('pureTone');
-          const echoPower = resonatorActive ? (pureTone ? 1.15 : 1.0) : (pureTone ? 0.65 : 0.5);
+          // Amplify (Conduit signature, vC-F): its echo rings at full strength
+          // (1.0) instead of the base half — drafts to double your carry's hit.
+          const amplify = echo.sig === 'amplify';
+          const echoPower = amplify
+            ? (resonatorActive ? (pureTone ? 1.3 : 1.15) : (pureTone ? 1.15 : 1.0))
+            : (resonatorActive ? (pureTone ? 1.15 : 1.0) : (pureTone ? 0.65 : 0.5));
           const jumpPower = pureTone ? 0.65 : 0.5;
           if (isFirstEcho && pureTone) roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, type: 'module_proc', moduleId: 'pureTone', callout: 'PURE TONE' });
           echo.firstEchoFiredThisRound = true;
@@ -782,22 +843,43 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
         if (unit.dials.has('backdraft')) roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, type: 'module_proc', moduleId: 'backdraft', callout: 'BACKDRAFT' });
 
         // ── Detonation: the charge releases ─────────────────────────────────
-        if (unit.stokeStacks >= SPARK_DETONATE_THRESHOLD) {
+        // Sputter (Flicker signature, vC-F): detonates at half the threshold for
+        // half the burst — frequent chip pressure instead of one big blast.
+        const sputter = unit.sig === 'sputter';
+        const detThreshold = sputter ? 2 : SPARK_DETONATE_THRESHOLD;
+        if (unit.stokeStacks >= detThreshold) {
           const foes = (unit.squad === 'A' ? unitsB : unitsA).filter((u) => u.alive);
-          const burst = Math.round(unit.currentAttack * SPARK_DETONATE_RATIO);
+          const burst = Math.round(unit.currentAttack * SPARK_DETONATE_RATIO * (sputter ? 0.5 : 1));
           const hits = [];
           for (const foe of foes) {
+            // Aegis (Bulwark signature): spread damage to a squad with a living
+            // Bulwark is softened — the anti-Spark anchor.
+            const foeSquad = foe.squad === 'A' ? unitsA : unitsB;
+            const aegis = foeSquad.some((u) => u.alive && u.sig === 'aegis');
+            const effBurst = aegis ? Math.round(burst * 0.6) : burst;
             const was = foe.alive;
-            const actual = applyDamage(foe, calcDamage(burst, foe.armor), round);
+            const actual = applyDamage(foe, calcDamage(effBurst, foe.armor), round);
             unit.tel.damageDealt += actual;
             if (actual > unit.tel.largestHit) unit.tel.largestHit = actual;
             const killed = was && !foe.alive;
             if (killed) unit.tel.standardKills += 1;
             hits.push({ targetName: foe.name, damage: actual, killed });
-            roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, targetId: foe.id, targetName: foe.name, damage: actual, killed, type: 'detonate', callout: 'DETONATE' });
+            roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, targetId: foe.id, targetName: foe.name, damage: actual, killed, type: 'detonate', callout: aegis ? 'DETONATE (AEGIS)' : 'DETONATE' });
           }
           unit.stokeStacks = 0;
           unit.currentAttack = sparkAttack(unit);
+
+          // Chain Igniter (Spark signature): its blast feeds allied Sparks,
+          // pushing them toward their own detonations — multi-Spark build glue.
+          if (unit.sig === 'chainIgniter') {
+            const allySparks = (unit.squad === 'A' ? unitsA : unitsB)
+              .filter((u) => u.alive && u.archetype === 'Spark' && u._uid !== unit._uid);
+            for (const s of allySparks) {
+              s.stokeStacks += 2;
+              s.currentAttack = sparkAttack(s);
+            }
+            if (allySparks.length) roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, type: 'signature_proc', sig: 'chainIgniter', callout: 'CHAIN IGNITER' });
+          }
           yield {
             type: 'detonation', round,
             actorId: unit._uid, actorSquad: unit.squad, actorName: unit.name,

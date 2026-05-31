@@ -1,4 +1,4 @@
-import { ARCHETYPES } from '../data/creatures.js';
+import { ARCHETYPES, CREATURES } from '../data/creatures.js';
 import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
@@ -7,6 +7,33 @@ import { useState, useEffect } from 'react';
 import { MAX_SQUAD } from '../config.js';
 
 const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'SPK' };
+
+// Each creature's signature — its defining behavioral identity (vC-F). Looked up
+// from CREATURES by creature id so it shows even on collections saved earlier.
+const SIG_BY_CREATURE = Object.fromEntries(CREATURES.map((c) => [c.id, c.signature]).filter(([, s]) => s));
+
+function SignatureRow({ unit }) {
+  const sig = unit.signature ?? SIG_BY_CREATURE[unit.id];
+  if (!sig) return null;
+  const isActive = sig.kind === 'active';
+  return (
+    <div style={{
+      padding: '6px 8px', borderRadius: 5, marginTop: 4,
+      background: sig.live ? '#0c1116' : '#0d0d12',
+      border: `1px solid ${sig.live ? (isActive ? '#9b6bd640' : '#2a5a8a40') : '#1a1a26'}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+        <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>SIGNATURE</span>
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: sig.live ? (isActive ? '#cba6e6' : '#7fb0e0') : '#555' }}>
+          {sig.name}
+        </span>
+        {isActive && <span style={{ fontSize: 6, color: '#9b6bd6', letterSpacing: 1, border: '1px solid #9b6bd640', borderRadius: 2, padding: '0 3px' }}>ACTIVE</span>}
+        {!sig.live && <span style={{ fontSize: 6, color: '#6a5a2a', letterSpacing: 1, border: '1px solid #6a5a2a55', borderRadius: 2, padding: '0 3px' }}>SOON</span>}
+      </div>
+      <div style={{ fontSize: 8.5, color: sig.live ? '#8a99a8' : '#444', lineHeight: 1.5 }}>{sig.text}</div>
+    </div>
+  );
+}
 
 function XpBar({ xp }) {
   const prog = xpProgress(xp);
@@ -316,6 +343,8 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
           )}
         </div>
       </div>
+
+      <SignatureRow unit={unit} />
 
       <XpBar xp={unit.xp} />
 

@@ -16,10 +16,10 @@ const SCENARIOS = {
     A: () => [mk('vault', 'a1', 'lastwall', ['earlyWall', 'hardplate']), mk('bastion', 'a2', 'ironhide', [])],
     B: () => [mk('fang', 'b1', 'quickstrike', ['deepCut']), mk('striker', 'b2', 'killingMomentum', ['secondWind'])],
     seed: 11,
-    // Phase 17: timeout now decided by board control (units alive, then squad HP
-    // fraction) instead of raw HP pool. Both squads end with 1 unit standing, and
-    // the Swift survivor retains a larger share of its pool → B takes the timeout.
-    golden: { winner: 'B', rounds: 10, aliveA: ['a1'], aliveB: ['b2'] },
+    // Phase 17: timeout decided by board control (units alive, then squad HP
+    // fraction). vC-F re-bless: Fang (Flank) dives past the Guardian wall and
+    // Striker (Sunder) cracks armor, so BOTH Swifts now survive the timeout.
+    golden: { winner: 'B', rounds: 10, aliveA: ['a1'], aliveB: ['b1', 'b2'] },
   },
   echoVsSpark: {
     A: () => [mk('conduit', 'a1', 'chainlink', ['longEcho', 'pureTone']), mk('link', 'a2', 'resonator', [])],
@@ -35,7 +35,10 @@ const SCENARIOS = {
     A: () => [mk('vault', 'a1', 'ironhide', [], 1), mk('fang', 'a2', 'quickstrike', [], 1)],
     B: () => [mk('vault', 'b1', 'ironhide', [], 5), mk('fang', 'b2', 'quickstrike', [], 5)],
     seed: 7,
-    golden: { winner: 'B', rounds: 10, aliveA: ['a2'], aliveB: ['b1', 'b2'] },
+    // vC-F re-bless: Fang's Flank changes who draws return fire, so the L1
+    // survivor is now the Vault (a1) rather than the Fang. B (Lv.5) still wins —
+    // the level-curve invariant holds.
+    golden: { winner: 'B', rounds: 10, aliveA: ['a1'], aliveB: ['b1', 'b2'] },
   },
   launchMix: {
     A: () => [mk('vault', 'a1', 'mirrorplate', ['hairTrigger']), mk('fang', 'a2', 'glassworkCore', [])],
