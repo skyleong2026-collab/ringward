@@ -77,6 +77,14 @@ const live = {
     return delta;
   },
   fetchLeaderboard: async (limit) => (await rest(`pvp_squads?active=eq.true&order=rating.desc&limit=${limit}`)) ?? [],
+  async fetchOpponentPool(rating, count = 4) {
+    const me = pvpClientId();
+    const rows = await rest(`pvp_squads?active=eq.true&player_id=neq.${me}&order=rating.asc&limit=20`);
+    if (!rows?.length) return [];
+    const scored = rows.map((r) => ({ ...r, _score: Math.abs(r.rating - rating) }));
+    scored.sort((a, b) => a._score - b._score);
+    return scored.slice(0, count);
+  },
 };
 
 // ─── MOCK backend (localStorage) ──────────────────────────────────────────────
@@ -116,6 +124,13 @@ const mock = {
     const s = mockStore();
     return s.pool.reduce((b, r) => Math.abs(r.rating - rating) < Math.abs(b.rating - rating) ? r : b);
   },
+  async fetchOpponentPool(rating, count = 4) {
+    const s = mockStore();
+    // Sort by proximity + small random noise so each refresh draw feels different.
+    const scored = s.pool.map((e) => ({ ...e, _score: Math.abs(e.rating - rating) + Math.random() * 100 }));
+    scored.sort((a, b) => a._score - b._score);
+    return scored.slice(0, count).map(({ _score, ...e }) => e);
+  },
   async recordMatch({ defenderSquadRow, winner }) {
     const s = mockStore();
     const won = winner === 'A';
@@ -139,9 +154,10 @@ const mock = {
 // ─── Public API (routes to live or mock) ──────────────────────────────────────
 const backend = () => (isPvpConfigured() ? live : mock);
 export const pvpIsMock = () => !isPvpConfigured();
-export const submitDefense   = (units, name = 'You') => backend().submitDefense(units, name);
-export const myDefense       = () => backend().myDefense();
-export const fetchOpponent   = (rating) => backend().fetchOpponent(rating);
-export const recordMatch     = (args) => backend().recordMatch(args);
+export const submitDefense    = (units, name = 'You') => backend().submitDefense(units, name);
+export const myDefense        = () => backend().myDefense();
+export const fetchOpponent    = (rating) => backend().fetchOpponent(rating);
+export const fetchOpponentPool = (rating, count = 4) => backend().fetchOpponentPool(rating, count);
+export const recordMatch      = (args) => backend().recordMatch(args);
 export const fetchLeaderboard = (limit = 10) => backend().fetchLeaderboard(limit);
-export const myRating        = () => (isPvpConfigured() ? null : mock.myRating());
+export const myRating         = () => (isPvpConfigured() ? null : mock.myRating());

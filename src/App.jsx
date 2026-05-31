@@ -14,7 +14,7 @@ import ContractsList from './screens/ContractsList.jsx';
 import ContractScreen from './screens/ContractScreen.jsx';
 import ContractResult from './screens/ContractResult.jsx';
 import PvpScreen from './screens/PvpScreen.jsx';
-import { fetchOpponent, recordMatch, myRating } from './engine/pvp.js';
+import { fetchOpponentPool, recordMatch, myRating } from './engine/pvp.js';
 import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
@@ -29,7 +29,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-K';
+const VERSION = 'vC-L';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -145,6 +145,8 @@ function App() {
   // Test 5: async-PvP — the opponent being fought + last match result banner.
   const [pvpOpponent, setPvpOpponent] = useState(null);
   const [pvpResult, setPvpResult] = useState(null);
+  const [pvpPool, setPvpPool] = useState([]);
+  const [pvpPoolRefreshedAt, setPvpPoolRefreshedAt] = useState(0);
 
   const [encounterHistory, setEncounterHistory] = useState(() => {
     try {
@@ -593,9 +595,26 @@ function App() {
     setScreen('pvp');
   }
 
-  async function handleFindMatch() {
-    const opp = await fetchOpponent(myRating() ?? 1000);
-    if (!opp || hydratePvpSquad(opp.squad).length === 0) return; // no opponents yet
+  const PVP_REFRESH_COST = 20; // credits to bypass the cooldown
+
+  // Load (or reload) the opponent pool. `paid=true` deducts credits and bypasses
+  // the cooldown. `paid=false` is the free timed refresh (or the initial load).
+  async function handleLoadPvpPool(paid = false) {
+    if (paid) {
+      if ((currencies.credits ?? 0) < PVP_REFRESH_COST) return;
+      setCurrencies((prev) => {
+        const next = { ...prev, credits: (prev.credits ?? 0) - PVP_REFRESH_COST };
+        persistCurrencies(next);
+        return next;
+      });
+    }
+    const pool = await fetchOpponentPool(myRating() ?? 1000, 4);
+    setPvpPool(pool);
+    setPvpPoolRefreshedAt(Date.now());
+  }
+
+  function handleSelectOpponent(opp) {
+    if (!opp || hydratePvpSquad(opp.squad).length === 0) return;
     setPvpOpponent(opp);
     setBattleSeed(randomSeed());
     setScreen('pvpbattle');
@@ -921,7 +940,12 @@ function App() {
         {screen === 'pvp' && (
           <PvpScreen
             playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
-            onFindMatch={handleFindMatch}
+            pvpPool={pvpPool}
+            pvpPoolRefreshedAt={pvpPoolRefreshedAt}
+            currencies={currencies}
+            refreshCost={PVP_REFRESH_COST}
+            onLoadPool={handleLoadPvpPool}
+            onSelectOpponent={handleSelectOpponent}
             onBack={() => setScreen('collection')}
             lastResult={pvpResult}
           />
