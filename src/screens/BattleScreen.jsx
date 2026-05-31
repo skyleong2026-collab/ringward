@@ -218,11 +218,19 @@ export default function BattleScreen({
   onForfeit = null, forfeitLabel = 'Forfeit counts as a loss. No roster change, no stat penalty.',
 }) {
   const [confirmForfeit, setConfirmForfeit] = useState(false);
+  // Playback speed (1×/2×/4×), persisted. Default 1× preserves the §19.2
+  // witnessing tempo. At 4× the battle fast-forwards and interventions go dark.
+  const [speed, setSpeed] = useState(() => {
+    const saved = Number(localStorage.getItem('8gents_battle_speed'));
+    return [1, 2, 4].includes(saved) ? saved : 1;
+  });
+  const changeSpeed = (s) => { setSpeed(s); try { localStorage.setItem('8gents_battle_speed', String(s)); } catch { /* ignore */ } };
+  const interventionsLive = speed < 4; // fast-forward drops player authoring
   const {
     start, pause, resume, redirect, anchor, resonate,
     phase, currentStep, unitsSnapshot,
     combatLog, interventionsLeft, enemyDetonations, result,
-  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed, maxInterventions, detonationClock, holdCondition, modifiers });
+  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed, maxInterventions, detonationClock, holdCondition, modifiers, speed });
 
   useEffect(() => { start(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -353,6 +361,20 @@ export default function BattleScreen({
               ⚑ Forfeit
             </button>
           )}
+          {/* Speed toggle — 1× keeps the witnessing tempo; 4× fast-forwards and
+              drops interventions (you've stopped authoring the fight). */}
+          {phase !== 'complete' && (
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              {[1, 2, 4].map((s) => (
+                <button key={s} onClick={() => changeSpeed(s)} title={s === 4 ? 'Fast-forward — interventions off' : `${s}× speed`} style={{
+                  padding: '6px 7px', background: speed === s ? '#1e2a3a' : 'none',
+                  border: `1px solid ${speed === s ? '#4a90d9' : '#1e1e2a'}`, borderRadius: 4,
+                  color: speed === s ? '#7fb0e0' : '#444', fontSize: 9, fontWeight: 700,
+                  cursor: 'pointer', letterSpacing: 0.5,
+                }}>{s}×</button>
+              ))}
+            </div>
+          )}
           {phase === 'complete' && (
             <span style={{ fontSize: 9, color: '#333', letterSpacing: 1 }}>DONE</span>
           )}
@@ -389,8 +411,8 @@ export default function BattleScreen({
         step={currentStep}
       />
 
-      {/* intervention panel — only while paused */}
-      {isAtPendingAction && (
+      {/* intervention panel — only while paused, and only when not fast-forwarding */}
+      {isAtPendingAction && interventionsLive && (
         <PendingActionPanel
           step={currentStep}
           interventionsLeft={interventionsLeft}
@@ -400,6 +422,18 @@ export default function BattleScreen({
           onResume={resume}
           anchorTargets={unitsSnapshot.B.filter((u) => u.alive)}
         />
+      )}
+      {isAtPendingAction && !interventionsLive && (
+        <div style={{
+          background: '#0d0d18', border: '1px solid #1e1e2e', borderRadius: 7,
+          padding: '10px 13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontSize: 10, color: '#666', letterSpacing: 0.5 }}>Interventions off at 4× — drop to 2× to author the fight.</span>
+          <button onClick={resume} style={{
+            padding: '7px 12px', background: '#1a1a2a', border: '1px solid #3a3a5a', borderRadius: 5,
+            color: '#8888ff', fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+          }}>Resume</button>
+        </div>
       )}
 
       {/* combat log — demoted secondary readout */}

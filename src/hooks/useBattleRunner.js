@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { battleStepEngine } from '../engine/battleStepEngine.js';
 
 // Witnessing tempo (§19.2 — "pacing is part of representation, not polish").
@@ -57,7 +57,7 @@ function buildProcLines(step) {
 export function useBattleRunner({
   squadA, squadB, seed,
   maxInterventions = DEFAULT_INTERVENTIONS, detonationClock = null,
-  holdCondition = null, modifiers = undefined,
+  holdCondition = null, modifiers = undefined, speed = 1,
 }) {
   const genRef       = useRef(null);
   const timerRef     = useRef(null);
@@ -65,6 +65,10 @@ export function useBattleRunner({
   const budgetRef    = useRef(maxInterventions);
   const detonationsRef = useRef(0);
   const endedRef     = useRef(false);
+  // Playback speed multiplier (1×/2×/4×). Ref-backed so a mid-battle change takes
+  // effect on the next scheduled beat without restarting the generator.
+  const speedRef     = useRef(speed);
+  useEffect(() => { speedRef.current = speed || 1; }, [speed]);
 
   const [phase, setPhase]                 = useState('idle');
   const [currentStep, setCurrentStep]     = useState(null);
@@ -83,6 +87,8 @@ export function useBattleRunner({
   const tick = useCallback((intervention) => {
     if (!genRef.current) return;
     if (endedRef.current) return; // a frame overlay already concluded the battle
+
+    const sp = speedRef.current || 1; // scale every beat delay by playback speed
 
     const { value, done } = genRef.current.next(intervention ?? null);
 
@@ -122,7 +128,7 @@ export function useBattleRunner({
         timerRef.current = setTimeout(() => {
           setResult({ ...frameResult, rounds: value.round, telemetry: { squadA: value.unitsA, squadB: value.unitsB }, battleLog: [], xpRewards: {} });
           setPhase('complete');
-        }, DETONATE_MS);
+        }, DETONATE_MS / sp);
       };
       if (esc && !esc.alive) {
         endHold({ winner: 'B', holdFailed: true }, `✖ ${esc.name} HAS FALLEN — the crossing is lost`);
@@ -143,7 +149,7 @@ export function useBattleRunner({
       } else {
         // Auto-advance after the anticipation hold (telegraph reads here)
         setPhase('playing');
-        timerRef.current = setTimeout(() => tick(null), ANTICIPATION_MS);
+        timerRef.current = setTimeout(() => tick(null), ANTICIPATION_MS / sp);
       }
 
     } else if (value.type === 'action_resolved') {
@@ -156,20 +162,20 @@ export function useBattleRunner({
 
       // Always advance from action_resolved to next pending_action
       // (pause will take effect at the next pending_action)
-      timerRef.current = setTimeout(() => tick(null), IMPACT_MS);
+      timerRef.current = setTimeout(() => tick(null), IMPACT_MS / sp);
 
     } else if (value.type === 'anchored') {
       // A unit's turn was skipped due to Anchor — show the locked beat, auto-advance.
       setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
       appendLog([`⚓ ${value.actorName} — ANCHORED (skips turn)`]);
-      timerRef.current = setTimeout(() => tick(null), IMPACT_MS);
+      timerRef.current = setTimeout(() => tick(null), IMPACT_MS / sp);
 
     } else if (value.type === 'resonance_skip') {
       // A unit already spent its action on a player-pulled synchronized strike —
       // show the spent beat, auto-advance.
       setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
       appendLog([`◇ ${value.actorName} — RESONANCE SPENT (turn synced earlier)`]);
-      timerRef.current = setTimeout(() => tick(null), IMPACT_MS);
+      timerRef.current = setTimeout(() => tick(null), IMPACT_MS / sp);
 
     } else if (value.type === 'detonation') {
       // Spark charge released — drop HP, empty the meter, narrate the burst.
@@ -202,12 +208,12 @@ export function useBattleRunner({
               xpRewards: {},
             });
             setPhase('complete');
-          }, DETONATE_MS);
+          }, DETONATE_MS / sp);
           return;
         }
       }
 
-      timerRef.current = setTimeout(() => tick(null), DETONATE_MS);
+      timerRef.current = setTimeout(() => tick(null), DETONATE_MS / sp);
     }
   }, [appendLog, detonationClock, holdCondition]);
 
