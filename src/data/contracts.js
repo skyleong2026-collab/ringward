@@ -54,6 +54,7 @@ export const CONTRACTS = [
       artifactId: 'firstLight',
       reputation: { faction: 'Shadow', amount: 1 }, // `amount` = the cautious floor
       boldnessMax: 3,                               // full blind-dive bonus on top
+      credits: 50, shards: 5,
       summary: 'First Light artifact · Shadow standing',
     },
     rewardsLine: "Rewards an autonomous build that doesn't need babysitting.",
@@ -127,6 +128,7 @@ export const CONTRACTS = [
       artifactId: 'bulwarkTithe', // a Light shield-artifact (§20.6) as the discovered piece
       reputation: { faction: 'Light', amount: 1 },
       boldnessMax: 3,
+      credits: 65, shards: 8,
       summary: 'Bulwark Tithe artifact · Light standing',
     },
     rewardsLine: 'Punishes pure single-target burst; rewards spread and chains.',
@@ -170,6 +172,165 @@ export const CONTRACTS = [
       },
     },
   },
+
+  // ── "Crack the Formation" (Shadow) — rep ladder rung 2 ───────────────────────
+  // Pure Guardian wall. No tricks, no surge — just armor. Tests sustained
+  // pressure builds over single-burst answers. Unlocks at Shadow rep ≥ 2.
+  {
+    id: 'crack-the-formation',
+    client: 'Shadow',
+    name: 'Crack the Formation',
+    situation:
+      "A disciplined Guardian cell is running perimeter sweeps, locking down a corridor Shadow needs open. Three anchors, holding a chokepoint. They don't move — you have to break them.",
+    stakes:
+      "Leave them there and the corridor stays dark. Break the wall and Shadow's route opens. They remember who clears the hard jobs.",
+    modifier: {
+      headline: 'You have 2 interventions this contract.',
+      detail:
+        'A tight allowance against a patient enemy. The squad you build has to do the work — you just steer.',
+      interventionBudget: 2,
+    },
+    winCondition: {
+      summary: 'Defeat the formation.',
+    },
+    payout: {
+      artifactId: 'momentumCore',
+      reputation: { faction: 'Shadow', amount: 1 },
+      boldnessMax: 2,
+      credits: 80, shards: 10,
+      summary: 'Momentum Core artifact · Shadow standing',
+    },
+    rewardsLine: 'Favors sustained pressure and sunder over single-target burst.',
+    winLine: 'The formation breaks. The corridor is open.',
+    intel: {
+      composition: {
+        label: 'Composition', glyph: '◇', fragmentIndex: 0,
+        hidden: 'Formation unknown — you do not know what is holding the chokepoint.',
+        revealed: 'Three Guardians in a wall — Vault, Bastion, Bulwark. No soft targets.',
+        scoutLine: 'Test the front rank to read the whole shape.',
+      },
+      behavior: {
+        label: 'Behavior', glyph: '◈', fragmentIndex: 1,
+        hidden: 'The formation\'s approach is unknown.',
+        revealed: 'No tricks. Pure attrition — they hold ground and outlast. The longer the fight goes, the more they benefit.',
+        scoutLine: 'Engage the second anchor to see how they hold.',
+      },
+      threat: {
+        label: 'Threat', glyph: '✸', fragmentIndex: 2,
+        hidden: 'Win condition unknown.',
+        revealed: 'Pure armor that compounds with time. Sunder, ramp, or sustained pressure. Burst alone will stall out.',
+        scoutLine: 'Probe the last anchor to understand the time pressure.',
+      },
+    },
+    level: 4,
+    squad: [c('vault'), c('bastion'), c('bulwark')],
+  },
+
+  // ── "Ghost the Relay" (Shadow) — rep ladder rung 3 ───────────────────────────
+  // Pure Echo array. Amplify stacks as the fight extends — kill it fast or the
+  // chain becomes unbreakable. Unlocks at Shadow rep ≥ 4.
+  {
+    id: 'ghost-the-relay',
+    client: 'Shadow',
+    name: 'Ghost the Relay',
+    situation:
+      'A signal relay is routing operations through a full Echo array — Conduit pairing with Nexus, Link tethering the circuit together. It is broadcasting everything. Kill it quietly before the array completes its cycle.',
+    stakes:
+      'Let it run and the circuit maps the whole operation. Cut it now and the damage is contained. Shadow rewards clean work.',
+    modifier: {
+      headline: 'You have 1 intervention this contract.',
+      detail:
+        'Loud and slow is the wrong answer here. The build has to work on its own — you send it in, you get the outcome.',
+      interventionBudget: 1,
+    },
+    winCondition: {
+      summary: 'Defeat the relay array.',
+    },
+    payout: {
+      artifactId: 'harmonicConduit',
+      reputation: { faction: 'Shadow', amount: 2 },
+      boldnessMax: 2,
+      credits: 100, shards: 12,
+      summary: 'Harmonic Conduit artifact · Shadow standing',
+    },
+    rewardsLine: 'Rewards decisive burst that kills before Echo chains compound.',
+    winLine: 'The relay goes dark. Shadow breathes easier.',
+    intel: {
+      composition: {
+        label: 'Composition', glyph: '◇', fragmentIndex: 0,
+        hidden: 'Relay configuration unknown.',
+        revealed: 'A full Echo array: Conduit, Link, Nexus. Amplify and tether working as one circuit.',
+        scoutLine: 'Probe the relay anchor to read the circuit.',
+      },
+      behavior: {
+        label: 'Behavior', glyph: '◈', fragmentIndex: 1,
+        hidden: 'How the relay sustains itself is unknown.',
+        revealed: 'Amplify stacks as the fight extends — each round the echo chain grows harder to break. Go fast.',
+        scoutLine: 'Engage the link element to see how the cascade builds.',
+      },
+      threat: {
+        label: 'Threat', glyph: '✸', fragmentIndex: 2,
+        hidden: 'Win condition unknown.',
+        revealed: 'Bring decisive burst or a focused striker. Do not let the chain compound — the longer it runs, the louder it gets.',
+        scoutLine: 'Test the Nexus to feel the full relay output.',
+      },
+    },
+    level: 5,
+    squad: [c('conduit'), c('link'), c('nexus')],
+  },
+
+  // ── "The Last Threshold" (Shadow) — rep ladder rung 4 ────────────────────────
+  // Shadow's hardest standard clearance. A complete cell — Guardian anchor,
+  // Spark accelerant, Swift closer. No weak link. Unlocks at Shadow rep ≥ 7.
+  {
+    id: 'the-last-threshold',
+    client: 'Shadow',
+    name: 'The Last Threshold',
+    situation:
+      "Shadow's hardest clearance. A mixed cell holding a critical junction — Guardian anchor up front, Spark accelerating behind the shield, Swift closer waiting for any hesitation. A complete threat. No gaps.",
+    stakes:
+      "Clear this and Shadow's deepest access opens. Fail and the junction stays locked. This is the job that separates operators from amateurs.",
+    modifier: {
+      headline: 'You have 1 intervention this contract.',
+      detail:
+        "Shadow's hardest clearance. One call to make — spend it right or not at all.",
+      interventionBudget: 1,
+    },
+    winCondition: {
+      summary: 'Defeat the cell.',
+    },
+    payout: {
+      artifactId: 'cullingOrder',
+      reputation: { faction: 'Shadow', amount: 3 },
+      boldnessMax: 3,
+      credits: 150, shards: 18,
+      summary: 'Culling Order artifact · Shadow standing',
+    },
+    rewardsLine: 'Requires a balanced squad that answers Guardian, Spark, and Swift simultaneously.',
+    winLine: "The threshold falls. Shadow's deepest door opens.",
+    intel: {
+      composition: {
+        label: 'Composition', glyph: '◇', fragmentIndex: 0,
+        hidden: 'Squad unknown.',
+        revealed: 'A complete cell: Guardian anchor, Spark accelerant, Swift closer. No weak link — every archetype represented.',
+        scoutLine: 'Probe the anchor to read the whole formation.',
+      },
+      behavior: {
+        label: 'Behavior', glyph: '◈', fragmentIndex: 1,
+        hidden: 'Their approach is unknown.',
+        revealed: 'The Spark builds heat behind the Guardian shield — banked energy accelerating toward detonation. The Swift closes on anything that hesitates.',
+        scoutLine: 'Engage the Spark to see how the heat builds.',
+      },
+      threat: {
+        label: 'Threat', glyph: '✸', fragmentIndex: 2,
+        hidden: 'Win condition unknown.',
+        revealed: 'Three threats, no safe target. Pure burst stalls on the Guardian, pure ramp gets flanked, pure tank gets burned. Bring a balanced answer.',
+        scoutLine: 'Test the Swift to feel the tempo pressure.',
+      },
+    },
+    level: 6,
+    squad: [c('vault'), { ...c('cinder'), moduleIds: ['bankedHeat'] }, c('fang')],
+  },
 ];
 
 export const CONTRACTS_BY_ID = Object.fromEntries(CONTRACTS.map((k) => [k.id, k]));
@@ -202,7 +363,8 @@ export const RIVALS = [
     payout: {
       artifactId: 'shadowCrest',
       reputation: { faction: 'Shadow', amount: 2 },
-      summary: 'Shadow Crest cosmetic · Shadow standing +2',
+      credits: 200, shards: 25, marks: 2,
+      summary: 'Shadow Crest cosmetic · Shadow standing +2 · ✦2',
     },
     winLine: "Crucible nods. Shadow's hardest door is open.",
     // Escalating squads by tier (0–3). Level + module dials increase each tier.
@@ -230,7 +392,8 @@ export const RIVALS = [
     payout: {
       artifactId: 'lightSeal',
       reputation: { faction: 'Light', amount: 2 },
-      summary: 'Light Seal cosmetic · Light standing +2',
+      credits: 200, shards: 25, marks: 2,
+      summary: 'Light Seal cosmetic · Light standing +2 · ✦2',
     },
     winLine: 'Wardenfall stands down. The Light has seen what you are.',
     tiers: [

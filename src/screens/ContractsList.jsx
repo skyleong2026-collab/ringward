@@ -1,5 +1,6 @@
 import { loadCodex } from '../engine/codex.js';
 import { countRevealed, RIVALS, RIVAL_UNLOCK_THRESHOLD, DIFFICULTIES } from '../data/contracts.js';
+import { REP_LADDERS, currentRung, availableContractIds } from '../data/regions.js';
 
 // ─── ContractsList (§20.8 + Test 4 Rivals + Test 6 Difficulty) ───────────────
 // The board of available contracts plus the Rivals section. Each job is
@@ -86,8 +87,87 @@ function LockedRivalRow({ rival }) {
   );
 }
 
+// ─── Rep Ladder ───────────────────────────────────────────────────────────────
+function RepLadder({ faction, rep }) {
+  const fs = FACTION_STYLE[faction] || FACTION_STYLE.Shadow;
+  const ladder = REP_LADDERS[faction];
+  if (!ladder) return null;
+  const rung = currentRung(faction, rep);
+  const nextThreshold = ladder.find((r) => rep < r.rep);
+
+  return (
+    <div style={{ background: '#08080f', border: `1px solid ${fs.color}18`, borderLeft: `2px solid ${fs.color}55`, borderRadius: 6, padding: '10px 13px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 7, color: fs.color, letterSpacing: 2 }}>{fs.label} STANDING</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: fs.color, fontWeight: 700 }}>{rep}</span>
+          <span style={{ fontSize: 9, color: '#555' }}>· {ladder[rung].label}</span>
+        </div>
+      </div>
+      {/* Rung dots */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        {ladder.map((r, i) => {
+          const filled = i <= rung;
+          const current = i === rung;
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+              <div title={`${r.label} (rep ${r.rep})`} style={{
+                width: current ? 10 : 7, height: current ? 10 : 7,
+                borderRadius: '50%', flexShrink: 0,
+                background: filled ? fs.color : '#1e1e2a',
+                border: `1px solid ${filled ? fs.color : '#2a2a3a'}`,
+                boxShadow: current ? `0 0 5px ${fs.color}88` : 'none',
+              }} />
+              {i < ladder.length - 1 && (
+                <div style={{ width: 18, height: 1, background: i < rung ? fs.color + '55' : '#1e1e2a' }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {nextThreshold && (
+        <div style={{ fontSize: 8, color: '#333', marginTop: 6 }}>
+          {nextThreshold.unlockLabel} at standing {nextThreshold.rep}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Locked contract card ──────────────────────────────────────────────────────
+function LockedContractRow({ contract, requiredRep }) {
+  const fs = FACTION_STYLE[contract.client] || FACTION_STYLE.Shadow;
+  return (
+    <div style={{
+      background: '#080810', border: '1px solid #14141e', borderLeft: `2px solid #2a2a3a`,
+      borderRadius: 7, padding: '11px 15px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>{fs.label}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#2a2a3a' }}>{contract.name}</span>
+      </div>
+      <span style={{ fontSize: 8, color: '#2a2a3a', letterSpacing: 0.5, flexShrink: 0 }}>
+        {fs.label} standing {requiredRep}
+      </span>
+    </div>
+  );
+}
+
 export default function ContractsList({ contracts, onSelect, onSelectRival, onBack }) {
   const codex = loadCodex();
+
+  // Build a map from contractId → required rep threshold (from regions data)
+  const reqRepByContract = {};
+  for (const [faction, ladder] of Object.entries(REP_LADDERS)) {
+    for (const rung of ladder) {
+      for (const id of rung.contractIds) {
+        reqRepByContract[id] = { faction, rep: rung.rep };
+      }
+    }
+  }
+
+  // Group contracts by faction, sorted by required rep
+  const factions = ['Shadow', 'Light'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -95,65 +175,76 @@ export default function ContractsList({ contracts, onSelect, onSelectRival, onBa
         <button onClick={onBack} style={{
           background: 'none', border: 'none', color: '#444',
           fontSize: 12, cursor: 'pointer', letterSpacing: 1, padding: 0, marginBottom: 10,
-        }}>← Roster</button>
-        <div style={{ fontSize: 16, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>Contracts</div>
+        }}>← Stable</button>
+        <div style={{ fontSize: 16, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>Operations</div>
         <div style={{ fontSize: 11, color: '#444', marginTop: 4, lineHeight: 1.6 }}>
-          Every job is a build against a build, under one constraint. Pick the problem that fits what you brought.
+          Every contract is a build against a build, under one constraint. Earn standing to open harder work.
         </div>
       </div>
 
-      {/* Regular contracts */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {contracts.map((contract) => {
-          const fs = FACTION_STYLE[contract.client] || FACTION_STYLE.Shadow;
-          const standing = codex.reputation?.[contract.client] ?? 0;
-          const done = !!codex.artifacts?.[contract.payout?.artifactId]?.unlocked;
-          const scouted = countRevealed(codex.intel?.[contract.id]);
-          // Highest difficulty cleared (stored in codex.cleared[contractId])
-          const cleared = codex.cleared?.[contract.id];
-          const clearedDiff = cleared ? DIFFICULTIES[cleared] : null;
-          return (
-            <button
-              key={contract.id}
-              onClick={() => onSelect(contract)}
-              style={{
-                textAlign: 'left', cursor: 'pointer',
-                background: '#0b0b14', border: '1px solid #1a1a2a', borderLeft: `2px solid ${fs.color}`,
-                borderRadius: 7, padding: '13px 15px', display: 'flex', flexDirection: 'column', gap: 7,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{
-                    fontSize: 7, color: fs.color, background: fs.bg, border: `1px solid ${fs.accent}`,
-                    borderRadius: 3, padding: '2px 6px', letterSpacing: 1.5,
-                  }}>{fs.label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: '#eee', letterSpacing: 0.5 }}>{contract.name}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  {clearedDiff && (
-                    <span style={{ fontSize: 7, color: clearedDiff.color, letterSpacing: 1, border: `1px solid ${clearedDiff.color}40`, borderRadius: 3, padding: '1px 5px' }}>
-                      ✓ {clearedDiff.label.toUpperCase()}
-                    </span>
-                  )}
-                  {done && !clearedDiff && (
-                    <span style={{ fontSize: 8, color: '#7ed321', letterSpacing: 1 }}>✓ CLEARED</span>
-                  )}
-                </div>
-              </div>
-              <div style={{ fontSize: 10, color: '#5a5a6a', lineHeight: 1.5 }}>{contract.modifier.headline}</div>
-              <div style={{ display: 'flex', gap: 12, fontSize: 8, color: '#3a3a4a', letterSpacing: 0.5 }}>
-                <span>{fs.label} STANDING {standing}</span>
-                <span>·</span>
-                <span>{scouted > 0 ? `${scouted}/3 SCOUTED` : 'UNSCOUTED'}</span>
-                <span style={{ marginLeft: 'auto', color: fs.color }}>OPEN →</span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {/* Per-faction rep track + contracts */}
+      {factions.map((faction) => {
+        const fs = FACTION_STYLE[faction] || FACTION_STYLE.Shadow;
+        const standing = codex.reputation?.[faction] ?? 0;
+        const availIds = new Set(availableContractIds(faction, standing));
+        const factionContracts = contracts.filter((c) => c.client === faction);
+        if (factionContracts.length === 0) return null;
 
-      {/* Rivals section (Test 4) */}
+        return (
+          <div key={faction} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <RepLadder faction={faction} rep={standing} />
+            {factionContracts.map((contract) => {
+              const available = availIds.has(contract.id);
+              if (!available) {
+                const reqData = reqRepByContract[contract.id];
+                return <LockedContractRow key={contract.id} contract={contract} requiredRep={reqData?.rep ?? '?'} />;
+              }
+              const done = !!codex.artifacts?.[contract.payout?.artifactId]?.unlocked;
+              const scouted = countRevealed(codex.intel?.[contract.id]);
+              const cleared = codex.cleared?.[contract.id];
+              const clearedDiff = cleared ? DIFFICULTIES[cleared] : null;
+              return (
+                <button
+                  key={contract.id}
+                  onClick={() => onSelect(contract)}
+                  style={{
+                    textAlign: 'left', cursor: 'pointer',
+                    background: '#0b0b14', border: '1px solid #1a1a2a', borderLeft: `2px solid ${fs.color}`,
+                    borderRadius: 7, padding: '13px 15px', display: 'flex', flexDirection: 'column', gap: 7,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        fontSize: 7, color: fs.color, background: fs.bg, border: `1px solid ${fs.accent}`,
+                        borderRadius: 3, padding: '2px 6px', letterSpacing: 1.5,
+                      }}>{fs.label}</span>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: '#eee', letterSpacing: 0.5 }}>{contract.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {clearedDiff && (
+                        <span style={{ fontSize: 7, color: clearedDiff.color, letterSpacing: 1, border: `1px solid ${clearedDiff.color}40`, borderRadius: 3, padding: '1px 5px' }}>
+                          ✓ {clearedDiff.label.toUpperCase()}
+                        </span>
+                      )}
+                      {done && !clearedDiff && (
+                        <span style={{ fontSize: 8, color: '#7ed321', letterSpacing: 1 }}>✓ CLEARED</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#5a5a6a', lineHeight: 1.5 }}>{contract.modifier.headline}</div>
+                  <div style={{ display: 'flex', gap: 12, fontSize: 8, color: '#3a3a4a', letterSpacing: 0.5 }}>
+                    <span>{scouted > 0 ? `${scouted}/3 scouted` : 'unscouted'}</span>
+                    <span style={{ marginLeft: 'auto', color: fs.color }}>OPEN →</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {/* Rivals section */}
       <div>
         <div style={{ fontSize: 8, color: '#252535', letterSpacing: 2, marginBottom: 8 }}>RIVALS</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

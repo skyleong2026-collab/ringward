@@ -36,7 +36,7 @@ function ArtifactCard({ artifactId, isNew }) {
 }
 
 export default function ContractResult({ contract, outcome, onRetry, onDone }) {
-  const { won, reason, codexResult, firedSynergies = [], revealedCount = 0, repAmount: dialRep, difficultyKey, newRival } = outcome;
+  const { won, reason, codexResult, firedSynergies = [], revealedCount = 0, repAmount: dialRep, difficultyKey, newRival, currenciesEarned } = outcome;
   const newArtifact = codexResult?.newArtifact;
   const newSynergyKeys = new Set(codexResult?.newSynergies ?? []);
   const repFaction = contract.payout?.reputation?.faction;
@@ -117,6 +117,37 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
             </div>
           )}
         </div>
+
+        {/* Currencies earned */}
+        {currenciesEarned && (currenciesEarned.credits > 0 || currenciesEarned.shards > 0 || currenciesEarned.marks > 0) && (
+          <div style={{
+            background: '#08080f', border: '1px solid #1e1e2e', borderRadius: 6,
+            padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 20,
+          }}>
+            <span style={{ fontSize: 8, color: '#333', letterSpacing: 1.5 }}>EARNED</span>
+            {currenciesEarned.credits > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 9, color: '#8888cc' }}>⦿</span>
+                <span style={{ fontSize: 11, color: '#aaaaee', fontWeight: 700 }}>+{currenciesEarned.credits}</span>
+                <span style={{ fontSize: 8, color: '#444' }}>credits</span>
+              </div>
+            )}
+            {currenciesEarned.shards > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 9, color: '#3a9a6a' }}>◈</span>
+                <span style={{ fontSize: 11, color: '#5abf8a', fontWeight: 700 }}>+{currenciesEarned.shards}</span>
+                <span style={{ fontSize: 8, color: '#444' }}>shards</span>
+              </div>
+            )}
+            {currenciesEarned.marks > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 9, color: '#d0902a' }}>✦</span>
+                <span style={{ fontSize: 11, color: '#e8a840', fontWeight: 700 }}>+{currenciesEarned.marks}</span>
+                <span style={{ fontSize: 8, color: '#444' }}>marks</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Difficulty badge */}
         {diff && (

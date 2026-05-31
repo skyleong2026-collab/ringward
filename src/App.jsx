@@ -21,7 +21,7 @@ import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
-import { CONTRACTS, countRevealed, payoutRepAmountWithDifficulty, contractEnemyLevel, getRivalContract, RIVAL_UNLOCK_THRESHOLD } from './data/contracts.js';
+import { CONTRACTS, countRevealed, payoutRepAmountWithDifficulty, contractEnemyLevel, getRivalContract, RIVAL_UNLOCK_THRESHOLD, DIFFICULTIES } from './data/contracts.js';
 import { ARCHETYPES, CREATURES } from './data/creatures.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
@@ -29,7 +29,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-I';
+const VERSION = 'vC-J';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -154,6 +154,23 @@ function App() {
       return {};
     }
   });
+
+  // ── Currencies (vC-J) ─────────────────────────────────────────────────────
+  // Credits (⦿) = volume loop, from contracts → levelling.
+  // Shards  (◈) = collection loop, from contracts + region clears → recruit/rank.
+  // Marks   (✦) = prestige, from Rivals + Arena → rarest unlocks.
+  const [currencies, setCurrencies] = useState(() => {
+    try {
+      const saved = localStorage.getItem('8gents_currencies');
+      return saved ? JSON.parse(saved) : { credits: 0, shards: 0, marks: 0 };
+    } catch {
+      return { credits: 0, shards: 0, marks: 0 };
+    }
+  });
+
+  function persistCurrencies(c) {
+    try { localStorage.setItem('8gents_currencies', JSON.stringify(c)); } catch { /* best-effort */ }
+  }
 
   function persist(newCollection, newSquadIds, newEncounterHistory = encounterHistory) {
     localStorage.setItem('8gents_collection', JSON.stringify(newCollection));
@@ -607,16 +624,15 @@ function App() {
     let codexResult = null;
     let firedSynergies = [];
     let newRival = null;
+    let currenciesEarned = { credits: 0, shards: 0, marks: 0 };
 
     if (won && currentContract) {
       firedSynergies = extractFiredSynergies(res);
       if (isRival) {
-        // Rival win: escalate their tier + record the win as a normal contract win for the artifact.
         escalateRival(currentContract.faction, currentContract.tiers.length - 1);
         codexResult = recordContractWin(currentContract, firedSynergies, { repAmount });
       } else {
         codexResult = recordContractWin(currentContract, firedSynergies, { repAmount });
-        // Record best difficulty cleared.
         if (diffKey !== 'standard') {
           try {
             const raw = JSON.parse(localStorage.getItem('8gents_codex') || '{}');
@@ -629,16 +645,32 @@ function App() {
             }
           } catch { /* storage unavailable */ }
         }
-        // Check if this win crosses the rival unlock threshold.
         newRival = checkRivalUnlock(currentContract.client, RIVAL_UNLOCK_THRESHOLD);
       }
+      // ── Award currencies ──────────────────────────────────────────────────
+      const payout = currentContract.payout ?? {};
+      const currMult = isRival ? 1 : (DIFFICULTIES[diffKey]?.payoutMult ?? 1);
+      currenciesEarned = {
+        credits: Math.round((payout.credits ?? 0) * currMult),
+        shards:  Math.round((payout.shards  ?? 0) * currMult),
+        marks:   payout.marks ?? 0,
+      };
+      setCurrencies((prev) => {
+        const next = {
+          credits: (prev.credits ?? 0) + currenciesEarned.credits,
+          shards:  (prev.shards  ?? 0) + currenciesEarned.shards,
+          marks:   (prev.marks   ?? 0) + currenciesEarned.marks,
+        };
+        persistCurrencies(next);
+        return next;
+      });
     }
 
     if (!won && isRival) {
       recordRivalLoss(currentContract.faction);
     }
 
-    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies, revealedCount, repAmount, difficultyKey: diffKey, newRival });
+    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies, revealedCount, repAmount, difficultyKey: diffKey, newRival, currenciesEarned });
     setScreen('contractresult');
   }, [currentContract, contractIntel, selectedDifficulty]);
 
@@ -697,6 +729,7 @@ function App() {
           <CollectionScreen
             collection={collection}
             squadIds={squadIds}
+            currencies={currencies}
             onToggleSquad={toggleSquad}
             onFeed={openFeed}
             onEncounters={() => setScreen('encounters')}

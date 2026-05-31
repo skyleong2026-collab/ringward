@@ -395,20 +395,37 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule }) {
+export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule }) {
   const [gearModalUnit, setGearModalUnit] = useState(null);
   const [moduleModalUnit, setModuleModalUnit] = useState(null);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
   const squadFull = squadIds.length >= MAX_SQUAD;
   const reserveFull = reserve.length >= 24;
+  const credits = currencies.credits ?? 0;
+  const shards  = currencies.shards  ?? 0;
+  const marks   = currencies.marks   ?? 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Header */}
+      {/* Stable header + currencies */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
+            STABLE — {collection.length} agents · DISPATCH {squadIds.length}/{MAX_SQUAD}
+          </div>
+          {/* Currency strip */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span title="Credits" style={{ fontSize: 9, color: '#8888cc', letterSpacing: 0.5 }}>⦿ {credits}</span>
+            <span title="Shards"  style={{ fontSize: 9, color: '#3a9a6a', letterSpacing: 0.5 }}>◈ {shards}</span>
+            {marks > 0 && <span title="Marks" style={{ fontSize: 9, color: '#d0902a', letterSpacing: 0.5 }}>✦ {marks}</span>}
+          </div>
+        </div>
+      </div>
+      {/* Nav row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
-          SQUAD — {squadIds.length}/{MAX_SQUAD}
+        <div style={{ fontSize: 10, color: '#252535', letterSpacing: 2 }}>
+          {/* spacer */}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -497,14 +514,14 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
         </div>
       </div>
 
-      {/* Active squad */}
+      {/* Dispatch */}
       {activeSquad.length === 0 ? (
         <div style={{
           border: '1px dashed #1e1e2e', borderRadius: 8,
           padding: '20px', textAlign: 'center',
           fontSize: 11, color: '#333',
         }}>
-          Add units from reserve to form your squad
+          Select up to {MAX_SQUAD} agents from your stable to dispatch
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
@@ -528,12 +545,12 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
       {/* Reserve */}
       <div>
         <div style={{ fontSize: 10, color: '#444', letterSpacing: 2, marginBottom: 10 }}>
-          RESERVE — {reserve.length}/24
+          BENCH — {reserve.length} agents
           {reserveFull && <span style={{ color: '#d0021b', marginLeft: 8 }}>FULL</span>}
         </div>
         {reserve.length === 0 ? (
           <div style={{ fontSize: 11, color: '#333', textAlign: 'center', padding: '12px 0' }}>
-            No reserve units
+            All agents dispatched
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
