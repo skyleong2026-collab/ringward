@@ -1,5 +1,6 @@
 import { ARTIFACTS_BY_ID, ARTIFACT_TIERS } from '../data/artifacts.js';
 import { DIFFICULTIES } from '../data/contracts.js';
+import { CREATURE_BY_ID, RECRUITABLE } from '../data/creatures.js';
 
 // ─── ContractResult (§20.8) ───────────────────────────────────────────────────
 // The payout frame. On a win: the artifact this contract grants is unlocked into
@@ -36,7 +37,7 @@ function ArtifactCard({ artifactId, isNew }) {
 }
 
 export default function ContractResult({ contract, outcome, onRetry, onDone }) {
-  const { won, reason, codexResult, firedSynergies = [], revealedCount = 0, repAmount: dialRep, difficultyKey, newRival, currenciesEarned } = outcome;
+  const { won, reason, codexResult, firedSynergies = [], revealedCount = 0, repAmount: dialRep, difficultyKey, newRival, currenciesEarned, discoveredNow = [] } = outcome;
   const newArtifact = codexResult?.newArtifact;
   const newSynergyKeys = new Set(codexResult?.newSynergies ?? []);
   const repFaction = contract.payout?.reputation?.faction;
@@ -154,6 +155,27 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: diff.color + '10', border: `1px solid ${diff.color}30`, borderRadius: 6 }}>
             <span style={{ fontSize: 9, color: diff.color, fontWeight: 700, letterSpacing: 1 }}>CLEARED ON {diff.label.toUpperCase()}</span>
             <span style={{ fontSize: 8, color: '#555' }}>·  ×{diff.payoutMult} payout</span>
+          </div>
+        )}
+
+        {/* Species discovered reveal (vC-N) */}
+        {discoveredNow.length > 0 && (
+          <div style={{ background: '#0a1410', border: '1px solid #3a9a6a60', borderRadius: 8, padding: '14px 16px' }}>
+            <div style={{ fontSize: 8, color: '#3a9a6a', letterSpacing: 2, marginBottom: 8 }}>SPECIES DISCOVERED</div>
+            {discoveredNow.map((id) => {
+              const cr = CREATURE_BY_ID[id];
+              if (!cr) return null;
+              return (
+                <div key={id} style={{ marginBottom: 4 }}>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#5abf8a', letterSpacing: 0.5 }}>{cr.name}</span>
+                  <span style={{ fontSize: 10, color: '#666', marginLeft: 8 }}>{cr.archetype}</span>
+                  <span style={{ fontSize: 10, color: '#3a9a6a', marginLeft: 8 }}>· recruit for {RECRUITABLE[id]?.cost} ◈</span>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 11, color: '#666', marginTop: 5, lineHeight: 1.6 }}>
+              Now available to recruit into your stable from the RECRUIT roster.
+            </div>
           </div>
         )}
 

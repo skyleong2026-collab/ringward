@@ -28,6 +28,7 @@ export const CONTRACTS = [
     id: 'quiet-the-signal',
     client: 'Shadow',
     name: 'Quiet the Signal',
+    discovers: ['cinder'], // vC-N: winning unlocks Ashwing for recruitment
     // ── Fiction ──
     situation:
       'A Spark phenomenon is overcharging in the rail yard. Left alone it keeps building — each surge wider than the last. The client wants it quiet before it finishes the third.',
@@ -108,6 +109,7 @@ export const CONTRACTS = [
     id: 'hold-the-crossing',
     client: 'Light',
     name: 'Hold the Crossing',
+    discovers: ['link'], // vC-N: winning unlocks the Echo Link for recruitment
     situation:
       'A Wild surge is breaking against the river crossing. The Light needs the beacon there kept lit while the surge spends itself — hold the line, do not chase.',
     stakes:
@@ -180,6 +182,7 @@ export const CONTRACTS = [
     id: 'crack-the-formation',
     client: 'Shadow',
     name: 'Crack the Formation',
+    discovers: ['claw'], // vC-N: winning unlocks the Swift Claw for recruitment
     situation:
       "A disciplined Guardian cell is running perimeter sweeps, locking down a corridor Shadow needs open. Three anchors, holding a chokepoint. They don't move — you have to break them.",
     stakes:

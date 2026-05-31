@@ -23,14 +23,14 @@ import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
 import { CONTRACTS, countRevealed, payoutRepAmountWithDifficulty, contractEnemyLevel, getRivalContract, RIVAL_UNLOCK_THRESHOLD, DIFFICULTIES } from './data/contracts.js';
-import { ARCHETYPES, CREATURES } from './data/creatures.js';
+import { ARCHETYPES, CREATURES, RECRUITABLE, RECRUITABLE_IDS } from './data/creatures.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, checkRivalUnlock, escalateRival, recordRivalLoss } from './engine/codex.js';
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-M';
+const VERSION = 'vC-N';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -177,6 +177,27 @@ function App() {
     try { localStorage.setItem('8gents_currencies', JSON.stringify(c)); } catch { /* best-effort */ }
   }
 
+  // vC-N: recruitable species the player has discovered (via contract wins). A
+  // recruitable species already present in the saved collection counts as
+  // discovered, so existing saves that owned all 12 don't lose access.
+  const [discoveredSpecies, setDiscoveredSpecies] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('8gents_discovered') || 'null');
+      if (Array.isArray(saved)) return saved;
+    } catch { /* fall through to seed */ }
+    try {
+      const col = JSON.parse(localStorage.getItem('8gents_collection') || '[]');
+      const owned = new Set(col.map((u) => u.id));
+      return RECRUITABLE_IDS.filter((id) => owned.has(id));
+    } catch {
+      return [];
+    }
+  });
+
+  function persistDiscovered(ids) {
+    try { localStorage.setItem('8gents_discovered', JSON.stringify(ids)); } catch { /* best-effort */ }
+  }
+
   function persist(newCollection, newSquadIds, newEncounterHistory = encounterHistory) {
     localStorage.setItem('8gents_collection', JSON.stringify(newCollection));
     localStorage.setItem('8gents_squadIds', JSON.stringify(newSquadIds));
@@ -258,6 +279,25 @@ function App() {
       const next = prev.map((u) =>
         u.instanceId === instanceId ? { ...u, sigRank: (u.sigRank ?? 1) + 1 } : u
       );
+      persist(next, squadIds);
+      return next;
+    });
+  }
+
+  // vC-N: recruit a discovered species into the stable for Shards.
+  function recruitCreature(speciesId) {
+    const spec = RECRUITABLE[speciesId];
+    if (!spec || !discoveredSpecies.includes(speciesId)) return; // not unlocked
+    if ((currencies.shards ?? 0) < spec.cost) return;            // can't afford
+    const creature = CREATURE_BY_ID[speciesId];
+    if (!creature) return;
+    setCurrencies((prev) => {
+      const next = { ...prev, shards: (prev.shards ?? 0) - spec.cost };
+      persistCurrencies(next);
+      return next;
+    });
+    setCollection((prev) => {
+      const next = [...prev, createCaughtInstance(creature, 'Recruited')];
       persist(next, squadIds);
       return next;
     });
@@ -687,6 +727,7 @@ function App() {
     let firedSynergies = [];
     let newRival = null;
     let currenciesEarned = { credits: 0, shards: 0, marks: 0 };
+    let discoveredNow = []; // vC-N: recruitable species newly unlocked by this win
 
     if (won && currentContract) {
       firedSynergies = extractFiredSynergies(res);
@@ -726,15 +767,25 @@ function App() {
         persistCurrencies(next);
         return next;
       });
+      // ── Discovery: a win can unlock recruitable species (vC-N) ──────────────
+      const discovers = currentContract.discovers ?? [];
+      discoveredNow = discovers.filter((id) => RECRUITABLE[id] && !discoveredSpecies.includes(id));
+      if (discoveredNow.length > 0) {
+        setDiscoveredSpecies((prev) => {
+          const next = [...new Set([...prev, ...discoveredNow])];
+          persistDiscovered(next);
+          return next;
+        });
+      }
     }
 
     if (!won && isRival) {
       recordRivalLoss(currentContract.faction);
     }
 
-    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies, revealedCount, repAmount, difficultyKey: diffKey, newRival, currenciesEarned });
+    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies, revealedCount, repAmount, difficultyKey: diffKey, newRival, currenciesEarned, discoveredNow });
     setScreen('contractresult');
-  }, [currentContract, contractIntel, selectedDifficulty]);
+  }, [currentContract, contractIntel, selectedDifficulty, discoveredSpecies]);
 
   function handleContractRetry() {
     setContractOutcome(null);
@@ -804,6 +855,8 @@ function App() {
             onEquipModule={equipModule}
             onEquipSigMod={equipSigMod}
             onRankUp={rankUpSignature}
+            discoveredSpecies={discoveredSpecies}
+            onRecruit={recruitCreature}
           />
         )}
         {screen === 'encounters' && (

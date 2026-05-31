@@ -1,4 +1,4 @@
-import { ARCHETYPES, CREATURES } from '../data/creatures.js';
+import { ARCHETYPES, CREATURES, CREATURE_BY_ID, RECRUITABLE, RECRUITABLE_IDS } from '../data/creatures.js';
 import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
 import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
@@ -60,6 +60,85 @@ function ModSelectModal({ unit, onEquipSigMod, onClose }) {
                 </div>
                 <div style={{ fontSize: 9, color: on ? '#aaa' : slotsFull ? '#2a2a3a' : '#666', lineHeight: 1.5 }}>{sigModRankedText(mod.id, rank)}</div>
               </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Recruit roster (vC-N) ────────────────────────────────────────────────────
+// Locked "rare finds" — discovered by winning matched contracts, then recruited
+// for Shards. Undiscovered species show as a sealed ??? card with a hint.
+function RecruitModal({ discoveredSpecies, ownedIds, shards, onRecruit, onClose }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 200,
+      display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+    }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: '#0d0d18', borderTop: '1px solid #2a2a3a',
+        borderRadius: '12px 12px 0 0', padding: '16px 16px 28px', maxHeight: '74vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 9, color: '#444', letterSpacing: 2 }}>RECRUIT — RARE FINDS</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+        </div>
+        <div style={{ fontSize: 9, color: '#333', marginBottom: 12, lineHeight: 1.5 }}>
+          Discover these by winning matched contracts, then recruit them with Shards. You have <span style={{ color: '#5abf8a' }}>◈ {shards}</span>.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {RECRUITABLE_IDS.map((id) => {
+            const cr = CREATURE_BY_ID[id];
+            const spec = RECRUITABLE[id];
+            const discovered = discoveredSpecies.includes(id);
+            const owned = ownedIds.has(id);
+            const arch = ARCHETYPES[cr.archetype];
+            const canAfford = shards >= spec.cost;
+            if (!discovered) {
+              return (
+                <div key={id} style={{
+                  background: '#0b0b12', border: '1px dashed #1e1e2a', borderRadius: 7,
+                  padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: '#333', letterSpacing: 1 }}>???</span>
+                    <span style={{ fontSize: 7, color: '#6a5a2a', letterSpacing: 1, border: '1px solid #6a5a2a55', borderRadius: 2, padding: '1px 5px' }}>LOCKED</span>
+                  </div>
+                  <div style={{ fontSize: 9, color: '#444', lineHeight: 1.5 }}>{spec.hint}</div>
+                </div>
+              );
+            }
+            return (
+              <div key={id} style={{
+                background: arch.color + '12', border: `1px solid ${arch.color}44`,
+                borderLeft: `3px solid ${arch.color}`, borderRadius: 7,
+                padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: arch.color, letterSpacing: 0.5 }}>{cr.name}</span>
+                    <span style={{ fontSize: 9, color: '#777' }}>{cr.archetype}</span>
+                    {owned && <span style={{ fontSize: 7, color: '#5abf8a', letterSpacing: 1, border: '1px solid #3a9a6a55', borderRadius: 2, padding: '1px 5px' }}>IN STABLE</span>}
+                  </div>
+                  {cr.signature && <div style={{ fontSize: 9, color: '#888', lineHeight: 1.5, marginTop: 3 }}>{cr.signature.name} — {cr.signature.text}</div>}
+                </div>
+                <button
+                  onClick={() => canAfford && onRecruit(id)}
+                  disabled={!canAfford}
+                  title={canAfford ? `Recruit ${cr.name} for ${spec.cost} shards` : `Need ${spec.cost} ◈ shards`}
+                  style={{
+                    flexShrink: 0, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                    color: canAfford ? '#0d0d18' : '#3a3a4a',
+                    background: canAfford ? '#5abf8a' : '#0d0d14',
+                    border: `1px solid ${canAfford ? '#5abf8a' : '#1e1e2a'}`,
+                    borderRadius: 6, padding: '8px 12px', cursor: canAfford ? 'pointer' : 'default',
+                  }}
+                >
+                  RECRUIT · {spec.cost} ◈
+                </button>
+              </div>
             );
           })}
         </div>
@@ -524,10 +603,11 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod, onRankUp }) {
+export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod, onRankUp, discoveredSpecies = [], onRecruit }) {
   const [gearModalUnit, setGearModalUnit] = useState(null);
   const [moduleModalUnit, setModuleModalUnit] = useState(null);
   const [modSelectUnit, setModSelectUnit] = useState(null);
+  const [recruitOpen, setRecruitOpen] = useState(false);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
   const squadFull = squadIds.length >= MAX_SQUAD;
@@ -535,6 +615,9 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
   const credits = currencies.credits ?? 0;
   const shards  = currencies.shards  ?? 0;
   const marks   = currencies.marks   ?? 0;
+  // vC-N recruit roster: surface a dot when something is discovered + affordable.
+  const ownedIds = new Set(collection.map((u) => u.id));
+  const canRecruitNow = onRecruit && RECRUITABLE_IDS.some((id) => discoveredSpecies.includes(id) && shards >= RECRUITABLE[id].cost);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -623,6 +706,20 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
               Arena
             </button>
           )}
+          {onRecruit && (
+            <button
+              onClick={() => setRecruitOpen(true)}
+              style={{
+                position: 'relative',
+                padding: '9px 14px', background: 'none', border: '1px solid #2a4a3a',
+                borderRadius: 7, color: '#3a9a6a', fontSize: 11, fontWeight: 900,
+                letterSpacing: 1.5, cursor: 'pointer', textTransform: 'uppercase',
+              }}
+            >
+              Recruit
+              {canRecruitNow && <span style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#5abf8a' }} />}
+            </button>
+          )}
           <button
             onClick={onEncounters}
             disabled={squadIds.length === 0}
@@ -707,6 +804,15 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
           </div>
         )}
       </div>
+      {recruitOpen && onRecruit && (
+        <RecruitModal
+          discoveredSpecies={discoveredSpecies}
+          ownedIds={ownedIds}
+          shards={shards}
+          onRecruit={onRecruit}
+          onClose={() => setRecruitOpen(false)}
+        />
+      )}
       {gearModalUnit && (
         <GearSelectModal
           unit={gearModalUnit}

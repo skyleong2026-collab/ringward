@@ -161,3 +161,17 @@ export const CREATURES = [
       text: 'Charges slowly but detonates huge — the delayed nuke you play around.' },
   },
 ];
+
+export const CREATURE_BY_ID = Object.fromEntries(CREATURES.map((c) => [c.id, c]));
+
+// ─── Recruitment (vC-N) ──────────────────────────────────────────────────────
+// Most species start owned. A small "rare finds" set starts LOCKED: each is
+// first DISCOVERED by winning a thematically-matched contract (contracts.js
+// `discovers`), then RECRUITED into the stable by spending Shards. One per
+// DPS archetype so the locked roster reads as a clear progression goal.
+export const RECRUITABLE = {
+  link:   { cost: 10, hint: 'Discovered by holding the Light crossing.' },   // Echo
+  claw:   { cost: 12, hint: 'Discovered by cracking a Shadow formation.' },  // Swift
+  cinder: { cost: 14, hint: 'Discovered by quieting the Signal.' },          // Spark
+};
+export const RECRUITABLE_IDS = Object.keys(RECRUITABLE);
