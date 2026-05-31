@@ -321,15 +321,21 @@ function snap(units) {
 // Drive the step engine to completion with no interventions and return the
 // final result object. The single synchronous entry point for non-interactive
 // battles (wild captures, retry) — interactive play uses the generator directly.
-export function resolveBattle(squadA, squadB, seed) {
-  const gen = battleStepEngine(squadA, squadB, seed);
+export function resolveBattle(squadA, squadB, seed, modifiers) {
+  const gen = battleStepEngine(squadA, squadB, seed, modifiers);
   let step = gen.next();
   while (!step.done) step = gen.next(null);
   return step.value;
 }
 
-export function* battleStepEngine(squadA, squadB, seed) {
+// `modifiers` (optional) — battle-level rule overrides set by a contract frame.
+//   singleTargetDamageScale: scales the PRIMARY (single-target) attack only;
+//   chains, spreads, echoes and detonations are unaffected (§20.8.5 "Hold the
+//   Crossing"). Defaulting to an empty object keeps every existing battle
+//   byte-identical (golden tests must stay green).
+export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
   const rng = createRng(seed);
+  const singleTargetScale = modifiers.singleTargetDamageScale ?? 1;
 
   const unitsA = squadA.map((u) => initUnit(u, 'A'));
   const unitsB = squadB.map((u) => initUnit(u, 'B'));
@@ -522,7 +528,10 @@ export function* battleStepEngine(squadA, squadB, seed) {
         openChannelProc = true;
       }
 
-      const effectiveDamage = calcDamage(rawAttack, target.armor);
+      // Single-target modifier (§20.8.5): a contract may halve the primary hit.
+      // Spreads/chains/echoes/detonations below are deliberately left at full.
+      let effectiveDamage = calcDamage(rawAttack, target.armor);
+      if (singleTargetScale !== 1) effectiveDamage = Math.max(1, Math.round(effectiveDamage * singleTargetScale));
 
       const targetWasAlive = target.alive;
       const actualDmg = applyDamage(target, effectiveDamage, round);

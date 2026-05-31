@@ -48,12 +48,22 @@ function buildProcLines(step) {
 //   clock, §20.8.5). When the enemy completes its Nth detonation the battle ends
 //   as a loss ("the signal completed"). null = no clock (normal battles). This is
 //   a frame-level win/loss overlay; it does not change what the engine computes.
-export function useBattleRunner({ squadA, squadB, seed, maxInterventions = DEFAULT_INTERVENTIONS, detonationClock = null }) {
+// holdCondition — optional protect objective (§20.8.5 "Hold the Crossing"):
+//   { rounds, escorteeInstanceId }. The escortee falling is a frame loss; the
+//   escortee still standing once `rounds` are survived is a frame win. Like the
+//   detonation clock, this is a win/loss overlay — it never changes engine math.
+// modifiers — battle-level rule overrides passed straight to the engine.
+export function useBattleRunner({
+  squadA, squadB, seed,
+  maxInterventions = DEFAULT_INTERVENTIONS, detonationClock = null,
+  holdCondition = null, modifiers = undefined,
+}) {
   const genRef       = useRef(null);
   const timerRef     = useRef(null);
   const isPausedRef  = useRef(false);
   const budgetRef    = useRef(maxInterventions);
   const detonationsRef = useRef(0);
+  const endedRef     = useRef(false);
 
   const [phase, setPhase]                 = useState('idle');
   const [currentStep, setCurrentStep]     = useState(null);
@@ -71,6 +81,7 @@ export function useBattleRunner({ squadA, squadB, seed, maxInterventions = DEFAU
   // Advance the generator one step, optionally injecting an intervention
   const tick = useCallback((intervention) => {
     if (!genRef.current) return;
+    if (endedRef.current) return; // a frame overlay already concluded the battle
 
     const { value, done } = genRef.current.next(intervention ?? null);
 
@@ -97,6 +108,30 @@ export function useBattleRunner({ squadA, squadB, seed, maxInterventions = DEFAU
     }
 
     setCurrentStep(value);
+
+    // ── Hold-the-line overlay (§20.8.5) ─────────────────────────────────────
+    // Judge the protect objective on every step before the normal dispatch.
+    if (holdCondition && value.unitsA) {
+      const esc = value.unitsA.find((u) => u.instanceId === holdCondition.escorteeInstanceId);
+      const endHold = (frameResult, logLine) => {
+        endedRef.current = true;
+        setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
+        appendLog([logLine]);
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+          setResult({ ...frameResult, rounds: value.round, telemetry: { squadA: value.unitsA, squadB: value.unitsB }, battleLog: [], xpRewards: {} });
+          setPhase('complete');
+        }, DETONATE_MS);
+      };
+      if (esc && !esc.alive) {
+        endHold({ winner: 'B', holdFailed: true }, `✖ ${esc.name} HAS FALLEN — the crossing is lost`);
+        return;
+      }
+      if (esc && esc.alive && value.round > holdCondition.rounds) {
+        endHold({ winner: 'A', holdSurvived: true }, `✓ ${esc.name} HELD — the crossing stands`);
+        return;
+      }
+    }
 
     if (value.type === 'pending_action') {
       setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
@@ -173,7 +208,7 @@ export function useBattleRunner({ squadA, squadB, seed, maxInterventions = DEFAU
 
       timerRef.current = setTimeout(() => tick(null), DETONATE_MS);
     }
-  }, [appendLog, detonationClock]);
+  }, [appendLog, detonationClock, holdCondition]);
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -183,8 +218,9 @@ export function useBattleRunner({ squadA, squadB, seed, maxInterventions = DEFAU
     // advance the *second* generator, double-stepping it and yielding a trailing
     // {value: undefined, done} that clobbers the real result.
     clearTimeout(timerRef.current);
-    genRef.current   = battleStepEngine(squadA, squadB, seed);
+    genRef.current   = battleStepEngine(squadA, squadB, seed, modifiers);
     isPausedRef.current = false;
+    endedRef.current    = false;
     budgetRef.current   = maxInterventions;
     detonationsRef.current = 0;
     setInterventionsLeft(maxInterventions);

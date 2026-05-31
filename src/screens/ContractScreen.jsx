@@ -2,6 +2,7 @@ import { ARCHETYPES } from '../data/creatures.js';
 import { generateSpotterRead } from '../engine/spotter.js';
 import { applyLevel } from '../engine/progression.js';
 import { INTEL_AXES, countRevealed, payoutRepAmount } from '../data/contracts.js';
+import { ARTIFACTS_BY_ID } from '../data/artifacts.js';
 
 // ─── ContractScreen (§20.8 + §20.8.4 Intel) ───────────────────────────────────
 // The contract entry frame. It opens PARTIALLY HIDDEN: composition, behavior and
@@ -131,7 +132,10 @@ function IntelRow({ axis, spec, known, onScout, canScout, fs }) {
 export default function ContractScreen({ contract, playerSquad, intel, reconFeedback, onScout, onCommit, onBack }) {
   const fs = FACTION_STYLE[contract.client] || FACTION_STYLE.Shadow;
   const spotterRead = generateSpotterRead(playerSquad, contract.squad);
-  const signalUnit = contract.squad.find((u) => u.archetype === 'Spark');
+  // The "THE CLOCK" tag only applies to a detonation-clock contract.
+  const hasClock = contract.winCondition.detonationLimit != null;
+  const signalUnit = hasClock ? contract.squad.find((u) => u.archetype === 'Spark') : null;
+  const escortee = contract.escortee;
   const canScout = playerSquad.length > 0;
 
   const revealedCount = countRevealed(intel);
@@ -231,7 +235,7 @@ export default function ContractScreen({ contract, playerSquad, intel, reconFeed
         <div style={{ background: '#0c0a12', border: '1px solid #2a1f3a', borderRadius: 6, padding: '11px 13px' }}>
           <div style={{ fontSize: 8, color: fs.accent, letterSpacing: 1.5, marginBottom: 6 }}>PAYOUT</div>
           <div style={{ fontSize: 11, color: fs.color, fontWeight: 600, lineHeight: 1.5 }}>
-            First Light · {contract.payout.reputation.faction} standing +{repAmount}
+            {ARTIFACTS_BY_ID[contract.payout.artifactId]?.name ?? 'Artifact'} · {contract.payout.reputation.faction} standing +{repAmount}
           </div>
           <div style={{ fontSize: 8, color: '#555', marginTop: 4 }}>
             {revealedCount === 0
@@ -254,6 +258,24 @@ export default function ContractScreen({ contract, playerSquad, intel, reconFeed
           }}>{line}</div>
         ))}
       </div>
+
+      {/* Escortee — what you protect (hold contracts) */}
+      {escortee && (
+        <div style={{
+          background: '#0a1018', border: '1px solid #1e3a5f', borderLeft: '2px solid #4a90d9',
+          borderRadius: 6, padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{ fontSize: 8, color: '#3a6a8a', letterSpacing: 1.5, marginBottom: 4 }}>▲ YOU PROTECT</div>
+            <div style={{ fontSize: 12, color: '#9fc0e0', fontWeight: 700 }}>{escortee.name}</div>
+            <div style={{ fontSize: 9, color: '#4a5a6a', marginTop: 2 }}>{escortee.flavor}</div>
+          </div>
+          <div style={{ fontSize: 9, color: '#3a5a7a', textAlign: 'right', fontFamily: 'monospace' }}>
+            HP {escortee.hp} · ARM {escortee.armor}<br />
+            <span style={{ color: '#2a3a4a' }}>fields beside your squad</span>
+          </div>
+        </div>
+      )}
 
       {/* Your squad */}
       <div>

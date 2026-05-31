@@ -206,12 +206,13 @@ function CombatLog({ entries }) {
 export default function BattleScreen({
   playerSquad, enemySquad, seed, onComplete,
   maxInterventions = 3, detonationClock = null, clockLabel = 'SIGNAL', bannerLabel = null,
+  holdCondition = null, modifiers = undefined,
 }) {
   const {
     start, pause, resume, redirect, anchor, resonate,
     phase, currentStep, unitsSnapshot,
     combatLog, interventionsLeft, enemyDetonations, result,
-  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed, maxInterventions, detonationClock });
+  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed, maxInterventions, detonationClock, holdCondition, modifiers });
 
   useEffect(() => { start(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -249,6 +250,33 @@ export default function BattleScreen({
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Hold clock (§20.8.5) — rounds held + the escortee's status */}
+          {holdCondition != null && (() => {
+            const esc = unitsSnapshot.A.find((u) => u.instanceId === holdCondition.escorteeInstanceId);
+            const held = Math.min(Math.max(0, round - 1), holdCondition.rounds);
+            const escPct = esc ? Math.max(0, esc.currentHP) / esc.maxHP : 0;
+            const escColor = !esc?.alive ? '#d0021b' : escPct < 0.35 ? '#ff6b35' : '#4a90d9';
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 8, color: '#3a6a8a', letterSpacing: 1.5 }}>HOLD {held}/{holdCondition.rounds}</span>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {Array.from({ length: holdCondition.rounds }).map((_, i) => (
+                    <div key={i} style={{
+                      width: 4, height: 9, borderRadius: 1,
+                      background: i < held ? '#4a90d9' : '#13131f',
+                      border: `1px solid ${i < held ? '#4a90d9' : '#23233a'}`,
+                    }} />
+                  ))}
+                </div>
+                <span title="escortee" style={{
+                  fontSize: 8, color: escColor, letterSpacing: 0.5, fontFamily: 'monospace',
+                  borderLeft: '1px solid #1a1a2a', paddingLeft: 6,
+                }}>
+                  ▲ {esc?.alive ? Math.round(esc.currentHP) : 'DOWN'}
+                </span>
+              </div>
+            );
+          })()}
           {/* Signal clock (§20.8.5) — each enemy detonation advances the signal */}
           {detonationClock != null && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>

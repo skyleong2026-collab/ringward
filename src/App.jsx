@@ -10,6 +10,7 @@ import Result from './screens/Result.jsx';
 import DungeonScreen from './screens/DungeonScreen.jsx';
 import DungeonResult from './screens/DungeonResult.jsx';
 import BattleScreen from './screens/BattleScreen.jsx';
+import ContractsList from './screens/ContractsList.jsx';
 import ContractScreen from './screens/ContractScreen.jsx';
 import ContractResult from './screens/ContractResult.jsx';
 import { resolveBattle } from './engine/battleStepEngine.js';
@@ -25,7 +26,7 @@ import { XP_PER_FEED } from './engine/progression.js';
 import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis } from './engine/codex.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vC-B';
+const VERSION = 'vC-C';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -55,6 +56,20 @@ function createCaughtInstance(creature, zoneName) {
     gearId: null,
     moduleIds: [],
   };
+}
+
+// Battle-level rule overrides for a contract (e.g. "Hold the Crossing" halves
+// single-target damage). Undefined when the contract has no engine modifier, so
+// non-modifier contracts run the engine exactly as before.
+function contractModifiers(contract) {
+  const s = contract?.modifier?.singleTargetDamageScale;
+  return s != null ? { singleTargetDamageScale: s } : undefined;
+}
+
+// The fielded squad for a contract: a hold contract prepends its transient
+// escortee (the thing you protect). The escortee never enters the roster.
+function contractPlayerSquad(contract, baseSquad) {
+  return contract?.escortee ? [contract.escortee, ...baseSquad] : baseSquad;
 }
 
 function App() {
@@ -503,11 +518,14 @@ function App() {
   }
 
   const handleContractComplete = useCallback((res) => {
-    // Outcome is judged off the existing engine result plus the frame's signal
-    // clock. The clock (3rd enemy detonation) flips a win into a loss.
+    // Outcome is judged off the engine result plus whichever frame overlay this
+    // contract uses — the signal clock (3rd detonation) or the hold objective
+    // (escortee falls). Either can flip the raw winner into a contract loss.
     let won, reason;
     if (res.clockExpired) {
       won = false; reason = 'clock';
+    } else if (res.holdFailed) {
+      won = false; reason = 'escortee';
     } else if (res.winner === 'A') {
       won = true; reason = 'win';
     } else {
@@ -540,7 +558,7 @@ function App() {
   function handleContractDone() {
     setContractOutcome(null);
     setCurrentContract(null);
-    setScreen('collection');
+    setScreen('contracts'); // back to the board, where standing/cleared status updates
   }
 
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
@@ -591,7 +609,7 @@ function App() {
             onEncounters={() => setScreen('encounters')}
             onWalk={() => setScreen('world')}
             onDungeon={() => setScreen('dungeon')}
-            onContracts={() => openContract(CONTRACTS[0])}
+            onContracts={() => setScreen('contracts')}
             justFedInstanceId={justFedInstanceId}
             onEquipGear={equipGear}
             onEquipModule={equipModule}
@@ -692,6 +710,13 @@ function App() {
             onReturn={handleDungeonResultDone}
           />
         )}
+        {screen === 'contracts' && (
+          <ContractsList
+            contracts={CONTRACTS}
+            onSelect={openContract}
+            onBack={() => setScreen('collection')}
+          />
+        )}
         {screen === 'contract' && currentContract && (
           <ContractScreen
             contract={currentContract}
@@ -700,7 +725,7 @@ function App() {
             reconFeedback={reconFeedback}
             onScout={handleScout}
             onCommit={commitContract}
-            onBack={() => setScreen('collection')}
+            onBack={() => setScreen('contracts')}
           />
         )}
         {screen === 'reconbattle' && currentContract && reconAxis && battleSeed !== null && (
@@ -713,18 +738,24 @@ function App() {
             seed={battleSeed}
             onComplete={handleReconComplete}
             maxInterventions={currentContract.modifier.interventionBudget}
+            modifiers={contractModifiers(currentContract)}
             bannerLabel={`RECON · ${currentContract.intel[reconAxis].label.toUpperCase()}`}
           />
         )}
         {screen === 'contractbattle' && currentContract && battleSeed !== null && (
           <BattleScreen
-            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            playerSquad={contractPlayerSquad(
+              currentContract,
+              collection.filter((u) => squadIds.includes(u.instanceId)),
+            )}
             enemySquad={levelEnemySquad(currentContract.squad, currentContract.level)}
             seed={battleSeed}
             onComplete={handleContractComplete}
             maxInterventions={currentContract.modifier.interventionBudget}
-            detonationClock={currentContract.winCondition.detonationLimit}
+            detonationClock={currentContract.winCondition.detonationLimit ?? null}
             clockLabel={currentContract.winCondition.clockLabel}
+            holdCondition={currentContract.winCondition.hold ?? null}
+            modifiers={contractModifiers(currentContract)}
           />
         )}
         {screen === 'contractresult' && currentContract && contractOutcome && (

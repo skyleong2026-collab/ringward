@@ -50,6 +50,7 @@ export const CONTRACTS = [
       summary: 'First Light artifact · Shadow standing',
     },
     rewardsLine: "Rewards an autonomous build that doesn't need babysitting.",
+    winLine: 'The signal is quiet. Shadow remembers.',
     // ── Intel axes (§20.8.4) ──────────────────────────────────────────────────
     // The contract opens with these hidden. Each is scouted by a low-stakes recon
     // fight against one fragment of the enemy squad — you learn the axis by
@@ -87,6 +88,80 @@ export const CONTRACTS = [
       { ...c('cinder'), name: 'The Signal', moduleIds: ['bankedHeat'] },
       c('striker'),
     ],
+  },
+
+  // ── "Hold the Crossing" (Light) — Test 3 (§20.8.5) ────────────────────────
+  // A protect contract with a different modifier, to test whether build
+  // *diversity* emerges (§20.8.6 Test 3). The single-target halving punishes a
+  // pure-burst answer; the Wild surge's threat is its Sparks, whose detonations
+  // are spreads — UNAFFECTED by the halving — so they bloom across the Beacon
+  // unless cleared. Spread/chain offense (Echo) clears them; pure Swift cannot.
+  {
+    id: 'hold-the-crossing',
+    client: 'Light',
+    name: 'Hold the Crossing',
+    situation:
+      'A Wild surge is breaking against the river crossing. The Light needs the beacon there kept lit while the surge spends itself — hold the line, do not chase.',
+    stakes:
+      'If the beacon falls the crossing is overrun and the district behind it goes dark. The Light does not forget who held.',
+    modifier: {
+      headline: 'Single-target attacks land at half. Chains and spreads land full.',
+      detail:
+        'Pure burst will not clear the surge in time — the threat is the Sparks, and they bloom wide. Bring something that spreads.',
+      interventionBudget: 3,
+      singleTargetDamageScale: 0.5, // §20.8.5 modifier — engine-level, defaulted off elsewhere
+    },
+    winCondition: {
+      hold: { rounds: 8, escorteeInstanceId: 'crossing-beacon' },
+      summary: 'Keep the Crossing Beacon standing for 8 rounds.',
+      clockLabel: 'HOLD',
+    },
+    payout: {
+      artifactId: 'bulwarkTithe', // a Light shield-artifact (§20.6) as the discovered piece
+      reputation: { faction: 'Light', amount: 1 },
+      boldnessMax: 3,
+      summary: 'Bulwark Tithe artifact · Light standing',
+    },
+    rewardsLine: 'Punishes pure single-target burst; rewards spread and chains.',
+    winLine: 'The crossing holds. Light remembers.',
+    // The escortee — a transient "structure" unit prepended to the player squad
+    // for this battle only (never enters the roster). A Guardian, so the surge
+    // focuses it (the thing you are protecting) and it can shield itself.
+    escortee: {
+      instanceId: 'crossing-beacon', id: 'beacon', name: 'Crossing Beacon',
+      archetype: 'Guardian', hp: 420, attack: 6, armor: 18, speed: 1,
+      level: 1, gearId: null, moduleIds: [],
+      flavor: 'It only has to stay lit.',
+    },
+    level: 3,
+    // Wild surge: two overcharging Sparks (the real, spread-damage threat) plus
+    // two Swift bodies (single-target, blunted by the modifier).
+    squad: [
+      { ...c('spark'), name: 'Emberling', moduleIds: ['bankedHeat'] },
+      { ...c('fang'), name: 'Surgefang' },
+      { ...c('cinder'), name: 'Ashling', moduleIds: ['bankedHeat'] },
+      { ...c('striker'), name: 'Ripclaw' },
+    ],
+    intel: {
+      composition: {
+        label: 'Composition', glyph: '◇', fragmentIndex: 1, // a Swift body
+        hidden: 'Lineup unknown — you do not know the shape of the surge.',
+        revealed: 'A Wild surge: fast Swift bodies swarming around overcharging Sparks.',
+        scoutLine: 'Cut down one of the runners to read the swarm.',
+      },
+      behavior: {
+        label: 'Behavior', glyph: '◈', fragmentIndex: 0, // a Spark
+        hidden: 'The surge has a trick — something about it is not just numbers.',
+        revealed: 'The Sparks detonate wide — area bursts that ignore the single-target rule. Kill them before they bloom.',
+        scoutLine: 'Engage a Spark alone to see how it blooms.',
+      },
+      threat: {
+        label: 'Threat', glyph: '✸', fragmentIndex: 3, // a Swift
+        hidden: 'Win condition unknown — you do not know what holding this costs.',
+        revealed: 'Keep the Beacon lit for 8 rounds. Single-target hits land at half, so burst alone will not clear the surge.',
+        scoutLine: 'Spar a runner to feel the tempo of the assault.',
+      },
+    },
   },
 ];
 

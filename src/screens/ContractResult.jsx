@@ -52,7 +52,9 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
           padding: '16px', textAlign: 'center',
         }}>
           <div style={{ fontSize: 22, fontWeight: 900, color: '#7ed321', letterSpacing: 2 }}>CONTRACT COMPLETE</div>
-          <div style={{ fontSize: 12, color: '#666', marginTop: 5 }}>The signal is quiet. {contract.client} remembers.</div>
+          <div style={{ fontSize: 12, color: '#666', marginTop: 5 }}>
+            {contract.winLine ?? `The job is done. ${contract.client} remembers.`}
+          </div>
         </div>
 
         {/* Artifact unlocked */}
@@ -136,11 +138,13 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
         padding: '16px', textAlign: 'center',
       }}>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#d0021b', letterSpacing: 2 }}>
-          {reason === 'clock' ? 'THE SIGNAL COMPLETED' : 'THE SQUAD FELL'}
+          {reason === 'clock' ? 'THE SIGNAL COMPLETED' : reason === 'escortee' ? 'THE BEACON FELL' : 'THE SQUAD FELL'}
         </div>
         <div style={{ fontSize: 12, color: '#888', marginTop: 6, lineHeight: 1.6 }}>
           {reason === 'clock'
             ? 'The third surge went off before you could quiet it. The job is still open.'
+            : reason === 'escortee'
+            ? 'The surge broke through before the crossing could hold. The job is still open.'
             : 'Your squad could not hold. The job is still open.'}
         </div>
       </div>
