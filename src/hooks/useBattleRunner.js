@@ -280,6 +280,19 @@ export function useBattleRunner({
     tick({ type: 'resonate', partnerUid });
   }
 
+  // Active creature signatures (vC-G) — spend an intervention to fire a charged
+  // signature (Vault Release, Nexus Cascade). Same budget as the other verbs.
+  function signatureActive(type) {
+    if (budgetRef.current <= 0) return;
+    if (!currentStep || currentStep.type !== 'pending_action') return;
+    budgetRef.current -= 1;
+    setInterventionsLeft(budgetRef.current);
+    isPausedRef.current = false;
+    setPhase('playing');
+    clearTimeout(timerRef.current);
+    tick({ type });
+  }
+
   function redirect(actorId, newTargetId) {
     if (budgetRef.current <= 0) return;
     if (!currentStep || currentStep.type !== 'pending_action') return;
@@ -300,6 +313,7 @@ export function useBattleRunner({
     redirect,
     anchor,
     resonate,
+    signatureActive,
     phase,
     currentStep,
     unitsSnapshot,

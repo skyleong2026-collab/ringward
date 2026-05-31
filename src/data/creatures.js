@@ -19,7 +19,7 @@ export const CREATURES = [
     armor: 24,
     speed: 2,
     flavor: 'Immovable.',
-    signature: { id: 'bank', name: 'Bank', kind: 'active', live: false,
+    signature: { id: 'bank', name: 'Bank', kind: 'active', live: true,
       text: 'Stores overflow shielding. Active: spend an intervention to release the bank as a barrier across the whole squad.' },
   },
   {
@@ -69,7 +69,7 @@ export const CREATURES = [
     armor: 11,
     speed: 7,
     flavor: 'Everything connects here.',
-    signature: { id: 'cascade', name: 'Cascade', kind: 'active', live: false,
+    signature: { id: 'cascade', name: 'Cascade', kind: 'active', live: true,
       text: 'Active: spend an intervention to make every ally immediately repeat their last action — the burst turn.' },
   },
   {
@@ -81,8 +81,8 @@ export const CREATURES = [
     armor: 13,
     speed: 5,
     flavor: 'The network holds.',
-    signature: { id: 'tether', name: 'Tether', kind: 'passive', live: false,
-      text: 'Echoes defensive actions — when an ally shields or guards, copies the protection to another ally.' },
+    signature: { id: 'tether', name: 'Tether', kind: 'passive', live: true,
+      text: 'A defensive Echo — each round it extends a protective shield to your most-wounded ally.' },
   },
 
   // ── Swifts: High Attack, Low HP, Low Armor ──

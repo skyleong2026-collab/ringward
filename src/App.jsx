@@ -20,7 +20,7 @@ import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
 import { CONTRACTS, countRevealed, payoutRepAmountWithDifficulty, contractEnemyLevel, getRivalContract, RIVAL_UNLOCK_THRESHOLD } from './data/contracts.js';
-import { ARCHETYPES } from './data/creatures.js';
+import { ARCHETYPES, CREATURES } from './data/creatures.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, checkRivalUnlock, escalateRival, recordRivalLoss } from './engine/codex.js';
@@ -31,11 +31,18 @@ const VERSION = 'vC-E';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
+const CREATURE_BY_ID = Object.fromEntries(CREATURES.map((c) => [c.id, c]));
 function migrateCollection(col) {
-  return col.map((u) => ({
-    ...u,
-    archetype: ARCHETYPE_MIGRATION[u.archetype] ?? u.archetype,
-  }));
+  return col.map((u) => {
+    // Re-sync the static signature from the creature definition so pre-vC-F saves
+    // (whose instances were stored before signatures existed) gain their identity.
+    const base = CREATURE_BY_ID[u.id];
+    return {
+      ...u,
+      archetype: ARCHETYPE_MIGRATION[u.archetype] ?? u.archetype,
+      signature: u.signature ?? base?.signature ?? null,
+    };
+  });
 }
 
 function createCaughtInstance(creature, zoneName) {

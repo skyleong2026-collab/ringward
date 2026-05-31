@@ -289,6 +289,9 @@ function initUnit(creature, squad) {
     anchored: false,
     actedThisRound: false,
     resonateSpent: false,
+    shieldBank: 0,        // Vault signature: accrued team-shield reserve
+    cascadeLastRound: -99, // Nexus signature: round its cascade last fired
+    lastStrikeAttack: 0,   // last attack value used (for cascade replay)
     tel: {
       damageDealt: 0,
       damageTaken: 0,
@@ -473,6 +476,17 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
             currentHP: Math.max(0, u.currentHP),
             maxHP: u.maxHP,
           })),
+        // Player-side active signatures that are charged and ready to spend.
+        squadActives: [
+          ...(() => {
+            const v = unitsA.find((u) => u.alive && u.sig === 'bank' && u.shieldBank > 0);
+            return v ? [{ type: 'release', unitName: v.name, amount: v.shieldBank }] : [];
+          })(),
+          ...(() => {
+            const n = unitsA.find((u) => u.alive && u.sig === 'cascade' && round - u.cascadeLastRound >= 3);
+            return n ? [{ type: 'cascade', unitName: n.name }] : [];
+          })(),
+        ],
         unitsA: snap(unitsA),
         unitsB: snap(unitsB),
       };
@@ -500,6 +514,42 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
         );
         if (p) resonancePartner = p;
       }
+
+      // ── Release (Vault active signature, vC-G): spend an intervention to pour
+      // the accrued shield bank across all living allies as fresh shield. Instant
+      // — does not consume the current actor's action; the round continues.
+      if (intervention?.type === 'release') {
+        // Player-side: always the A squad, regardless of whose turn we paused on.
+        const vault = unitsA.find((u) => u.alive && u.sig === 'bank' && u.shieldBank > 0);
+        if (vault) {
+          const recipients = unitsA.filter((u) => u.alive);
+          const each = Math.round(vault.shieldBank / recipients.length);
+          for (const ally of recipients) ally.shield += each;
+          roundEvents.push({ actorId: vault.id, actorName: vault.name, actorSquad: vault.squad, damage: vault.shieldBank, type: 'signature_proc', sig: 'bank', callout: `RELEASE (+${each} shield each)` });
+          vault.shieldBank = 0;
+        }
+      }
+
+      // ── Cascade (Nexus active signature, vC-G): spend an intervention to have
+      // every living ally fire a synchronized 0.5× strike on its best target — the
+      // burst turn. Charge-gated (once per 3 rounds), enforced runner-side too.
+      if (intervention?.type === 'cascade') {
+        const nexus = unitsA.find((u) => u.alive && u.sig === 'cascade');
+        if (nexus && round - nexus.cascadeLastRound >= 3) {
+          nexus.cascadeLastRound = round;
+          for (const ally of unitsA.filter((u) => u.alive)) {
+            const t = pickTarget(ally, unitsB, lastSquadTarget.A, rng);
+            if (!t) continue;
+            const cRaw = ally.currentAttack * 0.5;
+            const cWas = t.alive;
+            const cActual = applyDamage(t, calcDamage(cRaw, t.armor), round);
+            ally.tel.damageDealt += cActual;
+            if (cWas && !t.alive) ally.tel.standardKills += 1;
+            roundEvents.push({ actorId: ally.id, actorName: ally.name, actorSquad: ally.squad, targetId: t.id, targetName: t.name, damage: cActual, killed: cWas && !t.alive, type: 'signature_proc', sig: 'cascade', callout: 'CASCADE' });
+          }
+        }
+      }
+
       const wasPlayerRedirect = target !== proposedTarget;
 
       // Sentinel (overwatch intercept): the first enemy attack each round aimed
@@ -832,6 +882,23 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
     // End-of-round scaling
     for (const unit of [...unitsA, ...unitsB]) {
       if (!unit.alive) continue;
+      // Bank (Vault signature, vC-G): accrue a team-shield reserve each round,
+      // capped. The player spends it via the Release intervention.
+      if (unit.sig === 'bank') {
+        const cap = Math.round(unit.maxHP * 0.45);
+        unit.shieldBank = Math.min(cap, unit.shieldBank + Math.round(unit.maxHP * 0.07));
+      }
+      // Tether (Link signature, vC-G): a defensive Echo — each round it extends a
+      // protective shield to the squad's most-wounded ally (it can be itself).
+      if (unit.sig === 'tether') {
+        const squad = (unit.squad === 'A' ? unitsA : unitsB).filter((u) => u.alive);
+        const wounded = squad.reduce((lo, u) => (u.currentHP / u.maxHP < lo.currentHP / lo.maxHP ? u : lo), squad[0]);
+        if (wounded) {
+          const amt = Math.round(unit.currentAttack * 0.5);
+          wounded.shield += amt;
+          roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, targetId: wounded.id, targetName: wounded.name, damage: amt, type: 'signature_proc', sig: 'tether', callout: `TETHER (+${amt} shield)` });
+        }
+      }
       if (unit.archetype === 'Spark') {
         // Banked Heat (Stronger dial): every Stoke gain comes with an extra stack.
         const gain = unit.dials.has('bankedHeat') ? 2 : 1;

@@ -9,8 +9,9 @@ import { ARCHETYPES } from '../data/creatures.js';
 // Verb toggle: REDIRECT (repoint the acting unit's target) | ANCHOR (lock an
 // enemy out of its next action). Both draw from the shared 3-intervention budget.
 // anchorTargets: always the player's enemies (squad B alive), regardless of who's acting.
-function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onResonate, onResume, anchorTargets }) {
+function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onResonate, onResume, onSignatureActive, anchorTargets }) {
   const [verb, setVerb] = useState('redirect');
+  const squadActives = step.squadActives ?? [];
 
   const actorColor  = ARCHETYPES[step.actor.archetype]?.color ?? '#888';
   const targetColor = ARCHETYPES[step.proposedTarget.archetype]?.color ?? '#888';
@@ -48,6 +49,24 @@ function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onR
         <span style={{ fontSize: 10, color: '#333' }}>→</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: targetColor }}>{step.proposedTarget.name}</span>
       </div>
+
+      {/* charged active signatures (vC-G) — squad-level, spend an intervention */}
+      {canAct && squadActives.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 7, color: '#9b6bd6', letterSpacing: 1.5 }}>✦ SIGNATURE READY</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {squadActives.map((a) => (
+              <button key={a.type} onClick={() => onSignatureActive(a.type)} style={{
+                flex: 1, padding: '7px 6px', background: '#160e22', cursor: 'pointer',
+                border: '1px solid #9b6bd655', borderRadius: 5, color: '#cba6e6',
+                fontSize: 9, fontWeight: 800, letterSpacing: 1,
+              }}>
+                {a.type === 'release' ? `RELEASE · ${a.unitName} (+${a.amount})` : `CASCADE · ${a.unitName}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* verb toggle */}
       {canAct && (
@@ -227,7 +246,7 @@ export default function BattleScreen({
   const changeSpeed = (s) => { setSpeed(s); try { localStorage.setItem('8gents_battle_speed', String(s)); } catch { /* ignore */ } };
   const interventionsLive = speed < 4; // fast-forward drops player authoring
   const {
-    start, pause, resume, redirect, anchor, resonate,
+    start, pause, resume, redirect, anchor, resonate, signatureActive,
     phase, currentStep, unitsSnapshot,
     combatLog, interventionsLeft, enemyDetonations, result,
   } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed, maxInterventions, detonationClock, holdCondition, modifiers, speed });
@@ -419,6 +438,7 @@ export default function BattleScreen({
           onRedirect={redirect}
           onAnchor={anchor}
           onResonate={resonate}
+          onSignatureActive={signatureActive}
           onResume={resume}
           anchorTargets={unitsSnapshot.B.filter((u) => u.alive)}
         />
