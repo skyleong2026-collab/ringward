@@ -10,18 +10,22 @@ import Result from './screens/Result.jsx';
 import DungeonScreen from './screens/DungeonScreen.jsx';
 import DungeonResult from './screens/DungeonResult.jsx';
 import BattleScreen from './screens/BattleScreen.jsx';
+import ContractScreen from './screens/ContractScreen.jsx';
+import ContractResult from './screens/ContractResult.jsx';
 import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
+import { CONTRACTS } from './data/contracts.js';
 import { ARCHETYPES } from './data/creatures.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
+import { recordContractWin, extractFiredSynergies } from './engine/codex.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vSP-C';
+const VERSION = 'vC-A';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -91,6 +95,13 @@ function App() {
   // ── Dungeon run state ────────────────────────────────────────────────────
   // { dungeon, nodeIndex, hpOverrides: {instanceId: hp}, runLog: [{encounterId, won, xpEarned, isBoss, hpSnapshot}], failed, failedAt }
   const [dungeonRun, setDungeonRun] = useState(null);
+
+  // ── Contract state (§20.8 — the frame layer) ──────────────────────────────
+  // currentContract is the contract being viewed/run; contractOutcome holds the
+  // resolved win/loss + Codex result for the payout screen. Contracts pay access
+  // (Codex/reputation), never stat-power — no XP is applied from a contract.
+  const [currentContract, setCurrentContract] = useState(null);
+  const [contractOutcome, setContractOutcome] = useState(null);
 
   const [encounterHistory, setEncounterHistory] = useState(() => {
     try {
@@ -446,6 +457,56 @@ function App() {
     if (dungeon) startDungeon(dungeon);
   }
 
+  // ── Contract functions (§20.8) ────────────────────────────────────────────
+
+  function openContract(contract) {
+    setCurrentContract(contract);
+    setContractOutcome(null);
+    setScreen('contract');
+  }
+
+  function commitContract() {
+    setBattleSeed(randomSeed());
+    setScreen('contractbattle');
+  }
+
+  const handleContractComplete = useCallback((res) => {
+    // Outcome is judged off the existing engine result plus the frame's signal
+    // clock. The clock (3rd enemy detonation) flips a win into a loss.
+    let won, reason;
+    if (res.clockExpired) {
+      won = false; reason = 'clock';
+    } else if (res.winner === 'A') {
+      won = true; reason = 'win';
+    } else {
+      won = false; reason = 'squad';
+    }
+
+    let codexResult = null;
+    let firedSynergies = [];
+    if (won && currentContract) {
+      // Access-only payout: unlock artifact + reputation + log fired synergies.
+      // No XP / stat changes are applied (§20.8.2).
+      firedSynergies = extractFiredSynergies(res);
+      codexResult = recordContractWin(currentContract, firedSynergies);
+    }
+
+    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies });
+    setScreen('contractresult');
+  }, [currentContract]);
+
+  function handleContractRetry() {
+    setContractOutcome(null);
+    setBattleSeed(randomSeed());
+    setScreen('contractbattle');
+  }
+
+  function handleContractDone() {
+    setContractOutcome(null);
+    setCurrentContract(null);
+    setScreen('collection');
+  }
+
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
 
   return (
@@ -494,6 +555,7 @@ function App() {
             onEncounters={() => setScreen('encounters')}
             onWalk={() => setScreen('world')}
             onDungeon={() => setScreen('dungeon')}
+            onContracts={() => openContract(CONTRACTS[0])}
             justFedInstanceId={justFedInstanceId}
             onEquipGear={equipGear}
             onEquipModule={equipModule}
@@ -592,6 +654,33 @@ function App() {
             squadIds={squadIds}
             onRunAgain={handleDungeonRunAgain}
             onReturn={handleDungeonResultDone}
+          />
+        )}
+        {screen === 'contract' && currentContract && (
+          <ContractScreen
+            contract={currentContract}
+            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            onCommit={commitContract}
+            onBack={() => setScreen('collection')}
+          />
+        )}
+        {screen === 'contractbattle' && currentContract && battleSeed !== null && (
+          <BattleScreen
+            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            enemySquad={levelEnemySquad(currentContract.squad, currentContract.level)}
+            seed={battleSeed}
+            onComplete={handleContractComplete}
+            maxInterventions={currentContract.modifier.interventionBudget}
+            detonationClock={currentContract.winCondition.detonationLimit}
+            clockLabel={currentContract.winCondition.clockLabel}
+          />
+        )}
+        {screen === 'contractresult' && currentContract && contractOutcome && (
+          <ContractResult
+            contract={currentContract}
+            outcome={contractOutcome}
+            onRetry={handleContractRetry}
+            onDone={handleContractDone}
           />
         )}
       </main>

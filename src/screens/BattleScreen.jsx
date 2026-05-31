@@ -203,12 +203,15 @@ function CombatLog({ entries }) {
 }
 
 // ─── BattleScreen ─────────────────────────────────────────────────────────────
-export default function BattleScreen({ playerSquad, enemySquad, seed, onComplete }) {
+export default function BattleScreen({
+  playerSquad, enemySquad, seed, onComplete,
+  maxInterventions = 3, detonationClock = null, clockLabel = 'SIGNAL',
+}) {
   const {
     start, pause, resume, redirect, anchor, resonate,
     phase, currentStep, unitsSnapshot,
-    combatLog, interventionsLeft, result,
-  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed });
+    combatLog, interventionsLeft, enemyDetonations, result,
+  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed, maxInterventions, detonationClock });
 
   useEffect(() => { start(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -236,8 +239,29 @@ export default function BattleScreen({ playerSquad, enemySquad, seed, onComplete
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Signal clock (§20.8.5) — each enemy detonation advances the signal */}
+          {detonationClock != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 8, color: '#7a5a2a', letterSpacing: 1.5 }}>{clockLabel}</span>
+              <div style={{ display: 'flex', gap: 3 }}>
+                {Array.from({ length: detonationClock }).map((_, i) => {
+                  const lit = i < enemyDetonations;
+                  const isFinal = i === detonationClock - 1;
+                  return (
+                    <div key={i} style={{
+                      width: 9, height: 9, borderRadius: 2, transform: 'rotate(45deg)',
+                      background: lit ? (isFinal ? '#ff6b35' : '#f5a623') : '#1a1208',
+                      border: `1px solid ${lit ? (isFinal ? '#ff6b35' : '#f5a623') : '#3a2a14'}`,
+                      boxShadow: lit ? `0 0 6px ${isFinal ? '#ff6b35' : '#f5a623'}88` : 'none',
+                      transition: 'all 0.25s',
+                    }} />
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 4 }}>
-            {Array.from({ length: 3 }).map((_, i) => (
+            {Array.from({ length: maxInterventions }).map((_, i) => (
               <div key={i} style={{
                 width: 6, height: 6, borderRadius: '50%',
                 background: i < interventionsLeft ? '#4a90d9' : '#1a1a2a',

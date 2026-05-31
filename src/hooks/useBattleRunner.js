@@ -10,7 +10,7 @@ import { battleStepEngine } from '../engine/battleStepEngine.js';
 const ANTICIPATION_MS = 620;  // hold on pending_action — the telegraph reads
 const IMPACT_MS       = 540;  // dwell after a hit lands — recoil + recovery
 const DETONATE_MS     = 900;  // a detonation is a beat unto itself
-const MAX_INTERVENTIONS = 3;  // redirect budget per battle
+const DEFAULT_INTERVENTIONS = 3;  // redirect budget per battle (contracts may override)
 
 function buildLogLine(step) {
   if (step.type !== 'action_resolved') return null;
@@ -42,17 +42,25 @@ function buildProcLines(step) {
 //   'playing'  — auto-advancing (timers running)
 //   'paused'   — player paused; stopped at current pending_action
 //   'complete' — battle over, result ready
-export function useBattleRunner({ squadA, squadB, seed }) {
+// maxInterventions — the per-battle intervention budget (a contract modifier can
+//   tighten this, e.g. "Quiet the Signal" sets it to 1). Default 3 per §19.6S.
+// detonationClock — optional enemy-Spark detonation limit (the contract's visible
+//   clock, §20.8.5). When the enemy completes its Nth detonation the battle ends
+//   as a loss ("the signal completed"). null = no clock (normal battles). This is
+//   a frame-level win/loss overlay; it does not change what the engine computes.
+export function useBattleRunner({ squadA, squadB, seed, maxInterventions = DEFAULT_INTERVENTIONS, detonationClock = null }) {
   const genRef       = useRef(null);
   const timerRef     = useRef(null);
   const isPausedRef  = useRef(false);
-  const budgetRef    = useRef(MAX_INTERVENTIONS);
+  const budgetRef    = useRef(maxInterventions);
+  const detonationsRef = useRef(0);
 
   const [phase, setPhase]                 = useState('idle');
   const [currentStep, setCurrentStep]     = useState(null);
   const [unitsSnapshot, setUnitsSnapshot] = useState({ A: [], B: [] });
   const [combatLog, setCombatLog]         = useState([]);
-  const [interventionsLeft, setInterventionsLeft] = useState(MAX_INTERVENTIONS);
+  const [interventionsLeft, setInterventionsLeft] = useState(maxInterventions);
+  const [enemyDetonations, setEnemyDetonations]   = useState(0);
   const [result, setResult]               = useState(null);
 
   // Append lines to the scrolling combat log
@@ -136,17 +144,51 @@ export function useBattleRunner({ squadA, squadB, seed }) {
           (h) => `  ✸ → ${h.targetName}: ${Math.round(h.damage)} dmg${h.killed ? ' — DEFEATED' : ''}`,
         ),
       ]);
+
+      // Contract clock (§20.8.5): an enemy Spark detonation advances the signal.
+      if (value.actorSquad === 'B') {
+        detonationsRef.current += 1;
+        setEnemyDetonations(detonationsRef.current);
+
+        if (detonationClock != null && detonationsRef.current >= detonationClock) {
+          // The signal completed — contract lost. Freeze on the detonation beat,
+          // then surface a frame-level loss result (engine math untouched).
+          appendLog([`✸ THE SIGNAL IS COMPLETE`]);
+          clearTimeout(timerRef.current);
+          timerRef.current = setTimeout(() => {
+            setResult({
+              winner: 'B',
+              clockExpired: true,
+              enemyDetonations: detonationsRef.current,
+              rounds: value.round,
+              telemetry: { squadA: value.unitsA, squadB: value.unitsB },
+              battleLog: [],
+              xpRewards: {},
+            });
+            setPhase('complete');
+          }, DETONATE_MS);
+          return;
+        }
+      }
+
       timerRef.current = setTimeout(() => tick(null), DETONATE_MS);
     }
-  }, [appendLog]);
+  }, [appendLog, detonationClock]);
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
   function start() {
+    // Cancel any pending tick from a prior start(). React StrictMode invokes the
+    // mount effect twice; without this, the first start()'s scheduled tick would
+    // advance the *second* generator, double-stepping it and yielding a trailing
+    // {value: undefined, done} that clobbers the real result.
+    clearTimeout(timerRef.current);
     genRef.current   = battleStepEngine(squadA, squadB, seed);
     isPausedRef.current = false;
-    budgetRef.current   = MAX_INTERVENTIONS;
-    setInterventionsLeft(MAX_INTERVENTIONS);
+    budgetRef.current   = maxInterventions;
+    detonationsRef.current = 0;
+    setInterventionsLeft(maxInterventions);
+    setEnemyDetonations(0);
     setCombatLog([]);
     setResult(null);
     setCurrentStep(null);
@@ -220,6 +262,7 @@ export function useBattleRunner({ squadA, squadB, seed }) {
     unitsSnapshot,
     combatLog,
     interventionsLeft,
+    enemyDetonations,
     result,
   };
 }
