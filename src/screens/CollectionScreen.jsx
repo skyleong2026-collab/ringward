@@ -1,6 +1,7 @@
 import { ARCHETYPES, CREATURES } from '../data/creatures.js';
 import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
+import { SIG_MODS, SIG_MODS_BY_ID } from '../data/sigMods.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { useState, useEffect } from 'react';
@@ -11,6 +12,95 @@ const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'SPK
 // Each creature's signature — its defining behavioral identity (vC-F). Looked up
 // from CREATURES by creature id so it shows even on collections saved earlier.
 const SIG_BY_CREATURE = Object.fromEntries(CREATURES.map((c) => [c.id, c.signature]).filter(([, s]) => s));
+
+// ─── Signature Modifier UI (vC-K) ─────────────────────────────────────────────
+
+function ModSelectModal({ unit, onEquipSigMod, onClose }) {
+  const equipped = unit.sigModIds ?? [];
+  const slots = [0, 1];
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 200,
+      display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+    }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: '#0d0d18', borderTop: '1px solid #2a2a3a',
+        borderRadius: '12px 12px 0 0', padding: '16px 16px 28px', maxHeight: '70vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 9, color: '#444', letterSpacing: 2 }}>SIGNATURE MODIFIERS — {unit.name}</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+        </div>
+        <div style={{ fontSize: 9, color: '#333', marginBottom: 12, lineHeight: 1.5 }}>
+          {equipped.length < 2 ? `${2 - equipped.length} slot${2 - equipped.length !== 1 ? 's' : ''} open` : 'Both slots filled — tap a mod to remove it.'}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {SIG_MODS.map((mod) => {
+            const on = equipped.includes(mod.id);
+            const slotsFull = equipped.length >= 2 && !on;
+            return (
+              <button
+                key={mod.id}
+                onClick={() => { if (!slotsFull) { onEquipSigMod(unit.instanceId, mod.id); onClose(); } }}
+                disabled={slotsFull}
+                style={{
+                  textAlign: 'left', cursor: slotsFull ? 'default' : 'pointer',
+                  background: on ? mod.color + '18' : '#0d0d18',
+                  border: `1px solid ${on ? mod.color + '55' : slotsFull ? '#1a1a2a' : '#2a2a3a'}`,
+                  borderLeft: `3px solid ${on ? mod.color : slotsFull ? '#1a1a2a' : '#2a2a3a'}`,
+                  borderRadius: 7, padding: '10px 13px', display: 'flex', flexDirection: 'column', gap: 4,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ fontSize: 13, color: on ? mod.color : slotsFull ? '#333' : '#888' }}>{mod.glyph}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: on ? mod.color : slotsFull ? '#333' : '#ccc', letterSpacing: 0.5 }}>{mod.name}</span>
+                  {on && <span style={{ fontSize: 7, color: mod.color, border: `1px solid ${mod.color}40`, borderRadius: 2, padding: '1px 5px', letterSpacing: 1 }}>EQUIPPED</span>}
+                </div>
+                <div style={{ fontSize: 9, color: on ? '#aaa' : slotsFull ? '#2a2a3a' : '#666', lineHeight: 1.5 }}>{mod.text}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModSlotsRow({ unit, onOpenModSelectModal }) {
+  const equipped = unit.sigModIds ?? [];
+  return (
+    <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5, flexShrink: 0 }}>MOD</span>
+      {[0, 1].map((slot) => {
+        const modId = equipped[slot];
+        const mod = modId ? SIG_MODS_BY_ID[modId] : null;
+        return (
+          <button
+            key={slot}
+            onClick={() => onOpenModSelectModal(unit)}
+            title={mod ? `${mod.name}: ${mod.text}` : 'Empty slot — tap to equip modifier'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              background: mod ? mod.color + '18' : '#0d0d14',
+              border: `1px solid ${mod ? mod.color + '44' : '#1e1e2a'}`,
+              borderRadius: 5, padding: '3px 7px', cursor: 'pointer',
+              minWidth: 60,
+            }}
+          >
+            {mod ? (
+              <>
+                <span style={{ fontSize: 9, color: mod.color }}>{mod.glyph}</span>
+                <span style={{ fontSize: 8, color: mod.color, fontWeight: 700, letterSpacing: 0.5 }}>{mod.name}</span>
+              </>
+            ) : (
+              <span style={{ fontSize: 8, color: '#2a2a3a', letterSpacing: 1 }}>+ SLOT {slot + 1}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function SignatureRow({ unit }) {
   const sig = unit.signature ?? SIG_BY_CREATURE[unit.id];
@@ -225,7 +315,7 @@ function ModuleSelectModal({ unit, onEquipModule, onClose }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenGearModal, onOpenModuleModal }) {
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenGearModal, onOpenModuleModal, onOpenModSelectModal }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
@@ -345,6 +435,7 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
       </div>
 
       <SignatureRow unit={unit} />
+      {onOpenModSelectModal && <ModSlotsRow unit={unit} onOpenModSelectModal={onOpenModSelectModal} />}
 
       <XpBar xp={unit.xp} />
 
@@ -395,9 +486,10 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule }) {
+export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod }) {
   const [gearModalUnit, setGearModalUnit] = useState(null);
   const [moduleModalUnit, setModuleModalUnit] = useState(null);
+  const [modSelectUnit, setModSelectUnit] = useState(null);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
   const squadFull = squadIds.length >= MAX_SQUAD;
@@ -537,6 +629,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
               justFed={justFedInstanceId === u.instanceId}
               onOpenGearModal={(u) => setGearModalUnit(u)}
               onOpenModuleModal={(u) => setModuleModalUnit(u)}
+              onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
             />
           ))}
         </div>
@@ -566,6 +659,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
                 justFed={justFedInstanceId === u.instanceId}
                 onOpenGearModal={(u) => setGearModalUnit(u)}
                 onOpenModuleModal={(u) => setModuleModalUnit(u)}
+                onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
               />
             ))}
           </div>
@@ -583,6 +677,13 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
           unit={moduleModalUnit}
           onEquipModule={onEquipModule}
           onClose={() => setModuleModalUnit(null)}
+        />
+      )}
+      {modSelectUnit && onEquipSigMod && (
+        <ModSelectModal
+          unit={modSelectUnit}
+          onEquipSigMod={onEquipSigMod}
+          onClose={() => setModSelectUnit(null)}
         />
       )}
     </div>

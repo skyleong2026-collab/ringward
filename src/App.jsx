@@ -29,20 +29,19 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-J';
+const VERSION = 'vC-K';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
 const CREATURE_BY_ID = Object.fromEntries(CREATURES.map((c) => [c.id, c]));
 function migrateCollection(col) {
   return col.map((u) => {
-    // Re-sync the static signature from the creature definition so pre-vC-F saves
-    // (whose instances were stored before signatures existed) gain their identity.
     const base = CREATURE_BY_ID[u.id];
     return {
       ...u,
       archetype: ARCHETYPE_MIGRATION[u.archetype] ?? u.archetype,
       signature: u.signature ?? base?.signature ?? null,
+      sigModIds: u.sigModIds ?? [],   // vC-K: add slot array for pre-vC-K saves
     };
   });
 }
@@ -65,6 +64,7 @@ function createCaughtInstance(creature, zoneName) {
     foundAt: zoneName,
     gearId: null,
     moduleIds: [],
+    sigModIds: [],
   };
 }
 
@@ -74,7 +74,7 @@ function hydratePvpSquad(squad) {
   return (squad ?? []).map((u, i) => {
     const base = CREATURES.find((c) => c.id === u.id);
     if (!base) return null;
-    return { ...base, instanceId: `opp_${u.id}_${i}`, level: u.level ?? 1, gearId: u.gearId ?? null, moduleIds: u.moduleIds ?? [] };
+    return { ...base, instanceId: `opp_${u.id}_${i}`, level: u.level ?? 1, gearId: u.gearId ?? null, moduleIds: u.moduleIds ?? [], sigModIds: u.sigModIds ?? [] };
   }).filter(Boolean);
 }
 
@@ -212,6 +212,23 @@ function App() {
           ? ids.filter((id) => id !== moduleId)
           : [...ids, moduleId].slice(0, 3);
         return { ...u, moduleIds: nextIds };
+      });
+      persist(next, squadIds);
+      return next;
+    });
+  }
+
+  // vC-K: toggle a signature modifier in a unit's sigModIds (cap 2 slots).
+  function equipSigMod(instanceId, modId) {
+    if (!modId) return;
+    setCollection((prev) => {
+      const next = prev.map((u) => {
+        if (u.instanceId !== instanceId) return u;
+        const ids = u.sigModIds ?? [];
+        const nextIds = ids.includes(modId)
+          ? ids.filter((id) => id !== modId)
+          : [...ids, modId].slice(0, 2);
+        return { ...u, sigModIds: nextIds };
       });
       persist(next, squadIds);
       return next;
@@ -740,6 +757,7 @@ function App() {
             justFedInstanceId={justFedInstanceId}
             onEquipGear={equipGear}
             onEquipModule={equipModule}
+            onEquipSigMod={equipSigMod}
           />
         )}
         {screen === 'encounters' && (

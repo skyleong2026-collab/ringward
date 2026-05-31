@@ -74,6 +74,15 @@ function applyDamage(unit, damage, round) {
     unit.lastProc = 'pyreHeart';
   }
 
+  // Resilient (signature modifier, vC-K): survive first lethal hit at 1 HP.
+  // Fires after gear checks so lastwall/pyreHeart get priority; resilient only
+  // catches hits that no gear already handled.
+  if (unit.currentHP <= 0 && unit.dials?.has('resilient') && !unit.resilientUsed) {
+    unit.currentHP = 1;
+    unit.resilientUsed = true;
+    unit.lastProc = 'resilient';
+  }
+
   if (unit.currentHP <= 0) {
     unit.alive = false;
     if (unit.tel.fell === null) unit.tel.fell = round;
@@ -254,12 +263,25 @@ function initUnit(creature, squad) {
   // hp/attack/armor so every downstream read sees the leveled values; speed
   // is intentionally left unscaled.
   const eff = applyLevel(creature);
+  // vC-K: compute dials first so fortify/surge can read them during init.
+  const dials = new Set([
+    ...(creature.moduleIds ?? []),
+    ...(creature.sigModIds ?? []),   // signature modifier slots
+    ...(creature.signature?.live && creature.signature.id === 'bankedHeat' ? ['bankedHeat'] : []),
+  ]);
+  // fortify: +20% max HP (signature modifier).
+  const baseHP  = eff.hp;
+  const maxHP   = dials.has('fortify') ? Math.round(baseHP * 1.2) : baseHP;
+  // surge: +1 speed for non-Spark (Spark gets faster detonation instead, handled at end-of-round).
+  const baseSpd = eff.speed ?? 5;
+  const speed   = (dials.has('surge') && eff.archetype !== 'Spark') ? baseSpd + 1 : baseSpd;
   return {
     ...eff,
+    speed,
     _uid: `${creature.instanceId ?? creature.id}_${squad}_${_uidCounter++}`,
     squad,
-    currentHP: creature.currentHP ?? eff.hp,
-    maxHP: eff.hp,
+    currentHP: creature.currentHP ?? maxHP,
+    maxHP,
     currentAttack: eff.attack,
     shield: 0,
     hasShielded: false,
@@ -271,10 +293,8 @@ function initUnit(creature, squad) {
     // so Cinder's innate version just seeds that dial; all others read sig below.
     signature: creature.signature ?? null,
     sig: creature.signature?.live ? creature.signature.id : null,
-    dials: new Set([
-      ...(creature.moduleIds ?? []),
-      ...(creature.signature?.live && creature.signature.id === 'bankedHeat' ? ['bankedHeat'] : []),
-    ]),
+    dials,
+    resilientUsed: false,  // vC-K: tracks whether resilient has fired this battle
     ironhideUses: 0,
     lastwallUses: 0,
     mirrorBurstUses: 0,
@@ -638,7 +658,9 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
 
       // Single-target modifier (§20.8.5): a contract may halve the primary hit.
       // Spreads/chains/echoes/detonations below are deliberately left at full.
-      let effectiveDamage = calcDamage(rawAttack, target.armor);
+      // Pierce (signature modifier, vC-K): attacker ignores 8 armor on primary hit.
+      const pierceArmor = actor.dials.has('pierce') ? Math.max(0, target.armor - 8) : target.armor;
+      let effectiveDamage = calcDamage(rawAttack, pierceArmor);
       if (singleTargetScale !== 1) effectiveDamage = Math.max(1, Math.round(effectiveDamage * singleTargetScale));
 
       const targetWasAlive = target.alive;
@@ -701,6 +723,9 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
       }
       if (target.lastProc === 'lastwall') {
         roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'gear_proc', gearId: 'lastwall', callout: 'LAST STAND' });
+      }
+      if (target.lastProc === 'resilient') {
+        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, type: 'mod_proc', modId: 'resilient', callout: 'RESILIENT' });
       }
 
       if (target.lastwallUses > 0 && actor.alive) {
@@ -867,6 +892,31 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
         }
       }
 
+      // ── Chain (signature modifier, vC-K): splash 50% of damage to a random
+      // other living enemy. Lets non-Echo units spread pressure without
+      // requiring an Echo ally in the squad.
+      if (actor.dials.has('chain') && actor.alive && actualDmg > 0) {
+        const chainTargets = enemies.filter((e) => e.alive && e !== target);
+        if (chainTargets.length > 0) {
+          const chainTarget = chainTargets[Math.floor(rng() * chainTargets.length)];
+          const chainWas = chainTarget.alive;
+          const chainDmg = applyDamage(chainTarget, Math.round(actualDmg * 0.5), round);
+          actor.tel.damageDealt += chainDmg;
+          if (chainWas && !chainTarget.alive) actor.tel.standardKills += 1;
+          roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: chainTarget.id, targetName: chainTarget.name, damage: chainDmg, killed: chainWas && !chainTarget.alive, type: 'mod_proc', modId: 'chain', callout: 'CHAIN' });
+        }
+      }
+
+      // ── Echo Strike (signature modifier, vC-K): replay the hit at 40% on the
+      // same target. Single-unit sustained pressure; stacks well with execute.
+      if (actor.dials.has('echoStrike') && target.alive && actor.alive && actualDmg > 0) {
+        const esWas = target.alive;
+        const esDmg = applyDamage(target, Math.round(actualDmg * 0.4), round);
+        actor.tel.damageDealt += esDmg;
+        if (esWas && !target.alive) actor.tel.standardKills += 1;
+        roundEvents.push({ actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, targetId: target.id, targetName: target.name, damage: esDmg, killed: esWas && !target.alive, type: 'mod_proc', modId: 'echoStrike', callout: 'ECHO STRIKE' });
+      }
+
       // ── Resonance strike: a player-pulled ally adds a clean 1.0× strike onto
       // this actor's target, in the same synchronized burst. No execute doubling,
       // no gear procs — concentration + timing, not damage inflation. The partner
@@ -946,8 +996,9 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
         // ── Detonation: the charge releases ─────────────────────────────────
         // Sputter (Flicker signature, vC-F): detonates at half the threshold for
         // half the burst — frequent chip pressure instead of one big blast.
+        // Surge (signature modifier, vC-K): Spark detonates 1 stoke earlier.
         const sputter = unit.sig === 'sputter';
-        const detThreshold = sputter ? 2 : SPARK_DETONATE_THRESHOLD;
+        const detThreshold = sputter ? 2 : (unit.dials.has('surge') ? SPARK_DETONATE_THRESHOLD - 1 : SPARK_DETONATE_THRESHOLD);
         if (unit.stokeStacks >= detThreshold) {
           const foes = (unit.squad === 'A' ? unitsB : unitsA).filter((u) => u.alive);
           const burst = Math.round(unit.currentAttack * SPARK_DETONATE_RATIO * (sputter ? 0.5 : 1));

@@ -26,7 +26,7 @@ export function pvpClientId() {
 export function serializeSquad(units) {
   return units.map((u) => ({
     id: u.id, name: u.name, archetype: u.archetype,
-    level: u.level ?? 1, gearId: u.gearId ?? null, moduleIds: u.moduleIds ?? [],
+    level: u.level ?? 1, gearId: u.gearId ?? null, moduleIds: u.moduleIds ?? [], sigModIds: u.sigModIds ?? [],
   }));
 }
 
