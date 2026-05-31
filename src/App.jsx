@@ -13,6 +13,8 @@ import BattleScreen from './screens/BattleScreen.jsx';
 import ContractsList from './screens/ContractsList.jsx';
 import ContractScreen from './screens/ContractScreen.jsx';
 import ContractResult from './screens/ContractResult.jsx';
+import PvpScreen from './screens/PvpScreen.jsx';
+import { fetchOpponent, recordMatch, myRating } from './engine/pvp.js';
 import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
@@ -27,7 +29,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-E';
+const VERSION = 'vC-I';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -64,6 +66,16 @@ function createCaughtInstance(creature, zoneName) {
     gearId: null,
     moduleIds: [],
   };
+}
+
+// Hydrate a stored/serialized PvP squad ({id, level, gearId, moduleIds}) into
+// engine-ready units by merging the creature definition + a synthetic instanceId.
+function hydratePvpSquad(squad) {
+  return (squad ?? []).map((u, i) => {
+    const base = CREATURES.find((c) => c.id === u.id);
+    if (!base) return null;
+    return { ...base, instanceId: `opp_${u.id}_${i}`, level: u.level ?? 1, gearId: u.gearId ?? null, moduleIds: u.moduleIds ?? [] };
+  }).filter(Boolean);
 }
 
 // Battle-level rule overrides for a contract (e.g. "Hold the Crossing" halves
@@ -130,6 +142,9 @@ function App() {
   const [reconFeedback, setReconFeedback] = useState(null);
   // Test 6: player-chosen difficulty for the current contract.
   const [selectedDifficulty, setSelectedDifficulty] = useState('standard');
+  // Test 5: async-PvP — the opponent being fought + last match result banner.
+  const [pvpOpponent, setPvpOpponent] = useState(null);
+  const [pvpResult, setPvpResult] = useState(null);
 
   const [encounterHistory, setEncounterHistory] = useState(() => {
     try {
@@ -538,6 +553,34 @@ function App() {
     setScreen('contractbattle');
   }
 
+  // ── Async PvP (Test 5) ──
+  function openPvp() {
+    setPvpResult(null);
+    setScreen('pvp');
+  }
+
+  async function handleFindMatch() {
+    const opp = await fetchOpponent(myRating() ?? 1000);
+    if (!opp || hydratePvpSquad(opp.squad).length === 0) return; // no opponents yet
+    setPvpOpponent(opp);
+    setBattleSeed(randomSeed());
+    setScreen('pvpbattle');
+  }
+
+  const handlePvpComplete = useCallback(async (res) => {
+    const won = res.winner === 'A' && !res.forfeit;
+    const delta = await recordMatch({
+      defenderSquadRow: pvpOpponent,
+      seed: battleSeed,
+      winner: res.forfeit ? 'B' : res.winner,
+      rounds: res.rounds ?? 10,
+      myRating: myRating() ?? 1000,
+    });
+    setPvpResult({ won, delta: won ? Math.abs(delta) : -Math.abs(delta), opponentName: pvpOpponent?.player_name ?? 'Opponent' });
+    setPvpOpponent(null);
+    setScreen('pvp');
+  }, [pvpOpponent, battleSeed]);
+
   const handleContractComplete = useCallback((res) => {
     // Outcome is judged off the engine result plus whichever frame overlay this
     // contract uses — the signal clock (3rd detonation) or the hold objective
@@ -660,6 +703,7 @@ function App() {
             onWalk={() => setScreen('world')}
             onDungeon={() => setScreen('dungeon')}
             onContracts={() => setScreen('contracts')}
+            onPvp={openPvp}
             justFedInstanceId={justFedInstanceId}
             onEquipGear={equipGear}
             onEquipModule={equipModule}
@@ -821,6 +865,24 @@ function App() {
             forfeitLabel={currentContract.isRival
               ? 'Forfeit counts as a loss to this Rival. They do not escalate, but it is on the record. No roster change.'
               : 'Forfeit counts as a loss on this contract. No roster change, no stat penalty — the job stays open.'}
+          />
+        )}
+        {screen === 'pvp' && (
+          <PvpScreen
+            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            onFindMatch={handleFindMatch}
+            onBack={() => setScreen('collection')}
+            lastResult={pvpResult}
+          />
+        )}
+        {screen === 'pvpbattle' && pvpOpponent && battleSeed !== null && (
+          <BattleScreen
+            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            enemySquad={hydratePvpSquad(pvpOpponent.squad)}
+            seed={battleSeed}
+            onComplete={handlePvpComplete}
+            onForfeit={() => handlePvpComplete({ winner: 'B', forfeit: true, rounds: 0 })}
+            forfeitLabel="Concede the match. Counts as a loss; rating drops. No roster change."
           />
         )}
         {screen === 'contractresult' && currentContract && contractOutcome && (

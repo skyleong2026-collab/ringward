@@ -395,7 +395,7 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, justFedInstanceId, onEquipGear, onEquipModule }) {
+export default function CollectionScreen({ collection, squadIds, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule }) {
   const [gearModalUnit, setGearModalUnit] = useState(null);
   const [moduleModalUnit, setModuleModalUnit] = useState(null);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
@@ -462,6 +462,18 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
               }}
             >
               Contracts
+            </button>
+          )}
+          {onPvp && (
+            <button
+              onClick={onPvp}
+              style={{
+                padding: '9px 14px', background: 'none', border: '1px solid #5a2a4a',
+                borderRadius: 7, color: '#e06ab0', fontSize: 11, fontWeight: 900,
+                letterSpacing: 1.5, cursor: 'pointer', textTransform: 'uppercase',
+              }}
+            >
+              Arena
             </button>
           )}
           <button
