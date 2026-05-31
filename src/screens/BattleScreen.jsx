@@ -203,10 +203,18 @@ function CombatLog({ entries }) {
 }
 
 // ─── BattleScreen ─────────────────────────────────────────────────────────────
+// factionColor — optional hex tint for the battle header (contract/rival battles).
+// Applied as a very subtle border + glow so it reads faction without distracting.
+const FACTION_HEX = {
+  Shadow: '#9b6bd6',
+  Light:  '#4a90d9',
+  Wild:   '#3a8a4a',
+};
+
 export default function BattleScreen({
   playerSquad, enemySquad, seed, onComplete,
   maxInterventions = 3, detonationClock = null, clockLabel = 'SIGNAL', bannerLabel = null,
-  holdCondition = null, modifiers = undefined,
+  holdCondition = null, modifiers = undefined, factionColor = null,
 }) {
   const {
     start, pause, resume, redirect, anchor, resonate,
@@ -227,8 +235,18 @@ export default function BattleScreen({
   const isPaused = phase === 'paused';
   const isAtPendingAction = isPaused && currentStep?.type === 'pending_action';
 
+  const fc = factionColor ? (FACTION_HEX[factionColor] ?? factionColor) : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* faction header tint — a subtle 1px border flash for contract/rival battles */}
+      {fc && (
+        <div style={{
+          height: 2, borderRadius: 1,
+          background: `linear-gradient(90deg, transparent, ${fc}88, transparent)`,
+          marginBottom: -4,
+        }} />
+      )}
       {/* recon banner — marks a low-stakes scouting fight (§20.8.4) */}
       {bannerLabel && (
         <div style={{

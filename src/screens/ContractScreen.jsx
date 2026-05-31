@@ -1,7 +1,7 @@
 import { ARCHETYPES } from '../data/creatures.js';
 import { generateSpotterRead } from '../engine/spotter.js';
 import { applyLevel } from '../engine/progression.js';
-import { INTEL_AXES, countRevealed, payoutRepAmount } from '../data/contracts.js';
+import { INTEL_AXES, countRevealed, payoutRepAmountWithDifficulty, DIFFICULTIES, DIFFICULTY_ORDER } from '../data/contracts.js';
 import { ARTIFACTS_BY_ID } from '../data/artifacts.js';
 
 // ─── ContractScreen (§20.8 + §20.8.4 Intel) ───────────────────────────────────
@@ -129,20 +129,21 @@ function IntelRow({ axis, spec, known, onScout, canScout, fs }) {
   );
 }
 
-export default function ContractScreen({ contract, playerSquad, intel, reconFeedback, onScout, onCommit, onBack }) {
+export default function ContractScreen({ contract, playerSquad, intel, reconFeedback, onScout, onCommit, onBack, difficulty, onDifficultyChange }) {
   const fs = FACTION_STYLE[contract.client] || FACTION_STYLE.Shadow;
   const spotterRead = generateSpotterRead(playerSquad, contract.squad);
-  // The "THE CLOCK" tag only applies to a detonation-clock contract.
   const hasClock = contract.winCondition.detonationLimit != null;
   const signalUnit = hasClock ? contract.squad.find((u) => u.archetype === 'Spark') : null;
   const escortee = contract.escortee;
   const canScout = playerSquad.length > 0;
+  const isRival = !!contract.isRival;
 
   const revealedCount = countRevealed(intel);
-  const repAmount = payoutRepAmount(contract, revealedCount);
-  const compositionKnown = !!intel?.composition?.revealed;
-  const behaviorKnown = !!intel?.behavior?.revealed;
-  const threatKnown = !!intel?.threat?.revealed;
+  const repAmount = payoutRepAmountWithDifficulty(contract, revealedCount, difficulty);
+  const diff = DIFFICULTIES[difficulty] ?? DIFFICULTIES.standard;
+  const compositionKnown = isRival || !!intel?.composition?.revealed;
+  const behaviorKnown = isRival || !!intel?.behavior?.revealed;
+  const threatKnown = isRival || !!intel?.threat?.revealed;
   const boldnessMax = contract.payout?.boldnessMax ?? 0;
 
   return (
@@ -181,8 +182,8 @@ export default function ContractScreen({ contract, playerSquad, intel, reconFeed
         </div>
       </div>
 
-      {/* ── Intel layer (§20.8.4) ── */}
-      <div style={{
+      {/* ── Intel layer (§20.8.4) — hidden for Rivals (no scouting, no secrets) ── */}
+      {!isRival && <div style={{
         background: '#070710', border: '1px solid #15152a', borderRadius: 6, padding: '13px 14px',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
@@ -222,7 +223,35 @@ export default function ContractScreen({ contract, playerSquad, intel, reconFeed
           Scouting is optional. Each fight you scout makes the contract safer but trades one
           point of standing — caution is paid less, never punished. Dive blind for the full reward.
         </div>
-      </div>
+      </div>}
+
+      {/* ── Difficulty picker (Test 6) ── */}
+      {!isRival && (
+        <div style={{ background: '#080810', border: '1px solid #15152a', borderRadius: 6, padding: '12px 14px' }}>
+          <div style={{ fontSize: 8, color: '#3a3a5a', letterSpacing: 2, marginBottom: 10, fontFamily: 'monospace' }}>
+            ◼ DIFFICULTY — enemy level + payout scale
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {DIFFICULTY_ORDER.map((key) => {
+              const d = DIFFICULTIES[key];
+              const active = difficulty === key;
+              return (
+                <button key={key} onClick={() => onDifficultyChange(key)} style={{
+                  flex: 1, padding: '8px 4px', borderRadius: 5, cursor: 'pointer',
+                  background: active ? d.color + '20' : 'none',
+                  border: `1px solid ${active ? d.color : '#1e1e2a'}`,
+                  color: active ? d.color : '#444',
+                  fontSize: 9, fontWeight: active ? 800 : 400, letterSpacing: 1,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                }}>
+                  <span>{d.label.toUpperCase()}</span>
+                  <span style={{ fontSize: 7, color: active ? d.color : '#333' }}>Lv.{d.level} · ×{d.payoutMult}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Win condition + payout dial */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -238,9 +267,11 @@ export default function ContractScreen({ contract, playerSquad, intel, reconFeed
             {ARTIFACTS_BY_ID[contract.payout.artifactId]?.name ?? 'Artifact'} · {contract.payout.reputation.faction} standing +{repAmount}
           </div>
           <div style={{ fontSize: 8, color: '#555', marginTop: 4 }}>
-            {revealedCount === 0
-              ? `Blind-dive bonus +${boldnessMax} included`
-              : `−${revealedCount} from scouting · floor +${contract.payout.reputation.amount}`}
+            {isRival
+              ? `Rival payout — no scouting dial`
+              : revealedCount === 0
+              ? `Blind-dive +${boldnessMax}${diff.payoutMult > 1 ? ` · ${diff.label} ×${diff.payoutMult}` : ''}`
+              : `−${revealedCount} scouted · floor +${contract.payout.reputation.amount}${diff.payoutMult > 1 ? ` · ×${diff.payoutMult}` : ''}`}
           </div>
         </div>
       </div>

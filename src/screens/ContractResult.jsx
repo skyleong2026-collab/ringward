@@ -1,4 +1,5 @@
 import { ARTIFACTS_BY_ID, ARTIFACT_TIERS } from '../data/artifacts.js';
+import { DIFFICULTIES } from '../data/contracts.js';
 
 // ─── ContractResult (§20.8) ───────────────────────────────────────────────────
 // The payout frame. On a win: the artifact this contract grants is unlocked into
@@ -35,13 +36,14 @@ function ArtifactCard({ artifactId, isNew }) {
 }
 
 export default function ContractResult({ contract, outcome, onRetry, onDone }) {
-  const { won, reason, codexResult, firedSynergies = [], revealedCount = 0, repAmount: dialRep } = outcome;
+  const { won, reason, codexResult, firedSynergies = [], revealedCount = 0, repAmount: dialRep, difficultyKey, newRival } = outcome;
   const newArtifact = codexResult?.newArtifact;
   const newSynergyKeys = new Set(codexResult?.newSynergies ?? []);
   const repFaction = contract.payout?.reputation?.faction;
   const repAmount = dialRep ?? contract.payout?.reputation?.amount;
   const repTotal = codexResult?.codex?.reputation?.[repFaction];
   const boldLabel = revealedCount === 0 ? 'BLIND DIVE' : revealedCount >= 3 ? 'FULLY SCOUTED' : `${revealedCount} SCOUTED`;
+  const diff = DIFFICULTIES[difficultyKey];
 
   if (won) {
     return (
@@ -115,6 +117,29 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
             </div>
           )}
         </div>
+
+        {/* Difficulty badge */}
+        {diff && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: diff.color + '10', border: `1px solid ${diff.color}30`, borderRadius: 6 }}>
+            <span style={{ fontSize: 9, color: diff.color, fontWeight: 700, letterSpacing: 1 }}>CLEARED ON {diff.label.toUpperCase()}</span>
+            <span style={{ fontSize: 8, color: '#555' }}>·  ×{diff.payoutMult} payout</span>
+          </div>
+        )}
+
+        {/* Rival unlock reveal */}
+        {newRival && (
+          <div style={{
+            background: '#0c0a14', border: '1px solid #9b6bd660', borderRadius: 8, padding: '14px 16px',
+          }}>
+            <div style={{ fontSize: 8, color: '#9b6bd6', letterSpacing: 2, marginBottom: 8 }}>RIVAL UNLOCKED</div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: '#cba6e6', letterSpacing: 1 }}>
+              {newRival.charAt(0).toUpperCase() + newRival.slice(1)} challenges you.
+            </div>
+            <div style={{ fontSize: 11, color: '#666', marginTop: 5, lineHeight: 1.6 }}>
+              You've earned enough standing that someone noticed. They're on the board now — and they escalate each time you beat them.
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <button onClick={onRetry} style={{

@@ -19,14 +19,14 @@ import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
-import { CONTRACTS, countRevealed, payoutRepAmount } from './data/contracts.js';
+import { CONTRACTS, countRevealed, payoutRepAmountWithDifficulty, contractEnemyLevel, getRivalContract, RIVAL_UNLOCK_THRESHOLD } from './data/contracts.js';
 import { ARCHETYPES } from './data/creatures.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
-import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis } from './engine/codex.js';
+import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, checkRivalUnlock, escalateRival, recordRivalLoss } from './engine/codex.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vC-C';
+const VERSION = 'vC-D';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -117,11 +117,11 @@ function App() {
   // (Codex/reputation), never stat-power — no XP is applied from a contract.
   const [currentContract, setCurrentContract] = useState(null);
   const [contractOutcome, setContractOutcome] = useState(null);
-  // Intel layer (§20.8.4): per-contract revealed axes, the active recon, and the
-  // last recon's feedback shown back on the contract screen.
   const [contractIntel, setContractIntel] = useState({});
   const [reconAxis, setReconAxis] = useState(null);
   const [reconFeedback, setReconFeedback] = useState(null);
+  // Test 6: player-chosen difficulty for the current contract.
+  const [selectedDifficulty, setSelectedDifficulty] = useState('standard');
 
   const [encounterHistory, setEncounterHistory] = useState(() => {
     try {
@@ -482,8 +482,21 @@ function App() {
   function openContract(contract) {
     setCurrentContract(contract);
     setContractOutcome(null);
-    setContractIntel(loadIntel(contract.id)); // revealed axes persist across sessions
+    setContractIntel(loadIntel(contract.id));
     setReconFeedback(null);
+    setSelectedDifficulty(contract.isRival ? 'standard' : 'standard'); // rivals ignore difficulty
+    setScreen('contract');
+  }
+
+  function openRival(rivalDef) {
+    const { rivals } = { rivals: {}, ...JSON.parse(localStorage.getItem('8gents_codex') || '{}') };
+    const rivalData = rivals[rivalDef.faction.toLowerCase()];
+    const contract = getRivalContract(rivalDef, rivalData?.tier ?? 0);
+    setCurrentContract(contract);
+    setContractOutcome(null);
+    setContractIntel({});
+    setReconFeedback(null);
+    setSelectedDifficulty('standard');
     setScreen('contract');
   }
 
@@ -532,27 +545,54 @@ function App() {
       won = false; reason = 'squad';
     }
 
-    // The §20.8.4 risk dial: how much you scouted sets the reward you walk with.
+    // §20.8.4 risk dial × §Test 6 difficulty multiplier.
     const revealedCount = countRevealed(contractIntel);
-    const repAmount = currentContract ? payoutRepAmount(currentContract, revealedCount) : 0;
+    const isRival = !!currentContract?.isRival;
+    const diffKey = isRival ? 'standard' : selectedDifficulty;
+    const repAmount = currentContract ? payoutRepAmountWithDifficulty(currentContract, revealedCount, diffKey) : 0;
 
     let codexResult = null;
     let firedSynergies = [];
+    let newRival = null;
+
     if (won && currentContract) {
-      // Access-only payout: unlock artifact + reputation + log fired synergies.
-      // No XP / stat changes are applied (§20.8.2).
       firedSynergies = extractFiredSynergies(res);
-      codexResult = recordContractWin(currentContract, firedSynergies, { repAmount });
+      if (isRival) {
+        // Rival win: escalate their tier + record the win as a normal contract win for the artifact.
+        escalateRival(currentContract.faction, currentContract.tiers.length - 1);
+        codexResult = recordContractWin(currentContract, firedSynergies, { repAmount });
+      } else {
+        codexResult = recordContractWin(currentContract, firedSynergies, { repAmount });
+        // Record best difficulty cleared.
+        if (diffKey !== 'standard') {
+          try {
+            const raw = JSON.parse(localStorage.getItem('8gents_codex') || '{}');
+            if (!raw.cleared) raw.cleared = {};
+            const prev = raw.cleared[currentContract.id];
+            const order = ['standard', 'hard', 'brutal'];
+            if (!prev || order.indexOf(diffKey) > order.indexOf(prev)) {
+              raw.cleared[currentContract.id] = diffKey;
+              localStorage.setItem('8gents_codex', JSON.stringify(raw));
+            }
+          } catch { /* storage unavailable */ }
+        }
+        // Check if this win crosses the rival unlock threshold.
+        newRival = checkRivalUnlock(currentContract.client, RIVAL_UNLOCK_THRESHOLD);
+      }
     }
 
-    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies, revealedCount, repAmount });
+    if (!won && isRival) {
+      recordRivalLoss(currentContract.faction);
+    }
+
+    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies, revealedCount, repAmount, difficultyKey: diffKey, newRival });
     setScreen('contractresult');
-  }, [currentContract, contractIntel]);
+  }, [currentContract, contractIntel, selectedDifficulty]);
 
   function handleContractRetry() {
     setContractOutcome(null);
     setBattleSeed(randomSeed());
-    setScreen('contractbattle');
+    setScreen('contractbattle'); // difficulty stays as player last set it
   }
 
   function handleContractDone() {
@@ -714,6 +754,7 @@ function App() {
           <ContractsList
             contracts={CONTRACTS}
             onSelect={openContract}
+            onSelectRival={openRival}
             onBack={() => setScreen('collection')}
           />
         )}
@@ -726,6 +767,8 @@ function App() {
             onScout={handleScout}
             onCommit={commitContract}
             onBack={() => setScreen('contracts')}
+            difficulty={selectedDifficulty}
+            onDifficultyChange={setSelectedDifficulty}
           />
         )}
         {screen === 'reconbattle' && currentContract && reconAxis && battleSeed !== null && (
@@ -748,7 +791,10 @@ function App() {
               currentContract,
               collection.filter((u) => squadIds.includes(u.instanceId)),
             )}
-            enemySquad={levelEnemySquad(currentContract.squad, currentContract.level)}
+            enemySquad={levelEnemySquad(
+              currentContract.squad,
+              currentContract.isRival ? currentContract.level : contractEnemyLevel(currentContract, selectedDifficulty),
+            )}
             seed={battleSeed}
             onComplete={handleContractComplete}
             maxInterventions={currentContract.modifier.interventionBudget}
@@ -756,6 +802,7 @@ function App() {
             clockLabel={currentContract.winCondition.clockLabel}
             holdCondition={currentContract.winCondition.hold ?? null}
             modifiers={contractModifiers(currentContract)}
+            factionColor={currentContract.client ?? currentContract.faction}
           />
         )}
         {screen === 'contractresult' && currentContract && contractOutcome && (

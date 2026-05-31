@@ -167,6 +167,105 @@ export const CONTRACTS = [
 
 export const CONTRACTS_BY_ID = Object.fromEntries(CONTRACTS.map((k) => [k.id, k]));
 
+// ─── Rivals (Test 4) ──────────────────────────────────────────────────────────
+// A Rival is a recurring opponent unlocked by faction reputation (§20.8.6 Test 4).
+// Their squad scales each time you beat them (tier bumps: level + module upgrades).
+// No intel axes — you already know this enemy, and they know you. No clock or hold.
+// The "bet" is mutual: both sides wager standing (winner gains, loser loses nothing
+// — anti-permadeath holds). Each win earns a prestige artifact cosmetic.
+//
+// Rep threshold to unlock: Shadow ≥ 3 / Light ≥ 3.
+export const RIVAL_UNLOCK_THRESHOLD = 3;
+
+export const RIVALS = [
+  {
+    id: 'shadow-rival-crucible',
+    rivalId: 'crucible',             // key into codex.rivals
+    faction: 'Shadow',
+    name: 'Crucible',
+    title: 'Shadow Enforcer',
+    situation: 'Shadow took notice. Crucible runs their hardest tests personally — a squad that adapts to whoever it faces. This is not a job. This is a measure.',
+    stakes: "Win and Shadow's hardest door opens. Lose and Crucible escalates.",
+    modifier: {
+      headline: 'No constraints. Both squads fight clean.',
+      detail: 'No clock, no escort, no modifier. Crucible wins by being better.',
+      interventionBudget: 3,
+    },
+    winCondition: { summary: 'Defeat Crucible\'s squad.' },
+    payout: {
+      artifactId: 'shadowCrest',
+      reputation: { faction: 'Shadow', amount: 2 },
+      summary: 'Shadow Crest cosmetic · Shadow standing +2',
+    },
+    winLine: "Crucible nods. Shadow's hardest door is open.",
+    // Escalating squads by tier (0–3). Level + module dials increase each tier.
+    tiers: [
+      { level: 4, squad: [c('vault'), c('fang'), c('striker')] },
+      { level: 6, squad: [c('vault'), { ...c('fang'), moduleIds: ['deepCut'] }, c('striker'), c('spark')] },
+      { level: 8, squad: [{ ...c('vault'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, c('striker'), { ...c('cinder'), moduleIds: ['bankedHeat'] }] },
+      { level: 10, squad: [{ ...c('vault'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, { ...c('striker'), moduleIds: ['openChannel'] }, { ...c('cinder'), moduleIds: ['bankedHeat'] }, c('buzzline')] },
+    ],
+  },
+  {
+    id: 'light-rival-wardenfall',
+    rivalId: 'wardenfall',
+    faction: 'Light',
+    name: 'Wardenfall',
+    title: 'Light Champion',
+    situation: "The Light has champions who hold things together by being impossible to kill. Wardenfall is one. They've heard what you did at the crossing.",
+    stakes: 'This is a challenge of craft, not territory. Wardenfall wants to know if you are real.',
+    modifier: {
+      headline: 'No constraints. Both squads fight clean.',
+      detail: 'No clock, no escort, no modifier. Wardenfall wins by outlasting everything.',
+      interventionBudget: 3,
+    },
+    winCondition: { summary: 'Defeat Wardenfall\'s squad.' },
+    payout: {
+      artifactId: 'lightSeal',
+      reputation: { faction: 'Light', amount: 2 },
+      summary: 'Light Seal cosmetic · Light standing +2',
+    },
+    winLine: 'Wardenfall stands down. The Light has seen what you are.',
+    tiers: [
+      { level: 4, squad: [c('vault'), c('buzzline'), c('stoneback')] },
+      { level: 6, squad: [{ ...c('vault'), moduleIds: ['wallBreaker'] }, c('buzzline'), c('stoneback'), c('fang')] },
+      { level: 8, squad: [{ ...c('vault'), moduleIds: ['wallBreaker'] }, { ...c('buzzline'), moduleIds: ['frequencyBoost'] }, c('stoneback'), { ...c('fang'), moduleIds: ['deepCut'] }] },
+      { level: 10, squad: [{ ...c('vault'), moduleIds: ['wallBreaker'] }, { ...c('buzzline'), moduleIds: ['frequencyBoost'] }, { ...c('stoneback'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, c('striker')] },
+    ],
+  },
+];
+
+export const RIVALS_BY_ID = Object.fromEntries(RIVALS.map((r) => [r.rivalId, r]));
+export const RIVALS_BY_FACTION = Object.fromEntries(RIVALS.map((r) => [r.faction, r]));
+
+// Returns the rival contract for a faction at the given tier (from codex.rivals).
+export function getRivalContract(rivalDef, tier = 0) {
+  const t = rivalDef.tiers[Math.min(tier, rivalDef.tiers.length - 1)];
+  return { ...rivalDef, level: t.level, squad: t.squad, isRival: true };
+}
+
+// ─── Difficulty (Test 6) ───────────────────────────────────────────────────────
+// Player-set dial on ContractScreen. Scales enemy level and the payout multiplier.
+// Standard is the balanced baseline; Hard and Brutal are opt-in challenge modes.
+export const DIFFICULTIES = {
+  standard: { label: 'Standard', level: 3, payoutMult: 1.0, color: '#6a6a7a' },
+  hard:     { label: 'Hard',     level: 5, payoutMult: 1.5, color: '#d0902a' },
+  brutal:   { label: 'Brutal',   level: 8, payoutMult: 2.0, color: '#d0021b' },
+};
+export const DIFFICULTY_ORDER = ['standard', 'hard', 'brutal'];
+
+// Enemy level for a contract at a given difficulty (difficulty overrides contract.level).
+export function contractEnemyLevel(contract, difficultyKey = 'standard') {
+  return DIFFICULTIES[difficultyKey]?.level ?? contract.level;
+}
+
+// Payout rep after scouting + difficulty multiplier applied.
+export function payoutRepAmountWithDifficulty(contract, revealedCount, difficultyKey = 'standard') {
+  const base = payoutRepAmount(contract, revealedCount);
+  const mult = DIFFICULTIES[difficultyKey]?.payoutMult ?? 1;
+  return Math.ceil(base * mult);
+}
+
 export const INTEL_AXES = ['composition', 'behavior', 'threat'];
 
 // How many axes are revealed in a per-contract intel map (from the Codex).

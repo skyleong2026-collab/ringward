@@ -94,6 +94,18 @@ export const ARTIFACTS = {
     id: 'cullingOrder', name: 'Culling Order', tier: 'synthesis', family: 'Predator',
     text: "If this unit's hit would kill, it executes and immediately strikes a second target.",
   },
+  // ── Rival prestige cosmetics (Test 4 — earned by defeating a Rival) ──
+  // These are prestige pieces, not raw power. They signal what you've done.
+  shadowCrest: {
+    id: 'shadowCrest', name: 'Shadow Crest', tier: 'engine', family: 'Rival',
+    text: 'Shadow has seen what you are. When your squad opens with a kill in round 1, each ally acts with +15% attack for the rest of that round.',
+    note: 'Proof you faced Crucible. The bonus rewards the opening aggression Shadow values.',
+  },
+  lightSeal: {
+    id: 'lightSeal', name: 'Light Seal', tier: 'engine', family: 'Rival',
+    text: 'Light has seen what you are. The first ally to take a fatal hit each battle survives it once at 1 HP.',
+    note: 'Proof you faced Wardenfall. The effect mirrors the resilience that defines the Light.',
+  },
   // ── Discovery / weird ──
   strangeAttractor: {
     id: 'strangeAttractor', name: 'Strange Attractor', tier: 'engine', family: 'Discovery',

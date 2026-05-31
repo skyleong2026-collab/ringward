@@ -12,7 +12,7 @@
 const STORAGE_KEY = '8gents_codex';
 
 function emptyCodex() {
-  return { artifacts: {}, synergies: {}, reputation: {}, intel: {} };
+  return { artifacts: {}, synergies: {}, reputation: {}, intel: {}, rivals: {} };
 }
 
 export function loadCodex() {
@@ -88,6 +88,59 @@ export function extractFiredSynergies(result) {
   }
 
   return [...out.values()];
+}
+
+// ─── Rivals (Test 4) ──────────────────────────────────────────────────────────
+// A Rival entity is created the first time rep crosses the threshold. It tracks
+// their escalation tier (which squad they field next) and win/loss history. The
+// Rival never resets — loss leaves tier unchanged, win bumps it (they get harder).
+
+export function loadRivals() {
+  return loadCodex().rivals ?? {};
+}
+
+// After a contract win, check if this is the first time faction rep crosses the
+// unlock threshold. Returns the rivalId string if newly unlocked, else null.
+export function checkRivalUnlock(faction, RIVAL_UNLOCK_THRESHOLD, now = Date.now()) {
+  const codex = loadCodex();
+  if (!codex.rivals) codex.rivals = {};
+  const standing = codex.reputation?.[faction] ?? 0;
+  // Only unlock once (idempotent after first creation).
+  const alreadyExists = !!codex.rivals[faction.toLowerCase()];
+  if (!alreadyExists && standing >= RIVAL_UNLOCK_THRESHOLD) {
+    codex.rivals[faction.toLowerCase()] = { faction, tier: 0, wins: 0, losses: 0, unlockedAt: now };
+    saveCodex(codex);
+    return faction.toLowerCase();
+  }
+  return null;
+}
+
+// Called when the player wins a Rival Gauntlet. Bumps the rival's tier (capped at
+// tiers.length - 1 so it is passed in) and records the win.
+export function escalateRival(faction, maxTier = 3, now = Date.now()) {
+  const codex = loadCodex();
+  if (!codex.rivals) codex.rivals = {};
+  const key = faction.toLowerCase();
+  const existing = codex.rivals[key] ?? { faction, tier: 0, wins: 0, losses: 0, unlockedAt: now };
+  codex.rivals[key] = {
+    ...existing,
+    tier: Math.min(existing.tier + 1, maxTier),
+    wins: existing.wins + 1,
+    lastResultAt: now,
+    lastResult: 'win',
+  };
+  saveCodex(codex);
+  return codex.rivals[key];
+}
+
+// Record a Rival Gauntlet loss (no tier change — anti-permadeath).
+export function recordRivalLoss(faction, now = Date.now()) {
+  const codex = loadCodex();
+  if (!codex.rivals) codex.rivals = {};
+  const key = faction.toLowerCase();
+  if (!codex.rivals[key]) return;
+  codex.rivals[key] = { ...codex.rivals[key], losses: codex.rivals[key].losses + 1, lastResultAt: now, lastResult: 'loss' };
+  saveCodex(codex);
 }
 
 // Record the outcome of a won contract: unlock its artifact, bank reputation,
