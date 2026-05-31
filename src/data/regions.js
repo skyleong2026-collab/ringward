@@ -1,17 +1,58 @@
-// ─── Regions (World Layer — vC-J) ─────────────────────────────────────────────
-// Each region is a named territory with faction tracks and a rep ladder.
-// The rep ladder gates contract availability — progression without a walkable map.
+// ─── Regions (World Layer — vC-J data / vC-O board) ───────────────────────────
+// Each region is a named territory. The Ironfield is the home territory and
+// holds every current contract; frontier territories are the visible horizon —
+// they OPEN once you've built enough combined faction standing, then host the
+// operations that ship into them. Contracts carry a `region` id (see
+// contracts.js) so future content drops into a frontier just by tagging it.
 //
-// vC-J: one region ("The Ironfield"), two faction tracks (Shadow / Light).
-// Region select screen (world board with multiple territories) is vC-K.
+// "Combined standing" = Shadow rep + Light rep. It is the world-progression
+// gauge: doing work anywhere pushes the frontier open. The per-faction rep
+// LADDERS (below) still gate which contracts unlock WITHIN a region.
 
 export const REGIONS = [
   {
     id: 'ironfield',
     name: 'The Ironfield',
+    sigil: '▰',
+    status: 'home', // always open — the starting territory
+    factions: ['Shadow', 'Light'],
     tagline: 'Contested rail yards, relay towers, and shadow operations. Both factions move here.',
   },
+  {
+    id: 'saltmarsh-verge',
+    name: 'Saltmarsh Verge',
+    sigil: '◷',
+    status: 'frontier',
+    unlockAt: 6, // combined standing
+    factions: ['Light'],
+    lean: 'Light',
+    tagline: 'Flooded causeways the Light is fighting to keep open. Standing here is earned in mud.',
+  },
+  {
+    id: 'ashfall-reach',
+    name: 'Ashfall Reach',
+    sigil: '◢',
+    status: 'frontier',
+    unlockAt: 12, // combined standing
+    factions: ['Shadow'],
+    lean: 'Shadow',
+    tagline: 'Burned-out substations past the perimeter. Only the Shadow still operates this far out.',
+  },
 ];
+
+export const REGION_BY_ID = Object.fromEntries(REGIONS.map((r) => [r.id, r]));
+
+// Combined faction standing — the gauge that opens frontier territory.
+export function combinedStanding(reputation = {}) {
+  return Object.values(reputation).reduce((sum, v) => sum + (v || 0), 0);
+}
+
+// A region is open if it's home, or its combined-standing threshold is met.
+export function regionUnlocked(region, standing) {
+  if (!region) return false;
+  if (region.status === 'home') return true;
+  return standing >= (region.unlockAt ?? Infinity);
+}
 
 // ─── Reputation ladders ───────────────────────────────────────────────────────
 // 5 rungs per faction. Each rung unlocks at a rep threshold.

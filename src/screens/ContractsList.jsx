@@ -153,8 +153,14 @@ function LockedContractRow({ contract, requiredRep }) {
   );
 }
 
-export default function ContractsList({ contracts, onSelect, onSelectRival, onBack }) {
+export default function ContractsList({ contracts, onSelect, onSelectRival, onBack, region }) {
   const codex = loadCodex();
+
+  // Scope the board to the active territory (vC-O). Untagged contracts default
+  // to the home region so older saves / data stay visible.
+  const regionContracts = region
+    ? contracts.filter((c) => (c.region ?? 'ironfield') === region.id)
+    : contracts;
 
   // Build a map from contractId → required rep threshold (from regions data)
   const reqRepByContract = {};
@@ -175,8 +181,11 @@ export default function ContractsList({ contracts, onSelect, onSelectRival, onBa
         <button onClick={onBack} style={{
           background: 'none', border: 'none', color: '#444',
           fontSize: 12, cursor: 'pointer', letterSpacing: 1, padding: 0, marginBottom: 10,
-        }}>← Stable</button>
-        <div style={{ fontSize: 16, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>Operations</div>
+        }}>← World</button>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>Operations</div>
+          {region && <div style={{ fontSize: 10, color: '#555', letterSpacing: 1 }}>· {region.name}</div>}
+        </div>
         <div style={{ fontSize: 11, color: '#444', marginTop: 4, lineHeight: 1.6 }}>
           Every contract is a build against a build, under one constraint. Earn standing to open harder work.
         </div>
@@ -187,7 +196,7 @@ export default function ContractsList({ contracts, onSelect, onSelectRival, onBa
         const fs = FACTION_STYLE[faction] || FACTION_STYLE.Shadow;
         const standing = codex.reputation?.[faction] ?? 0;
         const availIds = new Set(availableContractIds(faction, standing));
-        const factionContracts = contracts.filter((c) => c.client === faction);
+        const factionContracts = regionContracts.filter((c) => c.client === faction);
         if (factionContracts.length === 0) return null;
 
         return (
@@ -244,7 +253,8 @@ export default function ContractsList({ contracts, onSelect, onSelectRival, onBa
         );
       })}
 
-      {/* Rivals section */}
+      {/* Rivals section — recurring opponents operate out of the home territory */}
+      {(!region || region.status === 'home') && (
       <div>
         <div style={{ fontSize: 8, color: '#252535', letterSpacing: 2, marginBottom: 8 }}>RIVALS</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -258,6 +268,7 @@ export default function ContractsList({ contracts, onSelect, onSelectRival, onBa
           })}
         </div>
       </div>
+      )}
     </div>
   );
 }

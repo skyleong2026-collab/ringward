@@ -27,6 +27,7 @@ export const CONTRACTS = [
   {
     id: 'quiet-the-signal',
     client: 'Shadow',
+    region: 'ironfield',
     name: 'Quiet the Signal',
     discovers: ['cinder'], // vC-N: winning unlocks Ashwing for recruitment
     // ── Fiction ──
@@ -108,6 +109,7 @@ export const CONTRACTS = [
   {
     id: 'hold-the-crossing',
     client: 'Light',
+    region: 'ironfield',
     name: 'Hold the Crossing',
     discovers: ['link'], // vC-N: winning unlocks the Echo Link for recruitment
     situation:
@@ -181,6 +183,7 @@ export const CONTRACTS = [
   {
     id: 'crack-the-formation',
     client: 'Shadow',
+    region: 'ironfield',
     name: 'Crack the Formation',
     discovers: ['claw'], // vC-N: winning unlocks the Swift Claw for recruitment
     situation:
@@ -235,6 +238,7 @@ export const CONTRACTS = [
   {
     id: 'ghost-the-relay',
     client: 'Shadow',
+    region: 'ironfield',
     name: 'Ghost the Relay',
     situation:
       'A signal relay is routing operations through a full Echo array — Conduit pairing with Nexus, Link tethering the circuit together. It is broadcasting everything. Kill it quietly before the array completes its cycle.',
@@ -288,6 +292,7 @@ export const CONTRACTS = [
   {
     id: 'the-last-threshold',
     client: 'Shadow',
+    region: 'ironfield',
     name: 'The Last Threshold',
     situation:
       "Shadow's hardest clearance. A mixed cell holding a critical junction — Guardian anchor up front, Spark accelerating behind the shield, Swift closer waiting for any hesitation. A complete threat. No gaps.",

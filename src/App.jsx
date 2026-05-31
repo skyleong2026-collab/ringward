@@ -14,6 +14,8 @@ import ContractsList from './screens/ContractsList.jsx';
 import ContractScreen from './screens/ContractScreen.jsx';
 import ContractResult from './screens/ContractResult.jsx';
 import PvpScreen from './screens/PvpScreen.jsx';
+import RegionScreen from './screens/RegionScreen.jsx';
+import { REGION_BY_ID } from './data/regions.js';
 import { fetchOpponentPool, recordMatch, myRating } from './engine/pvp.js';
 import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
@@ -30,7 +32,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-N';
+const VERSION = 'vC-O';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -102,6 +104,7 @@ function App() {
     document.head.appendChild(style);
   }, []);
   const [screen, setScreen] = useState('collection');
+  const [currentRegionId, setCurrentRegionId] = useState('ironfield');
   const [result, setResult] = useState(null);
   const [currentEncounter, setCurrentEncounter] = useState(null);
   const [feedTarget, setFeedTarget] = useState(null);
@@ -602,6 +605,13 @@ function App() {
     if (dungeon) startDungeon(dungeon);
   }
 
+  // ── World board (vC-O) ──────────────────────────────────────────────────────
+  // Enter a territory → the Operations board scopes to that region's contracts.
+  function openRegion(regionId) {
+    setCurrentRegionId(regionId);
+    setScreen('contracts');
+  }
+
   // ── Contract functions (§20.8) ────────────────────────────────────────────
 
   function openContract(contract) {
@@ -848,7 +858,7 @@ function App() {
             onEncounters={() => setScreen('encounters')}
             onWalk={() => setScreen('world')}
             onDungeon={() => setScreen('dungeon')}
-            onContracts={() => setScreen('contracts')}
+            onContracts={() => setScreen('regions')}
             onPvp={openPvp}
             justFedInstanceId={justFedInstanceId}
             onEquipGear={equipGear}
@@ -956,12 +966,20 @@ function App() {
             onReturn={handleDungeonResultDone}
           />
         )}
+        {screen === 'regions' && (
+          <RegionScreen
+            contracts={CONTRACTS}
+            onEnter={openRegion}
+            onBack={() => setScreen('collection')}
+          />
+        )}
         {screen === 'contracts' && (
           <ContractsList
             contracts={CONTRACTS}
+            region={REGION_BY_ID[currentRegionId]}
             onSelect={openContract}
             onSelectRival={openRival}
-            onBack={() => setScreen('collection')}
+            onBack={() => setScreen('regions')}
           />
         )}
         {screen === 'contract' && currentContract && (
