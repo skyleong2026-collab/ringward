@@ -434,6 +434,20 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
       const aliveEnemies = enemies.filter((u) => u.alive);
       if (aliveEnemies.length === 0) break;
 
+      // ── Spark = pure charger (vC-H RPS rework) ──────────────────────────────
+      // A Spark doesn't brawl — its turn banks Stoke toward detonation. It never
+      // melees (so it never eats Guardian retaliation), which is what lets a ramp
+      // squad out-last a tank wall. Its only damage is the end-of-round %HP
+      // detonation. Fragile + no melee = still dies to burst before it blooms.
+      if (actor.archetype === 'Spark') {
+        actor.actedThisRound = true;
+        actor.stokeStacks += 1;
+        actor.currentAttack = sparkAttack(actor);
+        roundEvents.push({ type: 'module_proc', actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, moduleId: 'charge', callout: `CHARGING (${actor.stokeStacks})` });
+        yield { type: 'charging', round, actorId: actor._uid, actorSquad: actor.squad, actorName: actor.name, stokeStacks: actor.stokeStacks, unitsA: snap(unitsA), unitsB: snap(unitsB) };
+        continue;
+      }
+
       actor.allies = allies;
       const proposedTarget = pickTarget(actor, enemies, lastSquadTarget[actor.squad], rng);
       if (!proposedTarget) continue;
@@ -640,6 +654,19 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
         else actor.tel.standardKills += 1;
       }
 
+      // ── Guardian retaliation (vC-H RPS rework) ──────────────────────────────
+      // Striking a living enemy Guardian costs the attacker a thorns bite (∝ its
+      // armor). Over a fight this grinds down fragile burst units → a tank wall
+      // outlasts pure burst ("tank beats burst"). Sparks never trigger it (they
+      // don't melee), preserving "ramp beats tank".
+      if (target.alive && target.archetype === 'Guardian' && actor.squad !== target.squad) {
+        const bite = Math.max(5, Math.round(target.armor * 1.4));
+        const aWas = actor.alive;
+        applyDamage(actor, bite, round);
+        if (aWas && !actor.alive) target.tel.standardKills += 1;
+        roundEvents.push({ actorId: target.id, actorName: target.name, actorSquad: target.squad, targetId: actor.id, targetName: actor.name, damage: bite, killed: aWas && !actor.alive, type: 'signature_proc', sig: 'retaliate', callout: 'RETALIATE' });
+      }
+
       // Sunder (Striker signature, vC-F): the shield-breaker. Each hit strips a
       // chunk of the target's armor (permanent) and shaves remaining shield —
       // cracks enemy tanks open for the rest of the squad.
@@ -800,9 +827,12 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
           const pureTone = echo.dials.has('pureTone');
           // Amplify (Conduit signature, vC-F): its echo rings at full strength
           // (1.0) instead of the base half — drafts to double your carry's hit.
+          // Amplify (Conduit) rings louder than a base echo but not at FULL carry
+          // power — vC-H RPS nerf (1.0→0.7 base) so the amplified-burst generalist
+          // isn't unbeatable; it now loses to a tank wall.
           const amplify = echo.sig === 'amplify';
           const echoPower = amplify
-            ? (resonatorActive ? (pureTone ? 1.3 : 1.15) : (pureTone ? 1.15 : 1.0))
+            ? (resonatorActive ? (pureTone ? 1.0 : 0.9) : (pureTone ? 0.85 : 0.7))
             : (resonatorActive ? (pureTone ? 1.15 : 1.0) : (pureTone ? 0.65 : 0.5));
           const jumpPower = pureTone ? 0.65 : 0.5;
           if (isFirstEcho && pureTone) roundEvents.push({ actorId: echo.id, actorName: echo.name, actorSquad: echo.squad, type: 'module_proc', moduleId: 'pureTone', callout: 'PURE TONE' });
@@ -929,7 +959,10 @@ export function* battleStepEngine(squadA, squadB, seed, modifiers = {}) {
             const aegis = foeSquad.some((u) => u.alive && u.sig === 'aegis');
             const effBurst = aegis ? Math.round(burst * 0.6) : burst;
             const was = foe.alive;
-            const actual = applyDamage(foe, calcDamage(effBurst, foe.armor), round);
+            // vC-H: detonation = flat burst + % of target max-HP. The %HP term
+            // ignores armor and scales against big tanks → "ramp beats tank".
+            const pctHP = Math.round(foe.maxHP * (aegis ? 0.05 : 0.09));
+            const actual = applyDamage(foe, calcDamage(effBurst, foe.armor) + pctHP, round);
             unit.tel.damageDealt += actual;
             if (actual > unit.tel.largestHit) unit.tel.largestHit = actual;
             const killed = was && !foe.alive;

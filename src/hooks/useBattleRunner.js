@@ -170,6 +170,12 @@ export function useBattleRunner({
       appendLog([`⚓ ${value.actorName} — ANCHORED (skips turn)`]);
       timerRef.current = setTimeout(() => tick(null), IMPACT_MS / sp);
 
+    } else if (value.type === 'charging') {
+      // Spark pure-charger beat (vC-H): it banks Stoke toward detonation.
+      setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
+      appendLog([`⚡ ${value.actorName} — CHARGING (${value.stokeStacks})`]);
+      timerRef.current = setTimeout(() => tick(null), IMPACT_MS / sp);
+
     } else if (value.type === 'resonance_skip') {
       // A unit already spent its action on a player-pulled synchronized strike —
       // show the spent beat, auto-advance.

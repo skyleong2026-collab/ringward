@@ -16,10 +16,10 @@ const SCENARIOS = {
     A: () => [mk('vault', 'a1', 'lastwall', ['earlyWall', 'hardplate']), mk('bastion', 'a2', 'ironhide', [])],
     B: () => [mk('fang', 'b1', 'quickstrike', ['deepCut']), mk('striker', 'b2', 'killingMomentum', ['secondWind'])],
     seed: 11,
-    // Phase 17: timeout decided by board control (units alive, then squad HP
-    // fraction). vC-F re-bless: Fang (Flank) dives past the Guardian wall and
-    // Striker (Sunder) cracks armor, so BOTH Swifts now survive the timeout.
-    golden: { winner: 'B', rounds: 10, aliveA: ['a1'], aliveB: ['b1', 'b2'] },
+    // vC-H RPS re-bless: Guardian RETALIATION now grinds the fragile Swifts down
+    // — the Guardian squad wins outright (was a Swift timeout). This is the
+    // "tank beats burst" edge of the rock-paper-scissors cycle, captured here.
+    golden: { winner: 'A', rounds: 9, aliveA: ['a1'], aliveB: [] },
   },
   echoVsSpark: {
     A: () => [mk('conduit', 'a1', 'chainlink', ['longEcho', 'pureTone']), mk('link', 'a2', 'resonator', [])],
@@ -35,18 +35,19 @@ const SCENARIOS = {
     A: () => [mk('vault', 'a1', 'ironhide', [], 1), mk('fang', 'a2', 'quickstrike', [], 1)],
     B: () => [mk('vault', 'b1', 'ironhide', [], 5), mk('fang', 'b2', 'quickstrike', [], 5)],
     seed: 7,
-    // vC-F re-bless: Fang's Flank changes who draws return fire, so the L1
-    // survivor is now the Vault (a1) rather than the Fang. B (Lv.5) still wins —
-    // the level-curve invariant holds.
-    golden: { winner: 'B', rounds: 10, aliveA: ['a1'], aliveB: ['b1', 'b2'] },
+    // vC-H re-bless: with retaliation, B (Lv.5 Guardian+Swift) wipes A (Lv.1)
+    // faster — resolves round 7, A fully cleared. The level-curve invariant still
+    // holds: the higher-level side wins decisively.
+    golden: { winner: 'B', rounds: 7, aliveA: [], aliveB: ['b1', 'b2'] },
   },
   launchMix: {
     A: () => [mk('vault', 'a1', 'mirrorplate', ['hairTrigger']), mk('fang', 'a2', 'glassworkCore', [])],
     B: () => [mk('conduit', 'b1', 'openChannel', []), mk('spark', 'b2', 'pyreHeart', [])],
     seed: 33,
-    // Phase 17: Spark HP bump (b2) lets it survive one extra round before its
-    // squad is wiped — battle now resolves in 9 rounds. Winner/survivors unchanged.
-    golden: { winner: 'A', rounds: 9, aliveA: ['a1', 'a2'], aliveB: [] },
+    // vC-H re-bless: the Spark (b2) now charges as a pure charger and detonates
+    // harder, so B is cleared a few rounds sooner — resolves round 6.
+    // Winner/survivors unchanged.
+    golden: { winner: 'A', rounds: 6, aliveA: ['a1', 'a2'], aliveB: [] },
   },
 };
 
