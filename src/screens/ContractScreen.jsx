@@ -45,6 +45,7 @@ function SquadChip({ unit }) {
 // An enemy row — only fully legible once Composition is scouted. Behavior unlocks
 // the per-unit mechanic hint.
 function EnemyRow({ unit, level, isSignal, isLast, compositionKnown, behaviorKnown }) {
+  if (!unit) return null; // never let a malformed squad entry black-screen the page
   const color = ARCHETYPES[unit.archetype]?.color || '#888';
   const lvl = level ?? unit.level ?? 1;
   const eff = applyLevel({ ...unit, level: lvl });
@@ -130,7 +131,7 @@ function IntelRow({ axis, spec, known, onScout, canScout, fs }) {
 }
 
 export default function ContractScreen({ contract, playerSquad, intel, reconFeedback, onScout, onCommit, onBack, difficulty, onDifficultyChange }) {
-  const fs = FACTION_STYLE[contract.client] || FACTION_STYLE.Shadow;
+  const fs = FACTION_STYLE[contract.client ?? contract.faction] || FACTION_STYLE.Shadow;
   const spotterRead = generateSpotterRead(playerSquad, contract.squad);
   const hasClock = contract.winCondition.detonationLimit != null;
   const signalUnit = hasClock ? contract.squad.find((u) => u.archetype === 'Spark') : null;

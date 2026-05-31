@@ -1,6 +1,13 @@
 import { CREATURES } from './creatures.js';
 
-const c = (id) => CREATURES.find((u) => u.id === id);
+// Look up a creature by id. Throws at module-load if the id is invalid so a typo
+// surfaces immediately (build/test failure) instead of silently producing an
+// `undefined` squad member that black-screens a screen at render time.
+const c = (id) => {
+  const found = CREATURES.find((u) => u.id === id);
+  if (!found) throw new Error(`contracts.js: unknown creature id "${id}" (valid: ${CREATURES.map((u) => u.id).join(', ')})`);
+  return found;
+};
 
 // ─── Contracts (§20.8 — The Contract Frame) ───────────────────────────────────
 // A contract is the smallest frame that makes a battle's outcome matter and
@@ -203,7 +210,7 @@ export const RIVALS = [
       { level: 4, squad: [c('vault'), c('fang'), c('striker')] },
       { level: 6, squad: [c('vault'), { ...c('fang'), moduleIds: ['deepCut'] }, c('striker'), c('spark')] },
       { level: 8, squad: [{ ...c('vault'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, c('striker'), { ...c('cinder'), moduleIds: ['bankedHeat'] }] },
-      { level: 10, squad: [{ ...c('vault'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, { ...c('striker'), moduleIds: ['openChannel'] }, { ...c('cinder'), moduleIds: ['bankedHeat'] }, c('buzzline')] },
+      { level: 10, squad: [{ ...c('vault'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, { ...c('striker'), moduleIds: ['hairTrigger'] }, { ...c('cinder'), moduleIds: ['bankedHeat'] }, c('conduit')] },
     ],
   },
   {
@@ -227,10 +234,10 @@ export const RIVALS = [
     },
     winLine: 'Wardenfall stands down. The Light has seen what you are.',
     tiers: [
-      { level: 4, squad: [c('vault'), c('buzzline'), c('stoneback')] },
-      { level: 6, squad: [{ ...c('vault'), moduleIds: ['wallBreaker'] }, c('buzzline'), c('stoneback'), c('fang')] },
-      { level: 8, squad: [{ ...c('vault'), moduleIds: ['wallBreaker'] }, { ...c('buzzline'), moduleIds: ['frequencyBoost'] }, c('stoneback'), { ...c('fang'), moduleIds: ['deepCut'] }] },
-      { level: 10, squad: [{ ...c('vault'), moduleIds: ['wallBreaker'] }, { ...c('buzzline'), moduleIds: ['frequencyBoost'] }, { ...c('stoneback'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, c('striker')] },
+      { level: 4, squad: [c('vault'), c('conduit'), c('bastion')] },
+      { level: 6, squad: [{ ...c('vault'), moduleIds: ['earlyWall'] }, c('conduit'), c('bastion'), c('fang')] },
+      { level: 8, squad: [{ ...c('vault'), moduleIds: ['earlyWall'] }, { ...c('conduit'), moduleIds: ['longEcho'] }, c('bastion'), { ...c('fang'), moduleIds: ['deepCut'] }] },
+      { level: 10, squad: [{ ...c('vault'), moduleIds: ['earlyWall'] }, { ...c('conduit'), moduleIds: ['longEcho'] }, { ...c('bastion'), moduleIds: ['hardplate'] }, { ...c('fang'), moduleIds: ['deepCut'] }, c('striker')] },
     ],
   },
 ];
