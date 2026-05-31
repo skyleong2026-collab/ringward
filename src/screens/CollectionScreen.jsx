@@ -1,7 +1,7 @@
 import { ARCHETYPES, CREATURES } from '../data/creatures.js';
 import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
-import { SIG_MODS, SIG_MODS_BY_ID } from '../data/sigMods.js';
+import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { useState, useEffect } from 'react';
@@ -17,6 +17,7 @@ const SIG_BY_CREATURE = Object.fromEntries(CREATURES.map((c) => [c.id, c.signatu
 
 function ModSelectModal({ unit, onEquipSigMod, onClose }) {
   const equipped = unit.sigModIds ?? [];
+  const rank = unit.sigRank ?? 1;
   const slots = [0, 1];
   return (
     <div style={{
@@ -33,6 +34,7 @@ function ModSelectModal({ unit, onEquipSigMod, onClose }) {
         </div>
         <div style={{ fontSize: 9, color: '#333', marginBottom: 12, lineHeight: 1.5 }}>
           {equipped.length < 2 ? `${2 - equipped.length} slot${2 - equipped.length !== 1 ? 's' : ''} open` : 'Both slots filled — tap a mod to remove it.'}
+          {' '}Signature rank {rank} — effect values below reflect this rank.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {SIG_MODS.map((mod) => {
@@ -56,7 +58,7 @@ function ModSelectModal({ unit, onEquipSigMod, onClose }) {
                   <span style={{ fontSize: 11, fontWeight: 800, color: on ? mod.color : slotsFull ? '#333' : '#ccc', letterSpacing: 0.5 }}>{mod.name}</span>
                   {on && <span style={{ fontSize: 7, color: mod.color, border: `1px solid ${mod.color}40`, borderRadius: 2, padding: '1px 5px', letterSpacing: 1 }}>EQUIPPED</span>}
                 </div>
-                <div style={{ fontSize: 9, color: on ? '#aaa' : slotsFull ? '#2a2a3a' : '#666', lineHeight: 1.5 }}>{mod.text}</div>
+                <div style={{ fontSize: 9, color: on ? '#aaa' : slotsFull ? '#2a2a3a' : '#666', lineHeight: 1.5 }}>{sigModRankedText(mod.id, rank)}</div>
               </button>
             );
           })}
@@ -78,7 +80,7 @@ function ModSlotsRow({ unit, onOpenModSelectModal }) {
           <button
             key={slot}
             onClick={() => onOpenModSelectModal(unit)}
-            title={mod ? `${mod.name}: ${mod.text}` : 'Empty slot — tap to equip modifier'}
+            title={mod ? `${mod.name}: ${sigModRankedText(mod.id, unit.sigRank ?? 1)}` : 'Empty slot — tap to equip modifier'}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               background: mod ? mod.color + '18' : '#0d0d14',
@@ -102,10 +104,14 @@ function ModSlotsRow({ unit, onOpenModSelectModal }) {
   );
 }
 
-function SignatureRow({ unit }) {
+function SignatureRow({ unit, onRankUp, shards = 0 }) {
   const sig = unit.signature ?? SIG_BY_CREATURE[unit.id];
   if (!sig) return null;
   const isActive = sig.kind === 'active';
+  const rank = unit.sigRank ?? 1;
+  const cost = sigRankUpCost(rank);
+  const maxed = cost == null;
+  const canAfford = !maxed && shards >= cost;
   return (
     <div style={{
       padding: '6px 8px', borderRadius: 5, marginTop: 4,
@@ -121,6 +127,38 @@ function SignatureRow({ unit }) {
         {!sig.live && <span style={{ fontSize: 6, color: '#6a5a2a', letterSpacing: 1, border: '1px solid #6a5a2a55', borderRadius: 2, padding: '0 3px' }}>SOON</span>}
       </div>
       <div style={{ fontSize: 8.5, color: sig.live ? '#8a99a8' : '#444', lineHeight: 1.5 }}>{sig.text}</div>
+      {/* vC-M: signature rank — pips + shard-cost rank-up. Amplifies slotted mods. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>RANK</span>
+        <div style={{ display: 'flex', gap: 2 }}>
+          {Array.from({ length: SIG_RANK_MAX }, (_, i) => (
+            <span key={i} style={{
+              width: 7, height: 7, borderRadius: 2,
+              background: i < rank ? '#cba6e6' : 'transparent',
+              border: `1px solid ${i < rank ? '#cba6e6' : '#2a2a3a'}`,
+            }} />
+          ))}
+        </div>
+        <span style={{ flex: 1 }} />
+        {onRankUp && (maxed ? (
+          <span style={{ fontSize: 7, color: '#6a5a2a', letterSpacing: 1, border: '1px solid #6a5a2a55', borderRadius: 3, padding: '2px 6px' }}>MAX</span>
+        ) : (
+          <button
+            onClick={() => canAfford && onRankUp(unit.instanceId)}
+            disabled={!canAfford}
+            title={canAfford ? `Rank up to ${rank + 1} — strengthens slotted modifiers` : `Need ${cost} ◈ shards to rank up`}
+            style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
+              color: canAfford ? '#cba6e6' : '#3a3a4a',
+              background: canAfford ? '#9b6bd618' : '#0d0d14',
+              border: `1px solid ${canAfford ? '#9b6bd655' : '#1e1e2a'}`,
+              borderRadius: 4, padding: '2px 8px', cursor: canAfford ? 'pointer' : 'default',
+            }}
+          >
+            RANK UP · {cost} ◈
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -315,7 +353,7 @@ function ModuleSelectModal({ unit, onEquipModule, onClose }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenGearModal, onOpenModuleModal, onOpenModSelectModal }) {
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenGearModal, onOpenModuleModal, onOpenModSelectModal, onRankUp, shards }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
@@ -434,7 +472,7 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
         </div>
       </div>
 
-      <SignatureRow unit={unit} />
+      <SignatureRow unit={unit} onRankUp={onRankUp} shards={shards} />
       {onOpenModSelectModal && <ModSlotsRow unit={unit} onOpenModSelectModal={onOpenModSelectModal} />}
 
       <XpBar xp={unit.xp} />
@@ -486,7 +524,7 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod }) {
+export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod, onRankUp }) {
   const [gearModalUnit, setGearModalUnit] = useState(null);
   const [moduleModalUnit, setModuleModalUnit] = useState(null);
   const [modSelectUnit, setModSelectUnit] = useState(null);
@@ -630,6 +668,8 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
               onOpenGearModal={(u) => setGearModalUnit(u)}
               onOpenModuleModal={(u) => setModuleModalUnit(u)}
               onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
+              onRankUp={onRankUp}
+              shards={shards}
             />
           ))}
         </div>
@@ -660,6 +700,8 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
                 onOpenGearModal={(u) => setGearModalUnit(u)}
                 onOpenModuleModal={(u) => setModuleModalUnit(u)}
                 onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
+              onRankUp={onRankUp}
+              shards={shards}
               />
             ))}
           </div>

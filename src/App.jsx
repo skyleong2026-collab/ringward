@@ -19,6 +19,7 @@ import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
+import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
 import { CONTRACTS, countRevealed, payoutRepAmountWithDifficulty, contractEnemyLevel, getRivalContract, RIVAL_UNLOCK_THRESHOLD, DIFFICULTIES } from './data/contracts.js';
@@ -29,7 +30,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-L';
+const VERSION = 'vC-M';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -42,6 +43,7 @@ function migrateCollection(col) {
       archetype: ARCHETYPE_MIGRATION[u.archetype] ?? u.archetype,
       signature: u.signature ?? base?.signature ?? null,
       sigModIds: u.sigModIds ?? [],   // vC-K: add slot array for pre-vC-K saves
+      sigRank: u.sigRank ?? 1,        // vC-M: signature rank for pre-vC-M saves
     };
   });
 }
@@ -65,6 +67,7 @@ function createCaughtInstance(creature, zoneName) {
     gearId: null,
     moduleIds: [],
     sigModIds: [],
+    sigRank: 1,
   };
 }
 
@@ -74,7 +77,7 @@ function hydratePvpSquad(squad) {
   return (squad ?? []).map((u, i) => {
     const base = CREATURES.find((c) => c.id === u.id);
     if (!base) return null;
-    return { ...base, instanceId: `opp_${u.id}_${i}`, level: u.level ?? 1, gearId: u.gearId ?? null, moduleIds: u.moduleIds ?? [], sigModIds: u.sigModIds ?? [] };
+    return { ...base, instanceId: `opp_${u.id}_${i}`, level: u.level ?? 1, gearId: u.gearId ?? null, moduleIds: u.moduleIds ?? [], sigModIds: u.sigModIds ?? [], sigRank: u.sigRank ?? 1 };
   }).filter(Boolean);
 }
 
@@ -232,6 +235,29 @@ function App() {
           : [...ids, modId].slice(0, 2);
         return { ...u, sigModIds: nextIds };
       });
+      persist(next, squadIds);
+      return next;
+    });
+  }
+
+  // vC-M: spend shards to advance a creature's signature rank (1→5). Higher rank
+  // amplifies every modifier the creature has slotted.
+  function rankUpSignature(instanceId) {
+    const unit = collection.find((u) => u.instanceId === instanceId);
+    if (!unit) return;
+    const rank = unit.sigRank ?? 1;
+    const cost = sigRankUpCost(rank);
+    if (cost == null) return;                         // already maxed
+    if ((currencies.shards ?? 0) < cost) return;      // can't afford
+    setCurrencies((prev) => {
+      const next = { ...prev, shards: (prev.shards ?? 0) - cost };
+      persistCurrencies(next);
+      return next;
+    });
+    setCollection((prev) => {
+      const next = prev.map((u) =>
+        u.instanceId === instanceId ? { ...u, sigRank: (u.sigRank ?? 1) + 1 } : u
+      );
       persist(next, squadIds);
       return next;
     });
@@ -777,6 +803,7 @@ function App() {
             onEquipGear={equipGear}
             onEquipModule={equipModule}
             onEquipSigMod={equipSigMod}
+            onRankUp={rankUpSignature}
           />
         )}
         {screen === 'encounters' && (
