@@ -26,8 +26,12 @@ function sparkAttack(u) {
 // At this many stacks a Spark DETONATES — releasing a burst to the whole enemy
 // squad, then recharging from zero. Turns Stoke into a visible charge→release
 // cycle the player can watch climb and race to interrupt (redirect fire onto it).
-export const SPARK_DETONATE_THRESHOLD = 4;
-const SPARK_DETONATE_RATIO = 0.6; // fraction of built-up attack dealt to each foe
+// vC-G balance: at squad cap 3 fights are shorter, so a 4-stack ramp often died
+// before its payoff landed. Threshold 4→3 brings the detonation a round earlier;
+// ratio 0.6→0.7 makes it matter when it lands. Glass-cannon identity (fragile,
+// ramp-dependent, needs protection) is unchanged — only the tempo of the payoff.
+export const SPARK_DETONATE_THRESHOLD = 3;
+const SPARK_DETONATE_RATIO = 0.7; // fraction of built-up attack dealt to each foe
 
 // Resonate (§19.6 intervention): a player pulls a free ally's next action forward
 // to strike the current actor's target in one synchronized burst. The partner
