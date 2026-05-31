@@ -10,6 +10,8 @@ export const ZONES = [
     nature: 'Wild',
     color: '#4a7a5a',
     pool: [c('bulwark'), c('link'), c('spark'), c('flicker'), c('cinder')],
+    tier: 1,
+    spawnLevel: [1, 2],
   },
   {
     id: 'rail-yard',
@@ -18,6 +20,8 @@ export const ZONES = [
     nature: 'Dark',
     color: '#4a5a8a',
     pool: [c('vault'), c('conduit'), c('nexus'), c('fang')],
+    tier: 2,
+    spawnLevel: [2, 3],
   },
   {
     id: 'downtown',
@@ -26,5 +30,7 @@ export const ZONES = [
     nature: 'Dark',
     color: '#8a5a4a',
     pool: [c('bastion'), c('striker'), c('claw')],
+    tier: 3,
+    spawnLevel: [3, 4],
   },
 ];

@@ -11,6 +11,7 @@ import DungeonScreen from './screens/DungeonScreen.jsx';
 import DungeonResult from './screens/DungeonResult.jsx';
 import BattleScreen from './screens/BattleScreen.jsx';
 import { resolveBattle } from './engine/battleStepEngine.js';
+import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
@@ -20,7 +21,7 @@ import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vG-B';
+const VERSION = 'vSP-C';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -183,7 +184,8 @@ function App() {
 
   function enterZone(zone) {
     setCurrentZone(zone);
-    const target = zone.pool[Math.floor(Math.random() * zone.pool.length)];
+    const base = zone.pool[Math.floor(Math.random() * zone.pool.length)];
+    const target = { ...base, level: rollSpawnLevel(zone) };
     setCurrentWildTarget(target);
     setScreen('wildhunt');
   }
@@ -296,7 +298,7 @@ function App() {
     }
     const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
     const seed = randomSeed();
-    const res = resolveBattle(playerSquad, currentEncounter.squad, seed);
+    const res = resolveBattle(playerSquad, levelEnemySquad(currentEncounter.squad, currentEncounter.level), seed);
     setResult(res);
   }
 
@@ -527,7 +529,8 @@ function App() {
             creature={currentWildTarget}
             zone={currentZone}
             onWalkAgain={() => {
-              const target = currentZone.pool[Math.floor(Math.random() * currentZone.pool.length)];
+              const base = currentZone.pool[Math.floor(Math.random() * currentZone.pool.length)];
+              const target = { ...base, level: rollSpawnLevel(currentZone) };
               setCurrentWildTarget(target);
               setCatchResult(null);
               setScreen('wildhunt');
@@ -555,7 +558,7 @@ function App() {
               const hp = dungeonRun.hpOverrides[u.instanceId];
               return hp !== undefined ? { ...u, currentHP: hp } : u;
             })}
-            enemySquad={currentEncounter.squad}
+            enemySquad={levelEnemySquad(currentEncounter.squad, currentEncounter.level)}
             seed={battleSeed}
             onComplete={handleBattleComplete}
           />

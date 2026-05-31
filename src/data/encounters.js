@@ -9,6 +9,7 @@ export const ENCOUNTERS = [
     flavor: 'A standard route through contested territory. Balanced. Readable. Expects the same from you.',
     squad: [c('vault'), c('conduit'), c('striker'), c('flicker')],
     difficulty: 'Balanced',
+    level: 1,
   },
   {
     id: 'iron-wall',
@@ -16,6 +17,7 @@ export const ENCOUNTERS = [
     flavor: 'Three Guardians in formation. The wall does not give. You need sustained damage or a crack in the line.',
     squad: [c('vault'), c('bastion'), c('bulwark'), c('link')],
     difficulty: 'Defensive',
+    level: 3,
   },
   {
     id: 'night-teeth',
@@ -23,6 +25,7 @@ export const ENCOUNTERS = [
     flavor: 'Speed and execute pressure. No formation, just hunger. Kill it fast or watch it scale.',
     squad: [c('fang'), c('striker'), c('claw'), c('spark')],
     difficulty: 'Aggressive',
+    level: 3,
   },
   {
     id: 'glass-pack',
@@ -30,6 +33,7 @@ export const ENCOUNTERS = [
     flavor: 'Three Swifts moving in sync. Deadly burst. One mistake and your frontline shatters.',
     squad: [c('fang'), c('striker'), c('claw')],
     difficulty: 'Aggressive',
+    level: 2,
   },
   {
     id: 'the-swarm',
@@ -37,6 +41,7 @@ export const ENCOUNTERS = [
     flavor: 'Seven Sparks flickering in the dark. Weak alone. Terrifying together. Can you carry?',
     squad: [c('spark'), c('flicker'), c('cinder'), c('spark'), c('flicker'), c('cinder'), c('spark')],
     difficulty: 'Aggressive',
+    level: 4,
   },
   {
     id: 'the-duelists',
@@ -44,6 +49,7 @@ export const ENCOUNTERS = [
     flavor: 'Two Guardians of legendary build. Slow. Inevitable. A test of who lasts longer.',
     squad: [c('vault'), c('bastion')],
     difficulty: 'Defensive',
+    level: 2,
   },
 
   // ── Harder encounters: test Core mechanics and force proc chains ──
@@ -53,6 +59,7 @@ export const ENCOUNTERS = [
     flavor: 'A Swift and two Sparks accelerating. By round 3 they hit like meteors. Kill fast or lose.',
     squad: [c('fang'), c('spark'), c('flicker')],
     difficulty: 'Aggressive',
+    level: 3,
   },
   {
     id: 'forge',
@@ -60,6 +67,7 @@ export const ENCOUNTERS = [
     flavor: 'Two Guardians trading blows. Shields break and reform. Whoever breaks last wins.',
     squad: [c('vault'), c('vault')],
     difficulty: 'Defensive',
+    level: 3,
   },
   {
     id: 'resonance-cascade',
@@ -67,6 +75,7 @@ export const ENCOUNTERS = [
     flavor: 'Three Echos firing in sync. Their chains weave through your squad. Silence them or be overwhelmed.',
     squad: [c('conduit'), c('nexus'), c('link')],
     difficulty: 'Aggressive',
+    level: 4,
   },
   {
     id: 'extinction-event',
@@ -74,6 +83,7 @@ export const ENCOUNTERS = [
     flavor: 'One Guardian holding five Sparks. Each ally fall feeds their flame. Breaks you or breaks itself.',
     squad: [c('vault'), c('spark'), c('flicker'), c('cinder'), c('spark'), c('flicker')],
     difficulty: 'Aggressive',
+    level: 5,
   },
   {
     id: 'precision',
@@ -81,6 +91,7 @@ export const ENCOUNTERS = [
     flavor: 'Four Swifts hunting wounded prey. They chain executes. One mistake opens the kill window.',
     squad: [c('fang'), c('striker'), c('claw'), c('fang')],
     difficulty: 'Aggressive',
+    level: 4,
   },
   {
     id: 'siege',
@@ -88,5 +99,6 @@ export const ENCOUNTERS = [
     flavor: 'Two iron Guardians with two Echo supports. Walls that echo. Unstoppable formation.',
     squad: [c('vault'), c('bastion'), c('conduit'), c('nexus')],
     difficulty: 'Defensive',
+    level: 4,
   },
 ];

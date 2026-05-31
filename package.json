@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test:smoke": "node scripts/phaseg-smoke.mjs",
     "test:golden": "node scripts/phaseg-golden.mjs",
+    "test:balance": "node scripts/phase17-balance.mjs",
     "test": "npm run test:smoke && npm run test:golden"
   },
   "dependencies": {

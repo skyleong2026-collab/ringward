@@ -51,17 +51,32 @@ function EncounterCard({ encounter, playerSquadSize, onRun, history }) {
             </span>
           )}
         </div>
-        <span style={{
-          fontSize: 9,
-          color: diffColor,
-          background: diffColor + '18',
-          border: `1px solid ${diffColor}44`,
-          borderRadius: 3,
-          padding: '2px 6px',
-          letterSpacing: 1,
-        }}>
-          {diff.toUpperCase()}
-        </span>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          {encounter.level != null && (
+            <span style={{
+              fontSize: 9,
+              color: '#c0a060',
+              background: '#c0a06018',
+              border: '1px solid #c0a06044',
+              borderRadius: 3,
+              padding: '2px 6px',
+              letterSpacing: 1,
+            }}>
+              LV {encounter.level}
+            </span>
+          )}
+          <span style={{
+            fontSize: 9,
+            color: diffColor,
+            background: diffColor + '18',
+            border: `1px solid ${diffColor}44`,
+            borderRadius: 3,
+            padding: '2px 6px',
+            letterSpacing: 1,
+          }}>
+            {diff.toUpperCase()}
+          </span>
+        </div>
       </div>
 
       <div style={{ fontSize: 11, color: '#555', lineHeight: 1.5 }}>

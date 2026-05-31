@@ -1,5 +1,6 @@
 import { ARCHETYPES } from '../data/creatures.js';
 import { generateSpotterRead } from '../engine/spotter.js';
+import { applyLevel } from '../engine/progression.js';
 
 const THREAT_STYLE = {
   'PRIMARY THREAT': { color: '#d0021b', bg: '#d0021b0f', border: '#d0021b2a' },
@@ -23,6 +24,8 @@ const ARCHETYPE_MECHANIC = {
 
 function SquadChip({ unit }) {
   const color = ARCHETYPES[unit.archetype]?.color || '#888';
+  const eff = applyLevel(unit);
+  const level = unit.level ?? 1;
   return (
     <div style={{
       background: color + '10',
@@ -34,14 +37,21 @@ function SquadChip({ unit }) {
       gap: 2,
     }}>
       <span style={{ fontSize: 10, fontWeight: 700, color: '#bbb', letterSpacing: 0.5 }}>{unit.name}</span>
-      <span style={{ fontSize: 8, color, letterSpacing: 0.5 }}>{unit.archetype.toUpperCase()}</span>
+      <span style={{ fontSize: 8, color, letterSpacing: 0.5 }}>
+        {unit.archetype.toUpperCase()}<span style={{ color: '#555' }}> · Lv.{level}</span>
+      </span>
+      <span style={{ fontSize: 8, color: '#666', letterSpacing: 0.5 }}>
+        HP {eff.hp} · ATK {eff.attack}
+      </span>
     </div>
   );
 }
 
-function EnemyRow({ unit, threatLabel, isLast }) {
+function EnemyRow({ unit, level, threatLabel, isLast }) {
   const color = ARCHETYPES[unit.archetype]?.color || '#888';
   const ts = threatLabel ? THREAT_STYLE[threatLabel] : null;
+  const lvl = level ?? unit.level ?? 1;
+  const eff = applyLevel({ ...unit, level: lvl });
 
   return (
     <div style={{
@@ -63,6 +73,9 @@ function EnemyRow({ unit, threatLabel, isLast }) {
             letterSpacing: 0.5,
           }}>
             {unit.archetype.toUpperCase()}
+          </span>
+          <span style={{ fontSize: 8, color: '#888', letterSpacing: 0.5 }}>
+            Lv.{lvl} · HP {eff.hp} · ATK {eff.attack}
           </span>
         </div>
         <span style={{ fontSize: 10, color: '#333' }}>
@@ -168,6 +181,7 @@ export default function PreBattle({ encounter, playerSquad, onCommit, onBack }) 
           <EnemyRow
             key={i}
             unit={u}
+            level={encounter.level}
             threatLabel={spotterRead.threatLabels[i]}
             isLast={i === encounter.squad.length - 1}
           />

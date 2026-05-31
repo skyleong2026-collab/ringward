@@ -1,34 +1,41 @@
 # Phase 16: Animation Testing & Refinement — Plan
 
-**Build:** vI-A  
-**Status:** Ready for testing  
+**Build:** vG-D  
+**Status:** ✅ COMPLETE (tested in-browser 2026-05-29)  
 **Prerequisite:** Phase 14 + 15 complete (sprites + framework)
+
+## Outcome (vG-D)
+
+Verified all 4 states live in `8gents-phase-a` dev server, driving a real battle and
+inspecting computed animation styles per frame. Two real defects found and fixed:
+
+1. **`damaged` state was never wired.** `BattleScreen` only ever set
+   attack/defeated/idle — the red-flash keyframe existed but nothing triggered it.
+   Now derived from the live `action_resolved` step: the surviving target flashes
+   for the step window (kills are left to `defeated`). Verified: damaged appears in
+   as many frames as attack (one attacker + one target per hit).
+2. **One-shot animations looped `infinite` with `fill:none`.** A dead unit
+   re-collapsed and snapped back to full opacity every 0.8s forever. Now
+   `defeated`/`damaged` use iteration-count `1`; `defeated` uses `fill:forwards` so
+   it collapses once and HOLDS. Verified live: `Mosshorn|1|forwards`.
+
+`attack`/`idle` intentionally keep looping `infinite` — they are persistent
+state indicators (this unit is the active actor / standing by), not one-shots.
 
 ## Testing Checklist
 
 ### Combat Animation States
-- [ ] **Idle** — creatures bob gently while waiting (1.5s cycle)
-  - Verify: No distraction, smooth loop, visible
-  - Adjustment if needed: Can reduce to 1.2s if too slow
-  
-- [ ] **Attack** — active creatures scale & thrust (0.5s)
-  - Verify: Clear forward motion, quick recoil feels right
-  - Adjustment if needed: Can adjust scale (1.1→1.15?) or thrust distance (8px→10px?)
-  
-- [ ] **Damaged** — red flash on hit (0.4s)
-  - Verify: Bright enough to see? Too bright?
-  - Adjustment if needed: Glow intensity (10px→15px?) or color saturation
-  
-- [ ] **Defeated** — collapse + fade (0.8s)
-  - Verify: Clear that unit is dead, not confused with damage
-  - Adjustment if needed: Could add more rotation (5°→15°?) or faster fade
+- [x] **Idle** — creatures bob gently while waiting (1.5s cycle) — smooth, legible, non-distracting
+- [x] **Attack** — active creatures scale & thrust (0.5s) — loops while unit is the active actor
+- [x] **Damaged** — red flash on hit (0.4s) — WIRED in vG-D (was missing); one-shot per hit
+- [x] **Defeated** — collapse + fade (0.8s) — now plays once and holds (was re-collapsing forever)
 
 ### Visual Clarity
-- [ ] Sprite legibility at 48px size (battle squad panels)
-- [ ] Sprite legibility at 80–200px sizes (other screens)
-- [ ] Creature type easily recognizable by silhouette
-- [ ] Archetype colors not washed out by animations
-- [ ] VFX glow doesn't obscure sprite details
+- [x] Sprite legibility at 48px size (battle squad panels) — all 12 sprites load and read
+- [x] Sprite legibility at 80–200px sizes (other screens) — collection/roster confirmed
+- [x] Creature type easily recognizable by silhouette
+- [x] Archetype colors not washed out by animations
+- [x] VFX glow doesn't obscure sprite details
 
 ### Battle Flow
 - [ ] Animation state changes don't feel sluggish

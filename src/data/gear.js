@@ -43,6 +43,14 @@ export const GEAR = {
     callout: 'Flame Inherited', color: '#f5a623', starter: true,
   },
 
+  // ── Overwatch probe (Phase 18 — reaction topology, XCOM import) ──
+  sentinel: {
+    id: 'sentinel', name: 'Sentinel', slot: 'gear', archetype: 'Guardian',
+    trigger: 'onAllyTargeted', effect: 'intercept',
+    description: 'Once a round, throws itself in front of the first ally attacked — taking the hit instead.',
+    callout: 'INTERCEPT', color: '#4a90d9',
+  },
+
   // ── Launch gear (GDD §6.1 — behavioral transforms, balance TBD) ──
   mirrorplate: {
     id: 'mirrorplate', name: 'Mirrorplate', slot: 'gear', archetype: 'Guardian',

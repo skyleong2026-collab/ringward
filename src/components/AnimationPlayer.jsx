@@ -79,6 +79,11 @@ export function AnimationPlayer({
     defeated: '0.8s',
   }[animate] || '1.5s';
 
+  // idle/attack are persistent state loops; damaged is a one-shot flash and
+  // defeated must collapse once and HOLD (forwards) instead of re-collapsing.
+  const animationIteration = { damaged: '1', defeated: '1' }[animate] ?? 'infinite';
+  const animationFillMode = animate === 'defeated' ? 'forwards' : 'none';
+
   return (
     <div
       style={{
@@ -119,7 +124,11 @@ export function AnimationPlayer({
             height: '100%',
             objectFit: 'contain',
             padding: '8px',
-            animation: `${animationName} ${animationDuration} ease-in-out infinite`,
+            animationName,
+            animationDuration,
+            animationTimingFunction: 'ease-in-out',
+            animationIterationCount: animationIteration,
+            animationFillMode,
           }}
         />
 

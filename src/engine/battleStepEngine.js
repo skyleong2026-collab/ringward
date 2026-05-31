@@ -1,14 +1,40 @@
 import { createRng } from './rng.js';
+import { applyLevel } from './progression.js';
 
 // ─── Damage formula ───────────────────────────────────────────────────────────
 function calcDamage(rawAttack, targetArmor) {
   return Math.max(rawAttack - targetArmor, rawAttack * 0.5);
 }
 
-// Spark per-stack scaling. Backdraft (Stronger dial) steepens it 0.12 → 0.15.
+// Spark per-stack scaling. Backdraft (Stronger dial) steepens it.
 function sparkCoeff(u) {
-  return u.dials?.has('backdraft') ? 0.15 : 0.12;
+  return u.dials?.has('backdraft') ? 0.20 : 0.16;
 }
+// Stoke → effective attack. FRONT-LOADED: the first 3 stacks each count 1.5×, so
+// Spark becomes a real threat by mid-fight (rounds 4-6) instead of only at peak —
+// it dies ~round 8 before late stacks ever land, so the payoff has to arrive
+// while it's still alive. Later stacks settle to the base coefficient, preserving
+// the "weak early, dangerous if ignored" ramp without flattening it.
+function sparkAttack(u) {
+  const coeff = sparkCoeff(u);
+  const front = Math.min(u.stokeStacks, 3);
+  const rest = Math.max(0, u.stokeStacks - 3);
+  return u.attack * (1 + coeff * front * 1.5 + coeff * rest);
+}
+
+// Evolving-state probe (vG-F): Stoke is no longer a silent single-target ramp.
+// At this many stacks a Spark DETONATES — releasing a burst to the whole enemy
+// squad, then recharging from zero. Turns Stoke into a visible charge→release
+// cycle the player can watch climb and race to interrupt (redirect fire onto it).
+export const SPARK_DETONATE_THRESHOLD = 4;
+const SPARK_DETONATE_RATIO = 0.6; // fraction of built-up attack dealt to each foe
+
+// Resonate (§19.6 intervention): a player pulls a free ally's next action forward
+// to strike the current actor's target in one synchronized burst. The partner
+// contributes a full normal strike (ratio 1.0) — no raw-damage inflation; the
+// value is concentration + timing (e.g. burst the ARMED Spark before it fires).
+// The partner then forfeits its own turn this round.
+const RESONANCE_RATIO = 1.0;
 
 // ─── Apply damage (mutates unit) ──────────────────────────────────────────────
 function applyDamage(unit, damage, round) {
@@ -129,10 +155,9 @@ function generateOutcome(winner, rounds, unitsA, unitsB) {
   const winUnits = winner === 'A' ? unitsA : unitsB;
 
   if (rounds >= 10) {
-    const hpA = unitsA.reduce((s, u) => s + u.currentHP, 0);
-    const hpB = unitsB.reduce((s, u) => s + u.currentHP, 0);
-    const remHP = winner === 'A' ? hpA : hpB;
-    return `Neither squad broke in 10 rounds — ${side} held more HP (${Math.round(remHP)}) and took the timeout victory.`;
+    const winSquad = winner === 'A' ? unitsA : unitsB;
+    const standing = winSquad.filter((u) => u.alive).length;
+    return `Neither squad broke in 10 rounds — ${side} kept more units standing (${standing}) and took the timeout victory.`;
   }
 
   const sparks = winUnits.filter((u) => u.archetype === 'Spark' && u.alive);
@@ -209,18 +234,22 @@ function computeThreat(unit) {
 
 let _uidCounter = 0;
 function initUnit(creature, squad) {
+  // Phase 17: scale combat stats by level (identity at L1). Override the raw
+  // hp/attack/armor so every downstream read sees the leveled values; speed
+  // is intentionally left unscaled.
+  const eff = applyLevel(creature);
   return {
-    ...creature,
+    ...eff,
     _uid: `${creature.instanceId ?? creature.id}_${squad}_${_uidCounter++}`,
     squad,
-    currentHP: creature.currentHP ?? creature.hp,
-    maxHP: creature.hp,
-    currentAttack: creature.attack,
+    currentHP: creature.currentHP ?? eff.hp,
+    maxHP: eff.hp,
+    currentAttack: eff.attack,
     shield: 0,
     hasShielded: false,
     stokeStacks: 0,
     alive: true,
-    threat: computeThreat(creature),
+    threat: computeThreat(eff),
     lastProc: null,
     dials: new Set(creature.moduleIds ?? []),
     ironhideUses: 0,
@@ -237,6 +266,10 @@ function initUnit(creature, squad) {
     openChannelMark: false,
     killMomentumCountThisRound: 0,
     execThreshWideThisRound: false,
+    sentinelUsedThisRound: false,
+    anchored: false,
+    actedThisRound: false,
+    resonateSpent: false,
     tel: {
       damageDealt: 0,
       damageTaken: 0,
@@ -273,6 +306,8 @@ function snap(units) {
     currentAttack: Math.round(u.currentAttack),
     gearId: u.gearId ?? null,
     moduleIds: u.moduleIds ?? [],
+    anchored: u.anchored ?? false,
+    actedThisRound: u.actedThisRound ?? false,
   }));
 }
 
@@ -328,6 +363,9 @@ export function* battleStepEngine(squadA, squadB, seed) {
       unit.firstEchoFiredThisRound = false;
       unit.killMomentumCountThisRound = 0;
       unit.execThreshWideThisRound = false;
+      unit.sentinelUsedThisRound = false;
+      unit.actedThisRound = false;
+      unit.resonateSpent = false;
     }
 
     const turnOrder = [...aliveA, ...aliveB].sort((a, b) => {
@@ -339,6 +377,24 @@ export function* battleStepEngine(squadA, squadB, seed) {
 
     for (const actor of turnOrder) {
       if (!actor.alive) continue;
+
+      if (actor.anchored) {
+        actor.anchored = false;
+        actor.actedThisRound = true;
+        roundEvents.push({ type: 'anchor_skip', actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, callout: 'ANCHORED' });
+        yield { type: 'anchored', round, actorId: actor._uid, actorSquad: actor.squad, actorName: actor.name, unitsA: snap(unitsA), unitsB: snap(unitsB) };
+        continue;
+      }
+
+      // Resonate skip: this unit already spent its action on a synchronized
+      // strike earlier this round (pulled forward by a player Resonate).
+      if (actor.resonateSpent) {
+        actor.resonateSpent = false;
+        actor.actedThisRound = true;
+        roundEvents.push({ type: 'resonance_skip', actorId: actor.id, actorName: actor.name, actorSquad: actor.squad, callout: 'RESONANCE SPENT' });
+        yield { type: 'resonance_skip', round, actorId: actor._uid, actorSquad: actor.squad, actorName: actor.name, unitsA: snap(unitsA), unitsB: snap(unitsB) };
+        continue;
+      }
 
       const enemies = actor.squad === 'A' ? unitsB : unitsA;
       const allies = actor.squad === 'A' ? unitsA : unitsB;
@@ -379,7 +435,18 @@ export function* battleStepEngine(squadA, squadB, seed) {
           archetype: u.archetype,
           currentHP: Math.max(0, u.currentHP),
           maxHP: u.maxHP,
+          stokeStacks: u.stokeStacks,
         })),
+        resonancePartners: allies
+          .filter((u) => u.alive && !u.actedThisRound && u._uid !== actor._uid)
+          .map((u) => ({
+            uid: u._uid,
+            id: u.id,
+            name: u.name,
+            archetype: u.archetype,
+            currentHP: Math.max(0, u.currentHP),
+            maxHP: u.maxHP,
+          })),
         unitsA: snap(unitsA),
         unitsB: snap(unitsB),
       };
@@ -391,6 +458,44 @@ export function* battleStepEngine(squadA, squadB, seed) {
           (u) => u._uid === intervention.newTargetId && u.alive,
         );
         if (redirected) target = redirected;
+      }
+      // Anchor: flag a chosen enemy to skip its next action
+      if (intervention?.type === 'anchor' && intervention.targetUid) {
+        const u = [...unitsA, ...unitsB].find((x) => x._uid === intervention.targetUid && x.alive);
+        if (u) u.anchored = true;
+      }
+      // Resonate: a free ally is pulled into THIS actor's strike. Resolved after
+      // the actor's action (below). The partner must be a living same-squad ally
+      // that hasn't acted yet this round.
+      let resonancePartner = null;
+      if (intervention?.type === 'resonate' && intervention.partnerUid) {
+        const p = allies.find(
+          (x) => x._uid === intervention.partnerUid && x.alive && !x.actedThisRound && x !== actor,
+        );
+        if (p) resonancePartner = p;
+      }
+      const wasPlayerRedirect = target !== proposedTarget;
+
+      // Sentinel (overwatch intercept): the first enemy attack each round aimed
+      // at a non-Sentinel ally is pulled onto an alive Sentinel Guardian, which
+      // eats the hit instead. A once-per-round reaction-taunt — the defensive
+      // half of "reaction topology." An explicit player redirect is treated as a
+      // manual override and suppresses the automatic intercept.
+      if (!wasPlayerRedirect) {
+        const defenders = target.squad === 'A' ? unitsA : unitsB;
+        const sentinel = defenders.find(
+          (u) => u.alive && u.gearId === 'sentinel' && u._uid !== target._uid && !u.sentinelUsedThisRound,
+        );
+        if (sentinel) {
+          sentinel.sentinelUsedThisRound = true;
+          const guarded = target;
+          target = sentinel;
+          roundEvents.push({
+            actorId: sentinel.id, actorName: sentinel.name, actorSquad: sentinel.squad,
+            targetId: guarded.id, targetName: guarded.name,
+            type: 'gear_proc', gearId: 'sentinel', callout: 'INTERCEPT',
+          });
+        }
       }
 
       // ── Resolve the action ────────────────────────────────────────────────
@@ -442,7 +547,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
         isExecute,
         killed,
         type: 'attack',
-        wasRedirected: target !== proposedTarget,
+        wasRedirected: wasPlayerRedirect,
       });
 
       if (target.lastProc === 'ironhide') {
@@ -534,7 +639,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
           if (sp.alive && sp.archetype === 'Spark' && sp.gearId === 'kindling' && sp !== target) {
             const gain = sp.dials.has('bankedHeat') ? 3 : 2;
             sp.stokeStacks += gain;
-            sp.currentAttack = sp.attack * (1 + sparkCoeff(sp) * sp.stokeStacks);
+            sp.currentAttack = sparkAttack(sp);
             roundEvents.push({ actorId: sp.id, actorName: sp.name, actorSquad: sp.squad, type: 'gear_proc', gearId: 'kindling', callout: 'Flame Inherited' });
             if (sp.dials.has('bankedHeat')) roundEvents.push({ actorId: sp.id, actorName: sp.name, actorSquad: sp.squad, type: 'module_proc', moduleId: 'bankedHeat', callout: 'BANKED HEAT' });
           }
@@ -551,7 +656,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
           heirs.sort((a, b) => b.stokeStacks - a.stokeStacks);
           const heir = heirs[0];
           heir.stokeStacks += target.pyreHeartPending + (heir.dials.has('bankedHeat') ? 1 : 0);
-          heir.currentAttack = heir.attack * (1 + sparkCoeff(heir) * heir.stokeStacks);
+          heir.currentAttack = sparkAttack(heir);
         }
         // Backdraft (Stronger dial): Pyre detonation hits wider.
         const burst = target.dials.has('backdraft')
@@ -608,6 +713,25 @@ export function* battleStepEngine(squadA, squadB, seed) {
         }
       }
 
+      // ── Resonance strike: a player-pulled ally adds a clean 1.0× strike onto
+      // this actor's target, in the same synchronized burst. No execute doubling,
+      // no gear procs — concentration + timing, not damage inflation. The partner
+      // forfeits its own turn this round (resonateSpent → resonance_skip beat).
+      if (resonancePartner && target.alive) {
+        const rRaw = resonancePartner.currentAttack * RESONANCE_RATIO;
+        const rEff = calcDamage(rRaw, target.armor);
+        const rWasAlive = target.alive;
+        const rActual = applyDamage(target, rEff, round);
+        resonancePartner.tel.damageDealt += rActual;
+        if (rActual > resonancePartner.tel.largestHit) resonancePartner.tel.largestHit = rActual;
+        const rKilled = rWasAlive && !target.alive;
+        if (rKilled) resonancePartner.tel.standardKills += 1;
+        resonancePartner.resonateSpent = true;
+        roundEvents.push({ actorId: resonancePartner.id, actorName: resonancePartner.name, actorSquad: resonancePartner.squad, targetId: target.id, targetName: target.name, damage: rActual, killed: rKilled, type: 'resonance', callout: 'RESONANCE' });
+      }
+
+      actor.actedThisRound = true;
+
       const wentA = enemies === unitsB && unitsB.every((u) => !u.alive);
       const wentB = enemies === unitsA && unitsA.every((u) => !u.alive);
 
@@ -622,7 +746,7 @@ export function* battleStepEngine(squadA, squadB, seed) {
         damage: actualDmg,
         isExecute,
         killed,
-        wasRedirected: target !== proposedTarget,
+        wasRedirected: wasPlayerRedirect,
         events: roundEvents.slice(),
         unitsA: snap(unitsA),
         unitsB: snap(unitsB),
@@ -644,9 +768,33 @@ export function* battleStepEngine(squadA, squadB, seed) {
         unit.stokeStacks += gain;
         unit.tel.peakStacks = unit.stokeStacks;
         unit.tel.roundReachedPeak = round;
-        unit.currentAttack = unit.attack * (1 + sparkCoeff(unit) * unit.stokeStacks);
+        unit.currentAttack = sparkAttack(unit);
         if (unit.dials.has('bankedHeat')) roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, type: 'module_proc', moduleId: 'bankedHeat', callout: 'BANKED HEAT' });
         if (unit.dials.has('backdraft')) roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, type: 'module_proc', moduleId: 'backdraft', callout: 'BACKDRAFT' });
+
+        // ── Detonation: the charge releases ─────────────────────────────────
+        if (unit.stokeStacks >= SPARK_DETONATE_THRESHOLD) {
+          const foes = (unit.squad === 'A' ? unitsB : unitsA).filter((u) => u.alive);
+          const burst = Math.round(unit.currentAttack * SPARK_DETONATE_RATIO);
+          const hits = [];
+          for (const foe of foes) {
+            const was = foe.alive;
+            const actual = applyDamage(foe, calcDamage(burst, foe.armor), round);
+            unit.tel.damageDealt += actual;
+            if (actual > unit.tel.largestHit) unit.tel.largestHit = actual;
+            const killed = was && !foe.alive;
+            if (killed) unit.tel.standardKills += 1;
+            hits.push({ targetName: foe.name, damage: actual, killed });
+            roundEvents.push({ actorId: unit.id, actorName: unit.name, actorSquad: unit.squad, targetId: foe.id, targetName: foe.name, damage: actual, killed, type: 'detonate', callout: 'DETONATE' });
+          }
+          unit.stokeStacks = 0;
+          unit.currentAttack = sparkAttack(unit);
+          yield {
+            type: 'detonation', round,
+            actorId: unit._uid, actorSquad: unit.squad, actorName: unit.name,
+            hits, unitsA: snap(unitsA), unitsB: snap(unitsB),
+          };
+        }
       }
     }
 
@@ -655,9 +803,18 @@ export function* battleStepEngine(squadA, squadB, seed) {
   }
 
   if (!winner) {
-    const hpA = unitsA.reduce((s, u) => s + u.currentHP, 0);
-    const hpB = unitsB.reduce((s, u) => s + u.currentHP, 0);
-    winner = hpA >= hpB ? 'A' : 'B';
+    // Timeout (Phase 17): judge by board control, not raw HP pool. A tanky squad
+    // shouldn't win purely on HP volume — units still standing dominate, and
+    // average squad-health FRACTION is the fine tiebreak. This gives damage
+    // dealers a fair timeout instead of handing it to whoever has the biggest
+    // HP bar.
+    const timeoutScore = (units) => {
+      const alive = units.filter((u) => u.alive).length;
+      const frac =
+        units.reduce((s, u) => s + Math.max(0, u.currentHP) / u.maxHP, 0) / units.length;
+      return alive + frac;
+    };
+    winner = timeoutScore(unitsA) >= timeoutScore(unitsB) ? 'A' : 'B';
   }
 
   const allUnits = [...unitsA, ...unitsB];
@@ -668,11 +825,16 @@ export function* battleStepEngine(squadA, squadB, seed) {
   }
 
   const playerWon = winner === 'A';
+  // Reward gradient (Phase 17): harder (higher-level) enemies pay more.
+  // L1 → 15 (unchanged from the old flat base), L5 → 35.
+  const avgEnemyLevel =
+    unitsB.reduce((s, u) => s + (u.level ?? 1), 0) / Math.max(1, unitsB.length);
+  const baseXp = Math.round(10 + 5 * avgEnemyLevel);
   const xpRewards = {};
   const survivalUpdates = {};
   const battleUpdates = {};
   for (const unit of unitsA) {
-    let xp = 15;
+    let xp = baseXp;
     if (unit.alive) { xp += 5; survivalUpdates[unit.instanceId] = 1; }
     if (playerWon) xp += 5;
     xpRewards[unit.instanceId] = xp;

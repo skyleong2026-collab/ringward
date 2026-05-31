@@ -1,7 +1,15 @@
 import { useRef, useState, useCallback } from 'react';
 import { battleStepEngine } from '../engine/battleStepEngine.js';
 
-const ACTION_DELAY_MS = 700;  // ms between auto-advancing actions
+// Witnessing tempo (§19.2 — "pacing is part of representation, not polish").
+// A battle should *unfold*, not *resolve*. The engine yields in beats: a
+// pending_action is the anticipation/telegraph (you see who is about to hit
+// whom), and the following action_resolved is the commitment+impact. Giving the
+// anticipation its own, longer hold is what lets the eye register the orient
+// before the lunge lands.
+const ANTICIPATION_MS = 620;  // hold on pending_action — the telegraph reads
+const IMPACT_MS       = 540;  // dwell after a hit lands — recoil + recovery
+const DETONATE_MS     = 900;  // a detonation is a beat unto itself
 const MAX_INTERVENTIONS = 3;  // redirect budget per battle
 
 function buildLogLine(step) {
@@ -15,9 +23,10 @@ function buildLogLine(step) {
 function buildProcLines(step) {
   if (step.type !== 'action_resolved') return [];
   return (step.events || [])
-    .filter((e) => e.type === 'gear_proc' || e.type === 'module_proc' || e.type === 'echo')
+    .filter((e) => e.type === 'gear_proc' || e.type === 'module_proc' || e.type === 'echo' || e.type === 'resonance')
     .map((e) => {
       if (e.type === 'echo')       return `  ↳ ${e.actorName} echoes for ${Math.round(e.damage)} dmg`;
+      if (e.type === 'resonance')  return `  ◇ ${e.actorName} resonates for ${Math.round(e.damage)} dmg${e.killed ? ' — DEFEATED' : ''}`;
       if (e.type === 'gear_proc')  return `  ◆ ${e.actorName}: ${e.callout}`;
       if (e.type === 'module_proc') return `  ◈ ${e.actorName}: ${e.callout}`;
       return null;
@@ -88,9 +97,9 @@ export function useBattleRunner({ squadA, squadB, seed }) {
         // Stay here — player is paused, show the pending action panel
         setPhase('paused');
       } else {
-        // Auto-advance after delay
+        // Auto-advance after the anticipation hold (telegraph reads here)
         setPhase('playing');
-        timerRef.current = setTimeout(() => tick(null), ACTION_DELAY_MS);
+        timerRef.current = setTimeout(() => tick(null), ANTICIPATION_MS);
       }
 
     } else if (value.type === 'action_resolved') {
@@ -103,7 +112,31 @@ export function useBattleRunner({ squadA, squadB, seed }) {
 
       // Always advance from action_resolved to next pending_action
       // (pause will take effect at the next pending_action)
-      timerRef.current = setTimeout(() => tick(null), ACTION_DELAY_MS);
+      timerRef.current = setTimeout(() => tick(null), IMPACT_MS);
+
+    } else if (value.type === 'anchored') {
+      // A unit's turn was skipped due to Anchor — show the locked beat, auto-advance.
+      setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
+      appendLog([`⚓ ${value.actorName} — ANCHORED (skips turn)`]);
+      timerRef.current = setTimeout(() => tick(null), IMPACT_MS);
+
+    } else if (value.type === 'resonance_skip') {
+      // A unit already spent its action on a player-pulled synchronized strike —
+      // show the spent beat, auto-advance.
+      setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
+      appendLog([`◇ ${value.actorName} — RESONANCE SPENT (turn synced earlier)`]);
+      timerRef.current = setTimeout(() => tick(null), IMPACT_MS);
+
+    } else if (value.type === 'detonation') {
+      // Spark charge released — drop HP, empty the meter, narrate the burst.
+      setUnitsSnapshot({ A: value.unitsA, B: value.unitsB });
+      appendLog([
+        `✸ ${value.actorName} DETONATES`,
+        ...value.hits.map(
+          (h) => `  ✸ → ${h.targetName}: ${Math.round(h.damage)} dmg${h.killed ? ' — DEFEATED' : ''}`,
+        ),
+      ]);
+      timerRef.current = setTimeout(() => tick(null), DETONATE_MS);
     }
   }, [appendLog]);
 
@@ -140,6 +173,28 @@ export function useBattleRunner({ squadA, squadB, seed }) {
     timerRef.current = setTimeout(() => tick(null), 0);
   }
 
+  function anchor(targetUid) {
+    if (budgetRef.current <= 0) return;
+    if (!currentStep || currentStep.type !== 'pending_action') return;
+    budgetRef.current -= 1;
+    setInterventionsLeft(budgetRef.current);
+    isPausedRef.current = false;
+    setPhase('playing');
+    clearTimeout(timerRef.current);
+    tick({ type: 'anchor', targetUid });
+  }
+
+  function resonate(partnerUid) {
+    if (budgetRef.current <= 0) return;
+    if (!currentStep || currentStep.type !== 'pending_action') return;
+    budgetRef.current -= 1;
+    setInterventionsLeft(budgetRef.current);
+    isPausedRef.current = false;
+    setPhase('playing');
+    clearTimeout(timerRef.current);
+    tick({ type: 'resonate', partnerUid });
+  }
+
   function redirect(actorId, newTargetId) {
     if (budgetRef.current <= 0) return;
     if (!currentStep || currentStep.type !== 'pending_action') return;
@@ -158,6 +213,8 @@ export function useBattleRunner({ squadA, squadB, seed }) {
     pause,
     resume,
     redirect,
+    anchor,
+    resonate,
     phase,
     currentStep,
     unitsSnapshot,
