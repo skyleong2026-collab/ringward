@@ -18,14 +18,14 @@ import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
-import { CONTRACTS } from './data/contracts.js';
+import { CONTRACTS, countRevealed, payoutRepAmount } from './data/contracts.js';
 import { ARCHETYPES } from './data/creatures.js';
 import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
-import { recordContractWin, extractFiredSynergies } from './engine/codex.js';
+import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis } from './engine/codex.js';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vC-A';
+const VERSION = 'vC-B';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -102,6 +102,11 @@ function App() {
   // (Codex/reputation), never stat-power — no XP is applied from a contract.
   const [currentContract, setCurrentContract] = useState(null);
   const [contractOutcome, setContractOutcome] = useState(null);
+  // Intel layer (§20.8.4): per-contract revealed axes, the active recon, and the
+  // last recon's feedback shown back on the contract screen.
+  const [contractIntel, setContractIntel] = useState({});
+  const [reconAxis, setReconAxis] = useState(null);
+  const [reconFeedback, setReconFeedback] = useState(null);
 
   const [encounterHistory, setEncounterHistory] = useState(() => {
     try {
@@ -462,8 +467,35 @@ function App() {
   function openContract(contract) {
     setCurrentContract(contract);
     setContractOutcome(null);
+    setContractIntel(loadIntel(contract.id)); // revealed axes persist across sessions
+    setReconFeedback(null);
     setScreen('contract');
   }
+
+  // ── Recon (§20.8.4) — scout one axis by fighting its enemy fragment ──
+  function handleScout(axis) {
+    if (!currentContract) return;
+    setReconAxis(axis);
+    setReconFeedback(null);
+    setBattleSeed(randomSeed());
+    setScreen('reconbattle');
+  }
+
+  const handleReconComplete = useCallback((res) => {
+    // Low-stakes: a win reveals the axis; a loss reveals nothing and is retryable.
+    // Nothing touches the roster, no XP either way (recon is practice, not payout).
+    const axis = reconAxis;
+    const spec = currentContract?.intel?.[axis];
+    if (res.winner === 'A' && currentContract && axis) {
+      const nextIntel = revealIntelAxis(currentContract.id, axis);
+      setContractIntel(nextIntel);
+      setReconFeedback({ ok: true, text: `Recon successful — ${spec?.label ?? axis} scouted.` });
+    } else {
+      setReconFeedback({ ok: false, text: `Recon broke off — ${spec?.label ?? axis} still hidden. You can scout again.` });
+    }
+    setReconAxis(null);
+    setScreen('contract');
+  }, [reconAxis, currentContract]);
 
   function commitContract() {
     setBattleSeed(randomSeed());
@@ -482,18 +514,22 @@ function App() {
       won = false; reason = 'squad';
     }
 
+    // The §20.8.4 risk dial: how much you scouted sets the reward you walk with.
+    const revealedCount = countRevealed(contractIntel);
+    const repAmount = currentContract ? payoutRepAmount(currentContract, revealedCount) : 0;
+
     let codexResult = null;
     let firedSynergies = [];
     if (won && currentContract) {
       // Access-only payout: unlock artifact + reputation + log fired synergies.
       // No XP / stat changes are applied (§20.8.2).
       firedSynergies = extractFiredSynergies(res);
-      codexResult = recordContractWin(currentContract, firedSynergies);
+      codexResult = recordContractWin(currentContract, firedSynergies, { repAmount });
     }
 
-    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies });
+    setContractOutcome({ won, reason, result: res, codexResult, firedSynergies, revealedCount, repAmount });
     setScreen('contractresult');
-  }, [currentContract]);
+  }, [currentContract, contractIntel]);
 
   function handleContractRetry() {
     setContractOutcome(null);
@@ -660,8 +696,24 @@ function App() {
           <ContractScreen
             contract={currentContract}
             playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            intel={contractIntel}
+            reconFeedback={reconFeedback}
+            onScout={handleScout}
             onCommit={commitContract}
             onBack={() => setScreen('collection')}
+          />
+        )}
+        {screen === 'reconbattle' && currentContract && reconAxis && battleSeed !== null && (
+          <BattleScreen
+            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            enemySquad={levelEnemySquad(
+              [currentContract.squad[currentContract.intel[reconAxis].fragmentIndex]],
+              currentContract.level,
+            )}
+            seed={battleSeed}
+            onComplete={handleReconComplete}
+            maxInterventions={currentContract.modifier.interventionBudget}
+            bannerLabel={`RECON · ${currentContract.intel[reconAxis].label.toUpperCase()}`}
           />
         )}
         {screen === 'contractbattle' && currentContract && battleSeed !== null && (

@@ -205,7 +205,7 @@ function CombatLog({ entries }) {
 // ─── BattleScreen ─────────────────────────────────────────────────────────────
 export default function BattleScreen({
   playerSquad, enemySquad, seed, onComplete,
-  maxInterventions = 3, detonationClock = null, clockLabel = 'SIGNAL',
+  maxInterventions = 3, detonationClock = null, clockLabel = 'SIGNAL', bannerLabel = null,
 }) {
   const {
     start, pause, resume, redirect, anchor, resonate,
@@ -228,6 +228,16 @@ export default function BattleScreen({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* recon banner — marks a low-stakes scouting fight (§20.8.4) */}
+      {bannerLabel && (
+        <div style={{
+          background: '#0a0814', border: '1px solid #2a1f3a', borderRadius: 5,
+          padding: '7px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontSize: 9, color: '#9b6bd6', letterSpacing: 2, fontWeight: 700 }}>◇ {bannerLabel}</span>
+          <span style={{ fontSize: 8, color: '#555', letterSpacing: 1 }}>LOW STAKES — INTEL ONLY</span>
+        </div>
+      )}
       {/* header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

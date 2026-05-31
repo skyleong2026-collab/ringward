@@ -41,12 +41,41 @@ export const CONTRACTS = [
       clockLabel: 'SIGNAL',
     },
     payout: {
-      // Access only, never stat-power (§20.8.2).
+      // Access only, never stat-power (§20.8.2). The reputation amount is the
+      // self-set risk dial (§20.8.4): you bank `base + boldnessMax` for a blind
+      // dive, losing one per axis scouted. Cautious play is always paid `base`.
       artifactId: 'firstLight',
-      reputation: { faction: 'Shadow', amount: 1 },
-      summary: 'First Light artifact · Shadow standing +1',
+      reputation: { faction: 'Shadow', amount: 1 }, // `amount` = the cautious floor
+      boldnessMax: 3,                               // full blind-dive bonus on top
+      summary: 'First Light artifact · Shadow standing',
     },
     rewardsLine: "Rewards an autonomous build that doesn't need babysitting.",
+    // ── Intel axes (§20.8.4) ──────────────────────────────────────────────────
+    // The contract opens with these hidden. Each is scouted by a low-stakes recon
+    // fight against one fragment of the enemy squad — you learn the axis by
+    // fighting it (the teaching layer). Winning reveals it; losing reveals
+    // nothing and is retryable (anti-permadeath). Revealed intel persists.
+    // `fragmentIndex` points into `squad` below: scout the piece, learn the lesson.
+    intel: {
+      composition: {
+        label: 'Composition', glyph: '◇', fragmentIndex: 0, // the Guardian anchor
+        hidden: 'Lineup unknown — you do not know what you are walking into.',
+        revealed: 'A Guardian anchors the formation, shielding a lone Spark, with a Swift on the flank.',
+        scoutLine: 'Probe the anchor to read the shape of the squad.',
+      },
+      behavior: {
+        label: 'Behavior', glyph: '◈', fragmentIndex: 1, // the Spark itself
+        hidden: "The phenomenon's trick is unknown — what is it actually doing?",
+        revealed: 'The Signal charges fast and detonates across your whole squad. Left alone it only grows.',
+        scoutLine: 'Engage the Signal alone to witness how it builds and bursts.',
+      },
+      threat: {
+        label: 'Threat', glyph: '✸', fragmentIndex: 2, // the Swift
+        hidden: 'Win condition unknown — you do not know what ends this, or what ends you.',
+        revealed: 'Quiet the squad before the third detonation. The Swift punishes a slow opener.',
+        scoutLine: 'Spar the flanker to feel the timing and the kill pressure.',
+      },
+    },
     // ── Enemy build ──
     // Centered on a Spark that charges fast (banked-heat dial → +2 stoke/round)
     // so the 3rd detonation is a genuine threat inside the round budget. The
@@ -62,3 +91,19 @@ export const CONTRACTS = [
 ];
 
 export const CONTRACTS_BY_ID = Object.fromEntries(CONTRACTS.map((k) => [k.id, k]));
+
+export const INTEL_AXES = ['composition', 'behavior', 'threat'];
+
+// How many axes are revealed in a per-contract intel map (from the Codex).
+export function countRevealed(intel) {
+  return INTEL_AXES.filter((k) => intel?.[k]?.revealed).length;
+}
+
+// The §20.8.4 risk dial: cautious floor + the blind-dive bonus you still hold.
+// Blind (0 scouted) pays base+boldnessMax; each axis scouted trades 1 standing
+// for safety. Cautious play is always paid the floor — never punished.
+export function payoutRepAmount(contract, revealedCount) {
+  const base = contract.payout?.reputation?.amount ?? 0;
+  const boldness = Math.max(0, (contract.payout?.boldnessMax ?? 0) - revealedCount);
+  return base + boldness;
+}

@@ -35,12 +35,13 @@ function ArtifactCard({ artifactId, isNew }) {
 }
 
 export default function ContractResult({ contract, outcome, onRetry, onDone }) {
-  const { won, reason, codexResult, firedSynergies = [] } = outcome;
+  const { won, reason, codexResult, firedSynergies = [], revealedCount = 0, repAmount: dialRep } = outcome;
   const newArtifact = codexResult?.newArtifact;
   const newSynergyKeys = new Set(codexResult?.newSynergies ?? []);
   const repFaction = contract.payout?.reputation?.faction;
-  const repAmount = contract.payout?.reputation?.amount;
+  const repAmount = dialRep ?? contract.payout?.reputation?.amount;
   const repTotal = codexResult?.codex?.reputation?.[repFaction];
+  const boldLabel = revealedCount === 0 ? 'BLIND DIVE' : revealedCount >= 3 ? 'FULLY SCOUTED' : `${revealedCount} SCOUTED`;
 
   if (won) {
     return (
@@ -71,7 +72,13 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
             background: '#0c0a12', border: '1px solid #2a1f3a', borderRadius: 6,
             padding: '11px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            <span style={{ fontSize: 11, color: '#9b6bd6', letterSpacing: 1 }}>{repFaction.toUpperCase()} STANDING</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#9b6bd6', letterSpacing: 1 }}>{repFaction.toUpperCase()} STANDING</span>
+              <span style={{
+                fontSize: 7, color: '#8a6ab0', background: '#9b6bd615', border: '1px solid #9b6bd62a',
+                borderRadius: 3, padding: '1px 5px', letterSpacing: 1,
+              }}>{boldLabel}</span>
+            </div>
             <span style={{ fontSize: 12, color: '#cba6e6', fontWeight: 700 }}>
               +{repAmount}{repTotal != null && <span style={{ color: '#555', fontWeight: 400 }}> → {repTotal}</span>}
             </span>

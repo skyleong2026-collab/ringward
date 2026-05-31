@@ -12,7 +12,7 @@
 const STORAGE_KEY = '8gents_codex';
 
 function emptyCodex() {
-  return { artifacts: {}, synergies: {}, reputation: {} };
+  return { artifacts: {}, synergies: {}, reputation: {}, intel: {} };
 }
 
 export function loadCodex() {
@@ -31,6 +31,28 @@ function saveCodex(codex) {
   } catch {
     /* storage unavailable — codex is best-effort, never blocks play */
   }
+}
+
+// ─── Intel (§20.8.4) ──────────────────────────────────────────────────────────
+// Per-contract scouting knowledge. Revealed axes persist — a re-taken contract
+// stays scouted (knowledge compounds; a loss becomes recon, never wasted). This
+// never touches the roster and never expires.
+
+export function loadIntel(contractId) {
+  const codex = loadCodex();
+  return codex.intel?.[contractId] ?? {};
+}
+
+// Mark one axis (composition | behavior | threat) revealed for a contract.
+// Returns the updated per-contract intel map.
+export function revealIntelAxis(contractId, axis, now = Date.now()) {
+  const codex = loadCodex();
+  if (!codex.intel) codex.intel = {};
+  const forContract = { ...(codex.intel[contractId] ?? {}) };
+  forContract[axis] = { revealed: true, at: now };
+  codex.intel[contractId] = forContract;
+  saveCodex(codex);
+  return forContract;
 }
 
 // Extract the synergies that actually fired for the player's squad this battle.
@@ -72,7 +94,7 @@ export function extractFiredSynergies(result) {
 // and log every synergy that fired. Idempotent-ish — re-winning just bumps
 // counts and refreshes timestamps; it never removes anything. Returns the
 // new-this-win artifact + synergy keys so the payout screen can highlight them.
-export function recordContractWin(contract, firedSynergies, now = Date.now()) {
+export function recordContractWin(contract, firedSynergies, { repAmount } = {}, now = Date.now()) {
   const codex = loadCodex();
 
   // ── Artifact unlock (access only) ──
@@ -88,10 +110,11 @@ export function recordContractWin(contract, firedSynergies, now = Date.now()) {
     if (!already) newArtifact = artifactId;
   }
 
-  // ── Reputation ──
+  // ── Reputation (amount set by the §20.8.4 risk dial; falls back to the floor) ──
   const rep = contract.payout?.reputation;
   if (rep?.faction) {
-    codex.reputation[rep.faction] = (codex.reputation[rep.faction] ?? 0) + (rep.amount ?? 0);
+    const gain = repAmount ?? rep.amount ?? 0;
+    codex.reputation[rep.faction] = (codex.reputation[rep.faction] ?? 0) + gain;
   }
 
   // ── Synergies discovered ──
