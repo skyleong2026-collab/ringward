@@ -25,8 +25,9 @@ import { getLevel } from './engine/progression.js';
 import { XP_PER_FEED } from './engine/progression.js';
 import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, checkRivalUnlock, escalateRival, recordRivalLoss } from './engine/codex.js';
 import { animationStyles } from './ui/animations.js';
+import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-D';
+const VERSION = 'vC-E';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -144,7 +145,7 @@ function App() {
       if (prev.includes(instanceId)) {
         next = prev.filter((id) => id !== instanceId);
       } else {
-        if (prev.length >= 8) return prev;
+        if (prev.length >= MAX_SQUAD) return prev;
         next = [...prev, instanceId];
       }
       persist(collection, next);
@@ -535,7 +536,9 @@ function App() {
     // contract uses — the signal clock (3rd detonation) or the hold objective
     // (escortee falls). Either can flip the raw winner into a contract loss.
     let won, reason;
-    if (res.clockExpired) {
+    if (res.forfeit) {
+      won = false; reason = 'forfeit';
+    } else if (res.clockExpired) {
       won = false; reason = 'clock';
     } else if (res.holdFailed) {
       won = false; reason = 'escortee';
@@ -717,6 +720,8 @@ function App() {
             enemySquad={levelEnemySquad(currentEncounter.squad, currentEncounter.level)}
             seed={battleSeed}
             onComplete={handleBattleComplete}
+            onForfeit={() => (dungeonRun ? handleDungeonFail() : setScreen('encounters'))}
+            forfeitLabel={dungeonRun ? 'Leaving ends the dungeon run. Your roster is unharmed.' : 'Leave this battle and return to encounters. Nothing is lost.'}
           />
         )}
         {screen === 'result' && result && (
@@ -783,6 +788,8 @@ function App() {
             maxInterventions={currentContract.modifier.interventionBudget}
             modifiers={contractModifiers(currentContract)}
             bannerLabel={`RECON · ${currentContract.intel[reconAxis].label.toUpperCase()}`}
+            onForfeit={() => { setReconAxis(null); setScreen('contract'); }}
+            forfeitLabel="Break off the scout. The axis stays hidden — no cost, you can try again."
           />
         )}
         {screen === 'contractbattle' && currentContract && battleSeed !== null && (
@@ -803,6 +810,10 @@ function App() {
             holdCondition={currentContract.winCondition.hold ?? null}
             modifiers={contractModifiers(currentContract)}
             factionColor={currentContract.client ?? currentContract.faction}
+            onForfeit={() => handleContractComplete({ winner: 'B', forfeit: true })}
+            forfeitLabel={currentContract.isRival
+              ? 'Forfeit counts as a loss to this Rival. They do not escalate, but it is on the record. No roster change.'
+              : 'Forfeit counts as a loss on this contract. No roster change, no stat penalty — the job stays open.'}
           />
         )}
         {screen === 'contractresult' && currentContract && contractOutcome && (

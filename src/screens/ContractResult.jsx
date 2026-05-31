@@ -163,13 +163,18 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
         padding: '16px', textAlign: 'center',
       }}>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#d0021b', letterSpacing: 2 }}>
-          {reason === 'clock' ? 'THE SIGNAL COMPLETED' : reason === 'escortee' ? 'THE BEACON FELL' : 'THE SQUAD FELL'}
+          {reason === 'clock' ? 'THE SIGNAL COMPLETED'
+            : reason === 'escortee' ? 'THE BEACON FELL'
+            : reason === 'forfeit' ? 'CONTRACT FORFEITED'
+            : 'THE SQUAD FELL'}
         </div>
         <div style={{ fontSize: 12, color: '#888', marginTop: 6, lineHeight: 1.6 }}>
           {reason === 'clock'
             ? 'The third surge went off before you could quiet it. The job is still open.'
             : reason === 'escortee'
             ? 'The surge broke through before the crossing could hold. The job is still open.'
+            : reason === 'forfeit'
+            ? 'You pulled out. It counts as a loss, but nothing was taken — the job stays open.'
             : 'Your squad could not hold. The job is still open.'}
         </div>
       </div>

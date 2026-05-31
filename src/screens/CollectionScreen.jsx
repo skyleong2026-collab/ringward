@@ -4,6 +4,7 @@ import { MODULES } from '../data/modules.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { useState, useEffect } from 'react';
+import { MAX_SQUAD } from '../config.js';
 
 const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'SPK' };
 
@@ -370,7 +371,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
   const [moduleModalUnit, setModuleModalUnit] = useState(null);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
-  const squadFull = squadIds.length >= 8;
+  const squadFull = squadIds.length >= MAX_SQUAD;
   const reserveFull = reserve.length >= 24;
 
   return (
@@ -378,7 +379,7 @@ export default function CollectionScreen({ collection, squadIds, onToggleSquad, 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
-          SQUAD — {squadIds.length}/8
+          SQUAD — {squadIds.length}/{MAX_SQUAD}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button

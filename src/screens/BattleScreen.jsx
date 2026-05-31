@@ -215,7 +215,9 @@ export default function BattleScreen({
   playerSquad, enemySquad, seed, onComplete,
   maxInterventions = 3, detonationClock = null, clockLabel = 'SIGNAL', bannerLabel = null,
   holdCondition = null, modifiers = undefined, factionColor = null,
+  onForfeit = null, forfeitLabel = 'Forfeit counts as a loss. No roster change, no stat penalty.',
 }) {
+  const [confirmForfeit, setConfirmForfeit] = useState(false);
   const {
     start, pause, resume, redirect, anchor, resonate,
     phase, currentStep, unitsSnapshot,
@@ -339,11 +341,46 @@ export default function BattleScreen({
               {isPaused ? 'RESUME' : '⏸ PAUSE'}
             </button>
           )}
+          {phase !== 'complete' && onForfeit && (
+            <button
+              onClick={() => { pause(); setConfirmForfeit(true); }}
+              style={{
+                padding: '6px 10px', background: 'none', border: '1px solid #3a1a1a',
+                borderRadius: 4, color: '#8a4a4a', fontSize: 10, fontWeight: 700,
+                letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+              }}
+            >
+              ⚑ Forfeit
+            </button>
+          )}
           {phase === 'complete' && (
             <span style={{ fontSize: 9, color: '#333', letterSpacing: 1 }}>DONE</span>
           )}
         </div>
       </div>
+
+      {/* forfeit confirmation */}
+      {confirmForfeit && (
+        <div style={{
+          background: '#160a0a', border: '1px solid #d0021b55', borderRadius: 7,
+          padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#e06a6a', letterSpacing: 1 }}>Forfeit this battle?</div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 5, lineHeight: 1.6 }}>{forfeitLabel}</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <button onClick={() => { setConfirmForfeit(false); resume(); }} style={{
+              padding: '10px', background: '#1a1a2a', border: '1px solid #3a3a5a', borderRadius: 6,
+              color: '#aaa', fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+            }}>Keep Fighting</button>
+            <button onClick={() => { setConfirmForfeit(false); onForfeit(); }} style={{
+              padding: '10px', background: '#5a1414', border: 'none', borderRadius: 6,
+              color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+            }}>Forfeit</button>
+          </div>
+        </div>
+      )}
 
       {/* the witnessing stage — primary channel */}
       <BattleStage
