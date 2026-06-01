@@ -1,4 +1,5 @@
-import { ARCHETYPES } from '../data/creatures.js';
+import { ARCHETYPES, archetypeLabel } from '../data/creatures.js';
+import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 import { generateSpotterRead } from '../engine/spotter.js';
 import { applyLevel } from '../engine/progression.js';
 import { INTEL_AXES, countRevealed, payoutRepAmountWithDifficulty, DIFFICULTIES, DIFFICULTY_ORDER } from '../data/contracts.js';
@@ -36,7 +37,8 @@ function SquadChip({ unit }) {
     }}>
       <span style={{ fontSize: 10, fontWeight: 700, color: '#bbb', letterSpacing: 0.5 }}>{unit.name}</span>
       <span style={{ fontSize: 8, color, letterSpacing: 0.5 }}>
-        {unit.archetype.toUpperCase()}<span style={{ color: '#555' }}> · Lv.{level}</span>
+        <GlossaryTerm term={unit.archetype} style={{ color }}>{archetypeLabel(unit.archetype).toUpperCase()}</GlossaryTerm>
+        <span style={{ color: '#555' }}> · Lv.{level}</span>
       </span>
       <span style={{ fontSize: 8, color: '#666', letterSpacing: 0.5 }}>HP {eff.hp} · ATK {eff.attack}</span>
     </div>
@@ -75,7 +77,7 @@ function EnemyRow({ unit, level, isSignal, isLast, compositionKnown, behaviorKno
           <span style={{
             fontSize: 8, color, background: color + '15', border: `1px solid ${color}30`,
             borderRadius: 3, padding: '1px 5px', letterSpacing: 0.5,
-          }}>{unit.archetype.toUpperCase()}</span>
+          }}>{archetypeLabel(unit.archetype).toUpperCase()}</span>
           <span style={{ fontSize: 8, color: '#888', letterSpacing: 0.5 }}>Lv.{lvl} · HP {eff.hp} · ATK {eff.attack}</span>
         </div>
         {behaviorKnown && ARCHETYPE_MECHANIC[unit.archetype] && (

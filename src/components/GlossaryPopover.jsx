@@ -14,9 +14,12 @@ import { defineTerm } from '../data/glossary.js';
 
 // The popover card itself: term, short read, and an opt-in "+ more" that reveals
 // the Cortana long-form. A fixed full-screen backdrop catches the outside tap.
-function GlossaryCard({ entry, onClose }) {
+function GlossaryCard({ entry, onClose, align = 'left' }) {
   const [expanded, setExpanded] = useState(false);
   const hasLong = entry.long && entry.long !== entry.short;
+  // Anchor to the right edge of the term when it sits on the right side of the
+  // screen (e.g. the currency strip), so the popover doesn't overflow off-screen.
+  const sideAnchor = align === 'right' ? { right: 0 } : { left: 0 };
   return (
     <>
       <div
@@ -26,7 +29,7 @@ function GlossaryCard({ entry, onClose }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 91,
+          position: 'absolute', top: 'calc(100% + 6px)', ...sideAnchor, zIndex: 91,
           width: 234, maxWidth: '78vw', textAlign: 'left', cursor: 'default',
           background: '#12101c', border: '1px solid #3a2f52', borderRadius: 8,
           padding: '10px 12px', boxShadow: '0 8px 26px #000b',
@@ -61,7 +64,7 @@ function GlossaryCard({ entry, onClose }) {
 // Inline tappable term: renders the label with a dotted underline + a small ⓘ so
 // it reads as "ask me about this." Falls back to plain text if the term isn't in
 // the glossary (so a typo never breaks the render).
-export function GlossaryTerm({ term, children, style }) {
+export function GlossaryTerm({ term, children, style, align = 'left' }) {
   const entry = defineTerm(term);
   const [open, setOpen] = useState(false);
   if (!entry) return <span style={style}>{children ?? term}</span>;
@@ -74,7 +77,7 @@ export function GlossaryTerm({ term, children, style }) {
         {children ?? entry.term}
         <span style={{ fontSize: '0.72em', verticalAlign: 'super', marginLeft: 2, opacity: 0.85 }}>ⓘ</span>
       </span>
-      {open && <GlossaryCard entry={entry} onClose={() => setOpen(false)} />}
+      {open && <GlossaryCard entry={entry} onClose={() => setOpen(false)} align={align} />}
     </span>
   );
 }
@@ -82,7 +85,7 @@ export function GlossaryTerm({ term, children, style }) {
 // Standalone affordance for places where the label can't be wrapped (e.g. inside
 // another button): just the ⓘ, same popover. stopPropagation keeps a host
 // button's onClick from firing when the dot is tapped.
-export function GlossaryDot({ term, style }) {
+export function GlossaryDot({ term, style, align = 'left' }) {
   const entry = defineTerm(term);
   const [open, setOpen] = useState(false);
   if (!entry) return null;
@@ -94,7 +97,7 @@ export function GlossaryDot({ term, style }) {
       >
         ⓘ
       </span>
-      {open && <GlossaryCard entry={entry} onClose={() => setOpen(false)} />}
+      {open && <GlossaryCard entry={entry} onClose={() => setOpen(false)} align={align} />}
     </span>
   );
 }

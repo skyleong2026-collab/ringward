@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import CollectionScreen from './screens/CollectionScreen.jsx';
+import { IntroFrame } from './screens/IntroFrame.jsx';
 import EncounterScreen from './screens/EncounterScreen.jsx';
 import PreBattle from './screens/PreBattle.jsx';
 import WorldScreen from './screens/WorldScreen.jsx';
@@ -33,7 +34,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-R';
+const VERSION = 'vC-S';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -204,6 +205,15 @@ function App() {
 
   function persistDiscovered(ids) {
     try { localStorage.setItem('8gents_discovered', JSON.stringify(ids)); } catch { /* best-effort */ }
+  }
+
+  // Identity/lore frame (vC-S): shown once on first run, re-openable from the header.
+  const [showIntro, setShowIntro] = useState(() => {
+    try { return localStorage.getItem('8gents_seen_intro') !== '1'; } catch { return true; }
+  });
+  function dismissIntro() {
+    try { localStorage.setItem('8gents_seen_intro', '1'); } catch { /* best-effort */ }
+    setShowIntro(false);
   }
 
   function persist(newCollection, newSquadIds, newEncounterHistory = encounterHistory) {
@@ -837,19 +847,29 @@ function App() {
         <span style={{ fontSize: 18, fontWeight: 900, color: '#e86040', letterSpacing: 2 }}>
           8gents
         </span>
-        <span style={{
-          fontSize: 10,
-          color: '#ddd',
-          background: '#1a1a22',
-          padding: '3px 8px',
-          borderRadius: 4,
-          letterSpacing: 1,
-          fontFamily: 'monospace',
-          border: '1px solid #444',
-          fontWeight: 600,
-        }}>
-          {VERSION}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowIntro(true)} title="Field briefing" style={{
+            fontSize: 9, color: '#8a8a9a', background: '#12121c',
+            padding: '4px 9px', borderRadius: 4, letterSpacing: 1,
+            fontFamily: 'monospace', border: '1px solid #2a2a3a', fontWeight: 600,
+            cursor: 'pointer',
+          }}>
+            ◼ BRIEFING
+          </button>
+          <span style={{
+            fontSize: 10,
+            color: '#ddd',
+            background: '#1a1a22',
+            padding: '3px 8px',
+            borderRadius: 4,
+            letterSpacing: 1,
+            fontFamily: 'monospace',
+            border: '1px solid #444',
+            fontWeight: 600,
+          }}>
+            {VERSION}
+          </span>
+        </div>
       </header>
 
       <main style={{ maxWidth: 640, margin: '0 auto', padding: '16px 12px 40px' }}>
@@ -1085,6 +1105,8 @@ function App() {
           onClose={() => setFeedTarget(null)}
         />
       )}
+
+      {showIntro && <IntroFrame onBegin={dismissIntro} />}
     </div>
   );
 }

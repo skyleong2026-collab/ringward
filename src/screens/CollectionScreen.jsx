@@ -4,6 +4,7 @@ import { MODULES } from '../data/modules.js';
 import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
+import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 import { useState, useEffect } from 'react';
 import { MAX_SQUAD } from '../config.js';
 
@@ -29,7 +30,7 @@ function ModSelectModal({ unit, onEquipSigMod, onClose }) {
         borderRadius: '12px 12px 0 0', padding: '16px 16px 28px', maxHeight: '70vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 9, color: '#444', letterSpacing: 2 }}>SIGNATURE GLYPHS — {unit.name}</div>
+          <div style={{ fontSize: 9, color: '#444', letterSpacing: 2 }}><GlossaryTerm term="signatureGlyph" style={{ color: '#666' }}>SIGNATURE GLYPHS</GlossaryTerm> — {unit.name}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
         </div>
         <div style={{ fontSize: 9, color: '#333', marginBottom: 12, lineHeight: 1.5 }}>
@@ -314,7 +315,7 @@ function GearSelectModal({ unit, onEquipGear, onClose }) {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP GEAR</div>
+            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP <GlossaryTerm term="gear" style={{ color: '#666' }}>GEAR</GlossaryTerm></div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#eee', marginTop: 2 }}>{unit.name}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#444', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>×</button>
@@ -407,7 +408,7 @@ function ModuleSelectModal({ unit, onEquipModule, onClose }) {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP MODULES — {equippedIds.length}/3</div>
+            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP <GlossaryTerm term="module" style={{ color: '#666' }}>MODULES</GlossaryTerm> — {equippedIds.length}/3</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#eee', marginTop: 2 }}>{unit.name}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#444', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>×</button>
@@ -625,13 +626,13 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
-            STABLE — {collection.length} agents · DISPATCH {squadIds.length}/{MAX_SQUAD}
+            <GlossaryTerm term="stable">STABLE</GlossaryTerm> — {collection.length} agents · <GlossaryTerm term="dispatch">DISPATCH</GlossaryTerm> {squadIds.length}/{MAX_SQUAD}
           </div>
           {/* Currency strip */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span title="Credits" style={{ fontSize: 9, color: '#8888cc', letterSpacing: 0.5 }}>⦿ {credits}</span>
-            <span title="Shards"  style={{ fontSize: 9, color: '#3a9a6a', letterSpacing: 0.5 }}>◈ {shards}</span>
-            {marks > 0 && <span title="Marks" style={{ fontSize: 9, color: '#d0902a', letterSpacing: 0.5 }}>✦ {marks}</span>}
+            <span style={{ fontSize: 9, color: '#8888cc', letterSpacing: 0.5 }}><GlossaryTerm term="credits" align="right" style={{ color: '#8888cc' }}>⦿</GlossaryTerm> {credits}</span>
+            <span style={{ fontSize: 9, color: '#3a9a6a', letterSpacing: 0.5 }}><GlossaryTerm term="shards" align="right" style={{ color: '#3a9a6a' }}>◈</GlossaryTerm> {shards}</span>
+            {marks > 0 && <span style={{ fontSize: 9, color: '#d0902a', letterSpacing: 0.5 }}><GlossaryTerm term="marks" align="right" style={{ color: '#d0902a' }}>✦</GlossaryTerm> {marks}</span>}
           </div>
         </div>
       </div>
