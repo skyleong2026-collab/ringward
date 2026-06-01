@@ -4,6 +4,7 @@ import { useBattleRunner } from '../hooks/useBattleRunner.js';
 import { SPARK_DETONATE_THRESHOLD } from '../engine/battleStepEngine.js';
 import { BattleStage } from '../components/BattleStage.jsx';
 import { ARCHETYPES } from '../data/creatures.js';
+import { GlossaryDot } from '../components/GlossaryPopover.jsx';
 
 // ─── Pending Action Panel ─────────────────────────────────────────────────────
 // Verb toggle: REDIRECT (repoint the acting unit's target) | ANCHOR (lock an
@@ -80,8 +81,10 @@ function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onR
                 border: activeVerb === id ? `1px solid ${accent}` : '1px solid #252535',
                 borderRadius: 4, color: activeVerb === id ? accent : '#444',
                 fontSize: 9, fontWeight: 700, letterSpacing: 1.5,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               }}>
                 {label}
+                <GlossaryDot term={id} style={{ color: activeVerb === id ? accent : '#555' }} />
               </button>
             );
           })}

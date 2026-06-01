@@ -1,6 +1,7 @@
-import { ARCHETYPES } from '../data/creatures.js';
+import { ARCHETYPES, archetypeLabel } from '../data/creatures.js';
 import { generateSpotterRead } from '../engine/spotter.js';
 import { applyLevel } from '../engine/progression.js';
+import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 
 const THREAT_STYLE = {
   'PRIMARY THREAT': { color: '#d0021b', bg: '#d0021b0f', border: '#d0021b2a' },
@@ -38,7 +39,8 @@ function SquadChip({ unit }) {
     }}>
       <span style={{ fontSize: 10, fontWeight: 700, color: '#bbb', letterSpacing: 0.5 }}>{unit.name}</span>
       <span style={{ fontSize: 8, color, letterSpacing: 0.5 }}>
-        {unit.archetype.toUpperCase()}<span style={{ color: '#555' }}> · Lv.{level}</span>
+        <GlossaryTerm term={unit.archetype} style={{ color }}>{archetypeLabel(unit.archetype).toUpperCase()}</GlossaryTerm>
+        <span style={{ color: '#555' }}> · Lv.{level}</span>
       </span>
       <span style={{ fontSize: 8, color: '#666', letterSpacing: 0.5 }}>
         HP {eff.hp} · ATK {eff.attack}
@@ -72,7 +74,7 @@ function EnemyRow({ unit, level, threatLabel, isLast }) {
             padding: '1px 5px',
             letterSpacing: 0.5,
           }}>
-            {unit.archetype.toUpperCase()}
+            {archetypeLabel(unit.archetype).toUpperCase()}
           </span>
           <span style={{ fontSize: 8, color: '#888', letterSpacing: 0.5 }}>
             Lv.{lvl} · HP {eff.hp} · ATK {eff.attack}
