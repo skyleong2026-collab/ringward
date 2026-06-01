@@ -1,26 +1,28 @@
-// IntroFrame.jsx — the identity / lore frame (core-loop framing, vC-S).
+// IntroFrame.jsx — the identity / lore frame (core-loop framing, Ringward).
 //
-// Answers the unaddressed half of the [[8gents-framing-gap]] verdict: the game
-// cold-opened on the Stable with no sense of WHO you are or WHY you fight. This
-// is the narrative wrapper — it establishes the premise, names the role, and
-// names the loop, then hands off to the Spotter (muse: Cortana) who is the
-// player's standing partner. It sets stakes; it does NOT step-by-step teach
-// mechanics (that's a separate guided-first-contract pass, if we build it).
+// Answers the unaddressed half of the framing-gap verdict: the game cold-opened
+// on the Stable with no sense of WHO you are or WHY you go. This is the narrative
+// wrapper — folk-mystery voice (see memory `8gents-world-frame`): it opens on the
+// road, withholds the mystery (the Drop is earned, never narrated), names the
+// role and the loop, then hands off to the Spotter — your mentor's parting voice.
+// It sets the pull; it does NOT step-by-step teach mechanics.
 //
-// Shown once on first run (gated by localStorage in App), and re-openable from
-// the header so it's never lost. Uses the real game vocabulary (Handler, Stable,
-// Contract, Standing, Frontier, FOCUS) so the frame doubles as orientation.
+// Tone: warm-folk-that-darkens (Gus McCrae / a weathered guide), not epic fantasy.
+// Shown once on first run (gated by localStorage in App), re-openable from the
+// header. Uses the real vocabulary (Handler, grunling, core, Stable, Contract,
+// FOCUS, Standing, ringward) so the frame doubles as orientation.
 
 const ACCENT = '#e86040';   // Ringward orange
 const SPOT = '#1e3a5f';     // Spotter label blue
 const SPOT_TEXT = '#6a8090';
 
-// The loop, named as identity beats — not a click-here tutorial.
+// The loop, named as identity beats — folk-warm but legible (it doubles as
+// orientation, so each beat still reads clean on its own).
 const BEATS = [
-  { k: 'You run a Stable.', v: 'A roster of creatures — own many, field few. The ones you dispatch fight on instinct.' },
-  { k: 'Clients post Contracts.', v: 'Each is a job: a twist, a win condition, a payout. You choose which to take and who to bring.' },
-  { k: 'The fight runs itself — almost.', v: 'Your edge is FOCUS: a handful of moments to read the field and step in — Redirect a strike, Stall a threat, Sync a finish.' },
-  { k: 'Win work. Build Standing.', v: 'Standing is your name in a region. Enough of it pushes the Frontier open — new territory, bigger clients, rarer creatures.' },
+  { k: 'Your stable.', v: 'Three grunlings to your name — earthen things, each grown round a living core. You keep many, you field a few. The ones you send out fight on their own.' },
+  { k: 'The work.', v: "Folks pay to have grunlings handled. Each contract's a job — a twist, a win condition, a payout. You pick which to take and who to bring." },
+  { k: 'Your call.', v: 'The fight runs itself, mostly. Your edge is FOCUS — a handful of moments to read it and step in: turn a strike, lock a threat down, call a finish.' },
+  { k: 'The road.', v: 'Win work and your Standing grows — your name in a place. Enough of it opens the way ringward: harder country, stranger cores, bigger questions.' },
 ];
 
 export function IntroFrame({ onBegin }) {
@@ -34,16 +36,22 @@ export function IntroFrame({ onBegin }) {
 
         {/* wordmark */}
         <div style={{ fontSize: 26, fontWeight: 900, color: ACCENT, letterSpacing: 5, marginBottom: 4 }}>RINGWARD</div>
-        <div style={{ fontSize: 9, color: '#555', letterSpacing: 4, marginBottom: 26 }}>FIELD BRIEFING</div>
+        <div style={{ fontSize: 9, color: '#555', letterSpacing: 4, marginBottom: 26 }}>BEFORE YOU GO</div>
 
-        {/* the premise — world + you, neutral establishing voice */}
+        {/* the premise — folk voice, opens on the road, withholds the mystery */}
         <p style={{ fontSize: 14, lineHeight: 1.75, color: '#cfcfda', margin: '0 0 10px' }}>
-          The regions are thick with wild creatures — and thicker with people who'll pay
-          to have them <span style={{ color: '#eee' }}>handled</span>.
+          Everybody knows the road runs <span style={{ color: ACCENT, fontWeight: 700 }}>ringward</span>.
+          Some walk it for standing. Some for the cores. Some go because they can't sit still —
+          and some because they need to know what's at the end of it.
+        </p>
+        <p style={{ fontSize: 14, lineHeight: 1.75, color: '#cfcfda', margin: '0 0 10px' }}>
+          The ones with sense stop somewhere good. Most just keep going.
         </p>
         <p style={{ fontSize: 14, lineHeight: 1.75, color: '#cfcfda', margin: 0 }}>
-          You're a <span style={{ color: ACCENT, fontWeight: 700 }}>Handler</span>. You take the work,
-          you build the squad, and when the fight turns — <span style={{ color: '#eee' }}>you decide when to step in</span>.
+          Your mentor walked it a long way — further than most. Now they've hung it up, and left you
+          three <span style={{ color: '#eee' }}>grunlings</span> to start your own.
+          You're a <span style={{ color: ACCENT, fontWeight: 700 }}>Handler</span> now.
+          You've got the tools. The name, you earn.
         </p>
 
         {/* the loop, as identity beats */}
@@ -59,18 +67,18 @@ export function IntroFrame({ onBegin }) {
           ))}
         </div>
 
-        {/* the Spotter — your standing partner (Cortana register) */}
+        {/* the Spotter — the mentor's parting voice, folk-wise register */}
         <div style={{
           background: '#0c1420', borderLeft: `2px solid ${SPOT}`, borderRadius: 5,
           padding: '14px 16px', marginBottom: 28,
         }}>
           <div style={{ fontSize: 8, color: SPOT, letterSpacing: 2, fontFamily: 'monospace', marginBottom: 9 }}>◼ SPOTTER</div>
           <div style={{ fontSize: 13, lineHeight: 1.7, color: SPOT_TEXT }}>
-            I read the field. You make the calls.
+            Your mentor's voice, near enough. I read the field — you make the calls.
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.7, color: SPOT_TEXT, fontStyle: 'italic', marginTop: 5 }}>
-            Tap any <span style={{ fontStyle: 'normal' }}>ⓘ</span> and I'll tell you what something means — no need to
-            memorize it all. Let's go earn you a name.
+            Tap any <span style={{ fontStyle: 'normal' }}>ⓘ</span> and I'll tell you what a word means —
+            no need to carry it all in your head. Now. Let's go earn you that name.
           </div>
         </div>
 
@@ -80,7 +88,7 @@ export function IntroFrame({ onBegin }) {
           color: '#0a0a14', fontSize: 13, fontWeight: 800, letterSpacing: 1.5,
           fontFamily: 'inherit',
         }}>
-          ENTER THE FIELD →
+          TAKE THE ROAD →
         </button>
         <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, textAlign: 'center', marginTop: 12 }}>
           Re-read anytime from the briefing button, top-right.

@@ -626,7 +626,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
-            <GlossaryTerm term="stable">STABLE</GlossaryTerm> — {collection.length} agents · <GlossaryTerm term="dispatch">DISPATCH</GlossaryTerm> {squadIds.length}/{MAX_SQUAD}
+            <GlossaryTerm term="stable">STABLE</GlossaryTerm> — {collection.length} <GlossaryTerm term="grunling">grunlings</GlossaryTerm> · <GlossaryTerm term="dispatch">DISPATCH</GlossaryTerm> {squadIds.length}/{MAX_SQUAD}
           </div>
           {/* Currency strip */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -749,7 +749,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
           padding: '20px', textAlign: 'center',
           fontSize: 11, color: '#333',
         }}>
-          Select up to {MAX_SQUAD} agents from your stable to dispatch
+          Select up to {MAX_SQUAD} grunlings from your stable to dispatch
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
@@ -776,12 +776,12 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
       {/* Reserve */}
       <div>
         <div style={{ fontSize: 10, color: '#444', letterSpacing: 2, marginBottom: 10 }}>
-          BENCH — {reserve.length} agents
+          BENCH — {reserve.length} grunlings
           {reserveFull && <span style={{ color: '#d0021b', marginLeft: 8 }}>FULL</span>}
         </div>
         {reserve.length === 0 ? (
           <div style={{ fontSize: 11, color: '#333', textAlign: 'center', padding: '12px 0' }}>
-            All agents dispatched
+            All grunlings dispatched
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>

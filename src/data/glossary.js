@@ -10,8 +10,9 @@
 //           should not have to tap twice to reach a comprehensible answer).
 //           Where a term already has a card/§10 one-liner, `short` MATCHES it so
 //           a term can't say two things in two places.
-//   long  — the warm "teaching gear" (the muse: Cortana — function & tone, not
-//           lore): answer-first, plain, brief, a little personality. Depth-2 =
+//   long  — the warm "teaching gear" (a folk-wise mentor's voice — see memory
+//           `8gents-spotter-glossary`): answer-first, plain, dry, a little
+//           personality. Light on dialect (clarity first). Depth-2 =
 //           interactions / edge cases / why-you-care.
 //
 // Internal engine keys are unchanged by the vC-Q renames (Spark/anchor/resonate
@@ -174,6 +175,30 @@ export const GLOSSARY = {
   },
 
   // ── World & loop ─────────────────────────────────────────────────────────
+  grunling: {
+    term: 'Grunling',
+    cat: 'world',
+    short: 'A creature you handle — an earthen body grown around a living core. Your units.',
+    long: "Grunlings are what came up out of the ground. Not flesh, not machine — something grown, with a core for a heart. They're your units: you keep a stable of them and field a few at a time. Folk wore 'groundling' down to 'grunling' a long way back, and the name stuck.",
+  },
+  core: {
+    term: 'Core',
+    cat: 'world',
+    short: "A grunling's heart — the glowing center that holds its power.",
+    long: "The core is the living center of a grunling: it glows while the thing's alive and goes dark when it ain't. Everything a grunling can do, it does because of its core — which is also the part worth collecting when one falls.",
+  },
+  handler: {
+    term: 'Handler',
+    cat: 'world',
+    short: 'You — someone who keeps and fields grunlings for work.',
+    long: "A Handler keeps a stable of grunlings and takes contracts with them. It's a trade: you earn your name one job at a time. You're a new one — your mentor left you the tools to start, but the Standing's yours to build.",
+  },
+  mentor: {
+    term: 'Mentor',
+    cat: 'world',
+    short: 'The Handler who trained you and left you your first three grunlings.',
+    long: "Your mentor walked the road a long way and certified you before they hung it up. They left you three grunlings and a voice in your ear to keep teaching after they were gone. You inherited the tools; the name you make yourself.",
+  },
   standing: {
     term: 'Standing',
     cat: 'world',
@@ -231,8 +256,8 @@ export const GLOSSARY = {
   spotter: {
     term: 'Spotter',
     cat: 'meta',
-    short: 'Your tactical comms — reads the field, and (here) explains the terms.',
-    long: "The Spotter is the voice in your ear — it calls what matters in the fight and, when you ask, tells you what a term means. A field handler, not a manual. That's me.",
+    short: 'The voice in your ear — reads the field, and (here) explains the terms.',
+    long: "The voice in your ear — near enough your mentor's. It calls what matters in a fight, and when you ask, it tells you what a word means. A guide, not a manual. That's me.",
   },
 };
 
@@ -253,6 +278,13 @@ const ALIASES = {
   region: 'frontier',
   escortee: 'hold',
   'signal clock': 'signalClock',
+  // "agent" retired in favor of grunling (the title pun is gone) — keep the
+  // alias so any lingering reference still resolves.
+  agent: 'grunling',
+  agents: 'grunling',
+  unit: 'grunling',
+  creature: 'grunling',
+  groundling: 'grunling',
 };
 
 // Normalize an arbitrary term/key into a canonical glossary key, or null.

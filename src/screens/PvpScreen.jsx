@@ -104,7 +104,7 @@ export default function PvpScreen({
         <div style={{ fontSize: 8, color: '#4a6a8a', letterSpacing: 2, marginBottom: 8 }}>YOUR DISPATCH</div>
         {playerSquad.length === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, color: '#555' }}>No agents selected.</span>
+            <span style={{ fontSize: 10, color: '#555' }}>No grunlings selected.</span>
             <button onClick={onBack} style={{ background: 'none', border: '1px solid #2a2a3a', borderRadius: 5, color: '#666', fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', padding: '5px 10px', textTransform: 'uppercase' }}>← Configure in Stable</button>
           </div>
         ) : (
