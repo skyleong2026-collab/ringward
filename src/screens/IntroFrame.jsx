@@ -11,7 +11,7 @@
 // the header so it's never lost. Uses the real game vocabulary (Handler, Stable,
 // Contract, Standing, Frontier, FOCUS) so the frame doubles as orientation.
 
-const ACCENT = '#e86040';   // 8gents orange
+const ACCENT = '#e86040';   // Ringward orange
 const SPOT = '#1e3a5f';     // Spotter label blue
 const SPOT_TEXT = '#6a8090';
 
@@ -33,7 +33,7 @@ export function IntroFrame({ onBegin }) {
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '44px 22px 36px' }}>
 
         {/* wordmark */}
-        <div style={{ fontSize: 26, fontWeight: 900, color: ACCENT, letterSpacing: 3, marginBottom: 4 }}>8gents</div>
+        <div style={{ fontSize: 26, fontWeight: 900, color: ACCENT, letterSpacing: 5, marginBottom: 4 }}>RINGWARD</div>
         <div style={{ fontSize: 9, color: '#555', letterSpacing: 4, marginBottom: 26 }}>FIELD BRIEFING</div>
 
         {/* the premise — world + you, neutral establishing voice */}

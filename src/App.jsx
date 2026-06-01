@@ -34,7 +34,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-S';
+const VERSION = 'vC-T';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -845,7 +845,7 @@ function App() {
         alignItems: 'center',
       }}>
         <span style={{ fontSize: 18, fontWeight: 900, color: '#e86040', letterSpacing: 2 }}>
-          8gents
+          RINGWARD
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => setShowIntro(true)} title="Field briefing" style={{
