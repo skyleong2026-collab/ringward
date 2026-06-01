@@ -1,8 +1,10 @@
 import { CREATURES } from './creatures.js';
+import { DEFAULT_RING, buildSlots, statBudgetOf } from './rings.js';
 
 const c = (id) => CREATURES.find((u) => u.id === id);
 
 function inst(creature, instanceId) {
+  const originRing = DEFAULT_RING; // §22.7 trio→Drop assignment is deferred content (§22.10 dial)
   return {
     instanceId,
     ...creature,
@@ -19,6 +21,11 @@ function inst(creature, instanceId) {
     foundAt: null,
     gearId: null,
     moduleIds: [],
+    // §22 origin-ring layer — fixed stat budget a reroll redistributes + slots
+    // gated by level/resonance. Engine never reads these (golden-safe).
+    originRing,
+    statBudget: statBudgetOf(creature),
+    slots: buildSlots(originRing, 1),
   };
 }
 

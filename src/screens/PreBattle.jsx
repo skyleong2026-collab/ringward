@@ -2,6 +2,13 @@ import { ARCHETYPES, archetypeLabel } from '../data/creatures.js';
 import { generateSpotterRead } from '../engine/spotter.js';
 import { applyLevel } from '../engine/progression.js';
 import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
+import { ringDef, squadResonance, resolveSlots } from '../data/rings.js';
+
+const SLOT_STYLE = {
+  open:    { color: '#7ed321', label: 'open' },
+  locked:  { color: '#2a2a3a', label: 'locked' },
+  dormant: { color: '#d0902a', label: 'dormant' },
+};
 
 const THREAT_STYLE = {
   'PRIMARY THREAT': { color: '#d0021b', bg: '#d0021b0f', border: '#d0021b2a' },
@@ -23,10 +30,13 @@ const ARCHETYPE_MECHANIC = {
   Echo:     'Echoes every allied attack at 50%',
 };
 
-function SquadChip({ unit }) {
+function SquadChip({ unit, resonance = 0 }) {
   const color = ARCHETYPES[unit.archetype]?.color || '#888';
   const eff = applyLevel(unit);
   const level = unit.level ?? 1;
+  const ring = ringDef(unit.originRing);
+  const slots = resolveSlots(unit, resonance);
+  const hasDormant = slots.some((s) => s.state === 'dormant');
   return (
     <div style={{
       background: color + '10',
@@ -45,6 +55,24 @@ function SquadChip({ unit }) {
       <span style={{ fontSize: 8, color: '#666', letterSpacing: 0.5 }}>
         HP {eff.hp} · ATK {eff.attack}
       </span>
+      {/* §22.5 slots: each pip is a slot, coloured by state for this squad's
+          resonance. Dormant (amber) = earned by level but unpowered until the
+          squad's resonance is high enough. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+        <span style={{ fontSize: 7, color: '#8a6a3a', letterSpacing: 0.5 }} title={`${ring.name} · resonance R ${resonance}`}>
+          {ring.name.replace('The ', '')} · R{resonance}
+        </span>
+        <span style={{ display: 'flex', gap: 2 }}>
+          {slots.map((s) => (
+            <span
+              key={s.index}
+              title={`slot ${s.index + 1}: ${SLOT_STYLE[s.state].label} (needs Lv.${s.needLevel}${s.needResonance ? `, R${s.needResonance}` : ''})`}
+              style={{ width: 5, height: 5, borderRadius: '50%', background: SLOT_STYLE[s.state].color, border: s.state === 'locked' ? '1px solid #333' : 'none' }}
+            />
+          ))}
+        </span>
+        {hasDormant && <span style={{ fontSize: 7, color: '#d0902a', letterSpacing: 0.3 }}>dormant</span>}
+      </div>
     </div>
   );
 }
@@ -169,7 +197,7 @@ export default function PreBattle({ encounter, playerSquad, onCommit, onBack }) 
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {playerSquad.map((u, i) => (
-            <SquadChip key={i} unit={u} />
+            <SquadChip key={i} unit={u} resonance={squadResonance(playerSquad, u.instanceId)} />
           ))}
         </div>
       </div>

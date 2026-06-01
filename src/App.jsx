@@ -23,6 +23,7 @@ import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
+import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost } from './data/rings.js';
 import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
@@ -48,12 +49,22 @@ function migrateCollection(col) {
       signature: base?.signature ?? u.signature ?? null, // re-sync from definition: signature text is static per species, so saved snapshots must not go stale on a rename (vC-Q)
       sigModIds: u.sigModIds ?? [],   // vC-K: add slot array for pre-vC-K saves
       sigRank: u.sigRank ?? 1,        // vC-M: signature rank for pre-vC-M saves
+      // §22 origin-ring layer for pre-§22 saves. statBudget reads from the live
+      // species definition (base totals) so it's the redistribution pool, not a
+      // leveled snapshot; slots seed from ring + current level (resonance comes
+      // at squad-set). All additive — the engine never reads these.
+      originRing: u.originRing ?? DEFAULT_RING,
+      statBudget: u.statBudget ?? statBudgetOf(base ?? u),
+      slots: u.slots ?? buildSlots(u.originRing ?? DEFAULT_RING, u.level ?? 1),
     };
   });
 }
 
 function createCaughtInstance(creature, zoneName) {
   const instanceId = `w${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+  // §22: a caught core's origin ring is stamped at incubation. Zone→ring mapping
+  // is deferred (§22.10 dial); default until then.
+  const originRing = DEFAULT_RING;
   return {
     instanceId,
     ...creature,
@@ -72,6 +83,9 @@ function createCaughtInstance(creature, zoneName) {
     moduleIds: [],
     sigModIds: [],
     sigRank: 1,
+    originRing,
+    statBudget: statBudgetOf(creature),
+    slots: buildSlots(originRing, 1),
   };
 }
 
@@ -173,12 +187,14 @@ function App() {
   // Credits (⦿) = volume loop, from contracts → levelling.
   // Shards  (◈) = collection loop, from contracts + region clears → recruit/rank.
   // Marks   (✦) = prestige, from Rivals + Arena → rarest unlocks.
+  // slag (§22) = the ONE universal build currency the Forge spends on rerolls.
+  // Read everywhere as (currencies.slag ?? 0) so pre-§22 saves never crash.
   const [currencies, setCurrencies] = useState(() => {
     try {
       const saved = localStorage.getItem('8gents_currencies');
-      return saved ? JSON.parse(saved) : { credits: 0, shards: 0, marks: 0 };
+      return saved ? JSON.parse(saved) : { credits: 0, shards: 0, marks: 0, slag: 0 };
     } catch {
-      return { credits: 0, shards: 0, marks: 0 };
+      return { credits: 0, shards: 0, marks: 0, slag: 0 };
     }
   });
 
@@ -296,6 +312,35 @@ function App() {
     setCollection((prev) => {
       const next = prev.map((u) =>
         u.instanceId === instanceId ? { ...u, sigRank: (u.sigRank ?? 1) + 1 } : u
+      );
+      persist(next, squadIds);
+      return next;
+    });
+  }
+
+  // §22.3: Forge reroll — REDISTRIBUTE a core's fixed stat budget for slag. The
+  // anti-treadmill keystone: the new HP/Attack/Armor/Speed must sum to exactly
+  // the core's statBudget (never grows the total — only the distribution moves).
+  // We reject any payload that fails the sum check, so a UI bug can't inflate.
+  function rerollStats(instanceId, newStats) {
+    const unit = collection.find((u) => u.instanceId === instanceId);
+    if (!unit) return;
+    const budget = unit.statBudget ?? statBudgetOf(unit);
+    const sum = (newStats.hp ?? 0) + (newStats.attack ?? 0) + (newStats.armor ?? 0) + (newStats.speed ?? 0);
+    if (sum !== budget) return;                          // INVARIANT: total is fixed
+    if (Object.values(newStats).some((v) => !Number.isInteger(v) || v < 1)) return; // no zeroed/fractional stats
+    const cost = rerollCost(unit.originRing);
+    if ((currencies.slag ?? 0) < cost) return;           // can't afford
+    setCurrencies((prev) => {
+      const next = { ...prev, slag: (prev.slag ?? 0) - cost };
+      persistCurrencies(next);
+      return next;
+    });
+    setCollection((prev) => {
+      const next = prev.map((u) =>
+        u.instanceId === instanceId
+          ? { ...u, hp: newStats.hp, attack: newStats.attack, armor: newStats.armor, speed: newStats.speed }
+          : u
       );
       persist(next, squadIds);
       return next;
@@ -890,6 +935,7 @@ function App() {
             onEquipModule={equipModule}
             onEquipSigMod={equipSigMod}
             onRankUp={rankUpSignature}
+            onRerollStats={rerollStats}
             discoveredSpecies={discoveredSpecies}
             onRecruit={recruitCreature}
           />

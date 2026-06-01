@@ -173,6 +173,12 @@ export const GLOSSARY = {
     short: '✦ Prestige currency — earned from and spent on rivals.',
     long: "Marks ✦ are the rival/prestige currency — you earn them settling scores and spend them on rival-tier rewards. The 'I beat someone who mattered' resource.",
   },
+  slag: {
+    term: 'Slag',
+    cat: 'resource',
+    short: '⚒ The one build currency — spent at the Forge to re-roll a core.',
+    long: "Slag ⚒ is common ground-matter, and the single currency that feeds building. It comes from ring runs and from rendering down culled grunlings. You spend it at the Forge to re-incubate a core and redistribute its stats — never to grow them. One currency for everything you make; the lower grades refine upward, so early slag never goes to waste.",
+  },
 
   // ── World & loop ─────────────────────────────────────────────────────────
   grunling: {

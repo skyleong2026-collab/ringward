@@ -3,6 +3,7 @@ import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
 import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
+import { ringDef, rerollCost } from '../data/rings.js';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 import { useState, useEffect } from 'react';
@@ -433,7 +434,116 @@ function ModuleSelectModal({ unit, onEquipModule, onClose }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenGearModal, onOpenModuleModal, onOpenModSelectModal, onRankUp, shards }) {
+// ─── Forge (§22.3) — redistribute a core's FIXED stat budget for slag ─────────
+// The reroll never grows the total: every point you pull off one stat lands in
+// an "unallocated" pool that must be fully re-placed before you can confirm. That
+// makes the sum-invariant true by construction in the UI; App.rerollStats also
+// re-checks it so a bug here can't inflate a core.
+const FORGE_STATS = [
+  { key: 'hp',     label: 'HP',  color: '#7ed321' },
+  { key: 'attack', label: 'ATK', color: '#d0021b' },
+  { key: 'armor',  label: 'ARM', color: '#4a90d9' },
+  { key: 'speed',  label: 'SPD', color: '#f5a623' },
+];
+
+function ForgeModal({ unit, slag = 0, onReroll, onClose }) {
+  const budget = unit.statBudget ?? (unit.hp + unit.attack + unit.armor + unit.speed);
+  const ring = ringDef(unit.originRing);
+  const cost = rerollCost(unit.originRing);
+  const [stats, setStats] = useState({ hp: unit.hp, attack: unit.attack, armor: unit.armor, speed: unit.speed });
+
+  const used = stats.hp + stats.attack + stats.armor + stats.speed;
+  const pool = budget - used;
+  const canAfford = slag >= cost;
+  const changed = FORGE_STATS.some((s) => stats[s.key] !== unit[s.key]);
+  const canConfirm = pool === 0 && changed && canAfford;
+
+  function dec(key) { setStats((s) => (s[key] > 1 ? { ...s, [key]: s[key] - 1 } : s)); }
+  function inc(key) {
+    setStats((s) => ((budget - (s.hp + s.attack + s.armor + s.speed)) > 0 ? { ...s, [key]: s[key] + 1 } : s));
+  }
+  function reset() { setStats({ hp: unit.hp, attack: unit.attack, armor: unit.armor, speed: unit.speed }); }
+  function confirm() { if (canConfirm) { onReroll(unit.instanceId, stats); onClose(); } }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#0a0a14', border: '1px solid #2a2a3a', borderRadius: 10, padding: 16, maxWidth: 340, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 900, color: '#eee', letterSpacing: 1 }}>FORGE — {unit.name}</span>
+          <span style={{ fontSize: 9, color: '#8a6a3a', letterSpacing: 1 }}>{ring.name}</span>
+        </div>
+        <div style={{ fontSize: 10, color: '#888', lineHeight: 1.4, marginBottom: 12 }}>
+          Re-incubate this core to redistribute its <b style={{ color: '#aaa' }}>fixed budget of {budget}</b>. The total never grows — only where the points sit.
+        </div>
+
+        {FORGE_STATS.map(({ key, label, color }) => {
+          const v = stats[key];
+          const delta = v - unit[key];
+          return (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ width: 34, fontSize: 10, fontWeight: 700, color, letterSpacing: 1 }}>{label}</span>
+              <button
+                onClick={() => dec(key)}
+                disabled={v <= 1}
+                style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid #2a2a3a', background: v > 1 ? '#16161f' : '#0d0d18', color: v > 1 ? '#ccc' : '#333', fontSize: 14, fontWeight: 700, cursor: v > 1 ? 'pointer' : 'default' }}
+              >−</button>
+              <span style={{ minWidth: 42, textAlign: 'center', fontSize: 13, fontWeight: 800, color: '#eee' }}>
+                {v}
+                {delta !== 0 && (
+                  <span style={{ fontSize: 9, color: delta > 0 ? '#7ed321' : '#d0691b', marginLeft: 3 }}>
+                    {delta > 0 ? `+${delta}` : delta}
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={() => inc(key)}
+                disabled={pool <= 0}
+                style={{ width: 26, height: 26, borderRadius: 5, border: '1px solid #2a2a3a', background: pool > 0 ? '#16161f' : '#0d0d18', color: pool > 0 ? '#ccc' : '#333', fontSize: 14, fontWeight: 700, cursor: pool > 0 ? 'pointer' : 'default' }}
+              >+</button>
+              <div style={{ flex: 1, height: 4, background: '#16161f', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, (v / budget) * 100)}%`, height: '100%', background: color }} />
+              </div>
+            </div>
+          );
+        })}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #1a1a2a', paddingTop: 10, marginTop: 6 }}>
+          <span style={{ fontSize: 10, color: pool === 0 ? '#3a6a4a' : '#d0902a', letterSpacing: 0.5 }}>
+            {pool === 0 ? 'budget balanced' : `${pool} unallocated — place all to forge`}
+          </span>
+          <span style={{ fontSize: 9, color: canAfford ? '#8a8a5a' : '#d0021b', letterSpacing: 0.5 }}>
+            cost ⚒ {cost} {!canAfford && `(have ${slag})`}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr', gap: 6, marginTop: 12 }}>
+          <button
+            onClick={reset}
+            disabled={!changed}
+            style={{ padding: '9px 4px', borderRadius: 6, border: '1px solid #2a2a3a', background: 'none', color: changed ? '#888' : '#333', fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: changed ? 'pointer' : 'default' }}
+          >RESET</button>
+          <button
+            onClick={onClose}
+            style={{ padding: '9px 4px', borderRadius: 6, border: '1px solid #2a2a3a', background: 'none', color: '#888', fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: 'pointer' }}
+          >CANCEL</button>
+          <button
+            onClick={confirm}
+            disabled={!canConfirm}
+            style={{ padding: '9px 4px', borderRadius: 6, border: `1px solid ${canConfirm ? '#5a8a4a' : '#1e1e2e'}`, background: canConfirm ? '#1a2a16' : '#0d0d18', color: canConfirm ? '#9ed36a' : '#333', fontSize: 10, fontWeight: 800, letterSpacing: 1, cursor: canConfirm ? 'pointer' : 'default' }}
+          >FORGE · ⚒ {cost}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenGearModal, onOpenModuleModal, onOpenModSelectModal, onOpenForge, onRankUp, shards }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
@@ -550,6 +660,19 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
             <span style={{ fontSize: 9, color: '#222' }}>tap to equip</span>
           )}
         </div>
+
+        {onOpenForge && (
+          <div
+            onClick={() => onOpenForge(unit)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>FORGE</span>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: '#8a6a3a' }}>
+              {unit.hp}/{unit.attack}/{unit.armor}/{unit.speed}
+            </span>
+            <span style={{ fontSize: 8, color: '#333', marginLeft: 'auto' }}>redistribute →</span>
+          </div>
+        )}
       </div>
 
       <SignatureRow unit={unit} onRankUp={onRankUp} shards={shards} />
@@ -604,10 +727,11 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod, onRankUp, discoveredSpecies = [], onRecruit }) {
+export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod, onRankUp, onRerollStats, discoveredSpecies = [], onRecruit }) {
   const [gearModalUnit, setGearModalUnit] = useState(null);
   const [moduleModalUnit, setModuleModalUnit] = useState(null);
   const [modSelectUnit, setModSelectUnit] = useState(null);
+  const [forgeUnit, setForgeUnit] = useState(null);
   const [recruitOpen, setRecruitOpen] = useState(false);
   const activeSquad = collection.filter((u) => squadIds.includes(u.instanceId));
   const reserve = collection.filter((u) => !squadIds.includes(u.instanceId));
@@ -616,6 +740,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
   const credits = currencies.credits ?? 0;
   const shards  = currencies.shards  ?? 0;
   const marks   = currencies.marks   ?? 0;
+  const slag    = currencies.slag    ?? 0;
   // vC-N recruit roster: surface a dot when something is discovered + affordable.
   const ownedIds = new Set(collection.map((u) => u.id));
   const canRecruitNow = onRecruit && RECRUITABLE_IDS.some((id) => discoveredSpecies.includes(id) && shards >= RECRUITABLE[id].cost);
@@ -632,6 +757,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ fontSize: 9, color: '#8888cc', letterSpacing: 0.5 }}><GlossaryTerm term="credits" align="right" style={{ color: '#8888cc' }}>⦿</GlossaryTerm> {credits}</span>
             <span style={{ fontSize: 9, color: '#3a9a6a', letterSpacing: 0.5 }}><GlossaryTerm term="shards" align="right" style={{ color: '#3a9a6a' }}>◈</GlossaryTerm> {shards}</span>
+            {slag > 0 && <span style={{ fontSize: 9, color: '#8a8a5a', letterSpacing: 0.5 }}><GlossaryTerm term="slag" align="right" style={{ color: '#8a8a5a' }}>⚒</GlossaryTerm> {slag}</span>}
             {marks > 0 && <span style={{ fontSize: 9, color: '#d0902a', letterSpacing: 0.5 }}><GlossaryTerm term="marks" align="right" style={{ color: '#d0902a' }}>✦</GlossaryTerm> {marks}</span>}
           </div>
         </div>
@@ -766,6 +892,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
               onOpenGearModal={(u) => setGearModalUnit(u)}
               onOpenModuleModal={(u) => setModuleModalUnit(u)}
               onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
+              onOpenForge={onRerollStats ? (u) => setForgeUnit(u) : null}
               onRankUp={onRankUp}
               shards={shards}
             />
@@ -798,6 +925,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
                 onOpenGearModal={(u) => setGearModalUnit(u)}
                 onOpenModuleModal={(u) => setModuleModalUnit(u)}
                 onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
+                onOpenForge={onRerollStats ? (u) => setForgeUnit(u) : null}
               onRankUp={onRankUp}
               shards={shards}
               />
@@ -833,6 +961,14 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
           unit={modSelectUnit}
           onEquipSigMod={onEquipSigMod}
           onClose={() => setModSelectUnit(null)}
+        />
+      )}
+      {forgeUnit && onRerollStats && (
+        <ForgeModal
+          unit={collection.find((u) => u.instanceId === forgeUnit.instanceId) ?? forgeUnit}
+          slag={slag}
+          onReroll={onRerollStats}
+          onClose={() => setForgeUnit(null)}
         />
       )}
     </div>
