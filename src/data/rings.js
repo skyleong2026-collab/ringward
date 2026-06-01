@@ -205,13 +205,17 @@ export function statBudgetOf(creature) {
   );
 }
 
-// §22.7 per-ring stat budget — "deeper origin ring = bigger stat budget". The ring
-// scales a core's combat budget by this multiplier; Reaches = 1.0 is the baseline
-// (everything was Reaches before origin rings, so existing balance is untouched),
-// Rim is leaner, Deep/Drop are the bigger chassis (Drop = the endgame max). The
-// budget is stamped at incubation and is FIXED — the Forge only redistributes it,
-// never grows it (§22.9 anti-treadmill). §22.10 strawman dials — tune for balance.
-export const RING_BUDGET_MULT = { Rim: 0.9, Reaches: 1.0, Deep: 1.2, Drop: 1.4 };
+// §22.7 per-ring stat budget — "deeper origin ring = bigger stat budget". Reaches =
+// 1.0 baseline (everything was Reaches pre-rings, so existing balance is untouched);
+// Rim leaner, Deep/Drop bigger. GENTLE ladder by deliberate design:
+//   ring-balance.mjs found combat SNOWBALLS on any stat lead — a mirror is 50% at
+//   1.0× but 100% by 1.1×. So a LARGE budget gap would make origin ring a hard
+//   stat-check that overrides buildcraft (anti-north-star). Endgame power is meant
+//   to come from the LEVEL CAP (Drop reaches L10 ≈ 2.08× base from level growth vs
+//   Reaches L5 ≈ 1.48×) + more slots, NOT a big raw-stat bonus. The budget is a
+//   modest nudge + Forge headroom. Real difficulty lever = enemy scaling, separate.
+// Stamped at incubation, FIXED — the Forge only redistributes it (§22.9). §22.10 dial.
+export const RING_BUDGET_MULT = { Rim: 0.95, Reaches: 1.0, Deep: 1.1, Drop: 1.2 };
 
 export function ringBudgetMult(ring) {
   return RING_BUDGET_MULT[ring] ?? RING_BUDGET_MULT[DEFAULT_RING];
