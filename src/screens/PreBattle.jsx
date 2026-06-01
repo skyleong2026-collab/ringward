@@ -88,6 +88,7 @@ function EnemyRow({ unit, level, threatLabel, isLast }) {
   const ts = threatLabel ? THREAT_STYLE[threatLabel] : null;
   const lvl = level ?? unit.level ?? 1;
   const eff = applyLevel({ ...unit, level: lvl });
+  const role = roleOf(unit.id);
 
   return (
     <div style={{
@@ -110,12 +111,21 @@ function EnemyRow({ unit, level, threatLabel, isLast }) {
           }}>
             {archetypeLabel(unit.archetype).toUpperCase()}
           </span>
+          {role && (
+            <span style={{
+              fontSize: 8, fontWeight: 800, color,
+              background: color + '14', border: `1px solid ${color}3a`,
+              borderRadius: 3, padding: '1px 5px', letterSpacing: 0.5,
+            }}>
+              {role.tag.toUpperCase()}
+            </span>
+          )}
           <span style={{ fontSize: 8, color: '#888', letterSpacing: 0.5 }}>
             Lv.{lvl} · HP {eff.hp} · ATK {eff.attack}
           </span>
         </div>
-        <span style={{ fontSize: 10, color: '#333' }}>
-          {ARCHETYPE_IMPLICATION[unit.archetype] || ''}
+        <span style={{ fontSize: 10, color: '#444' }}>
+          {role ? role.line : (ARCHETYPE_IMPLICATION[unit.archetype] || '')}
         </span>
         {ARCHETYPE_MECHANIC[unit.archetype] && (
           <span style={{ fontSize: 9, color: '#1e2e3e', letterSpacing: 0.3 }}>
