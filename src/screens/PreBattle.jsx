@@ -1,4 +1,4 @@
-import { ARCHETYPES, archetypeLabel } from '../data/creatures.js';
+import { ARCHETYPES, archetypeLabel, roleOf } from '../data/creatures.js';
 import { generateSpotterRead } from '../engine/spotter.js';
 import { applyLevel } from '../engine/progression.js';
 import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
@@ -37,6 +37,7 @@ function SquadChip({ unit, resonance = 0 }) {
   const ring = ringDef(unit.originRing);
   const slots = resolveSlots(unit, resonance);
   const hasDormant = slots.some((s) => s.state === 'dormant');
+  const role = roleOf(unit.id);
   return (
     <div style={{
       background: color + '10',
@@ -48,6 +49,11 @@ function SquadChip({ unit, resonance = 0 }) {
       gap: 2,
     }}>
       <span style={{ fontSize: 10, fontWeight: 700, color: '#bbb', letterSpacing: 0.5 }}>{unit.name}</span>
+      {role && (
+        <span title={role.line} style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.5, color }}>
+          {role.tag.toUpperCase()}
+        </span>
+      )}
       <span style={{ fontSize: 8, color, letterSpacing: 0.5 }}>
         <GlossaryTerm term={unit.archetype} style={{ color }}>{archetypeLabel(unit.archetype).toUpperCase()}</GlossaryTerm>
         <span style={{ color: '#555' }}> · Lv.{level}</span>

@@ -1,4 +1,4 @@
-import { ARCHETYPES, CREATURES, CREATURE_BY_ID, RECRUITABLE, RECRUITABLE_IDS, archetypeLabel } from '../data/creatures.js';
+import { ARCHETYPES, CREATURES, CREATURE_BY_ID, RECRUITABLE, RECRUITABLE_IDS, archetypeLabel, roleOf } from '../data/creatures.js';
 import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
 import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
@@ -567,6 +567,7 @@ function SlotsRow({ unit, resonance = 0, onOpenSocket }) {
 
 function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, resonance, onOpenSocket, onOpenModSelectModal, onOpenForge, onRankUp, shards }) {
   const arch = ARCHETYPES[unit.archetype];
+  const role = roleOf(unit.id);
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
   const [bouncing, setBouncing] = useState(false);
@@ -616,7 +617,18 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
           {unit.survivalCount >= 10 && ' ⚔'}
           {unit.survivalCount >= 5 && unit.survivalCount < 10 && ' •'}
         </div>
-        <div style={{ fontSize: 9, color: arch.color, letterSpacing: 1, marginTop: 1 }}>
+        {/* Role tag (vC-U) — the unit's JOB, read at a glance. */}
+        {role && (
+          <div title={role.line} style={{
+            display: 'inline-block', marginTop: 3,
+            fontSize: 8, fontWeight: 800, letterSpacing: 0.5, color: arch.color,
+            background: arch.color + '14', border: `1px solid ${arch.color}3a`,
+            borderRadius: 3, padding: '1px 6px',
+          }}>
+            {role.tag.toUpperCase()}
+          </div>
+        )}
+        <div style={{ fontSize: 9, color: arch.color, letterSpacing: 1, marginTop: 3 }}>
           {ARCHETYPE_ABBR[unit.archetype]}
           {unit.feedHistory.length > 0 && (
             <span style={{ color: '#555', marginLeft: 5 }}>

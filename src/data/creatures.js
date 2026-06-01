@@ -171,6 +171,33 @@ export const CREATURES = [
 
 export const CREATURE_BY_ID = Object.fromEntries(CREATURES.map((c) => [c.id, c]));
 
+// ─── Roles (vC-U) ─────────────────────────────────────────────────────────────
+// The one-line FUNCTIONAL identity of each species — its job in a fight — surfaced
+// on the card + PreBattle so a unit's PURPOSE reads at a glance, not just its name.
+// Display-only: the engine reads archetype + signature, never role. `tag` is the
+// short handle the card shows; `line` is the player-fantasy one-liner. Each role is
+// distinct — no two units share a job. Names are downstream of these (a name should
+// earn its meaning from the role, e.g. Shield-Breaker → "Sunderclaw").
+export const ROLES = {
+  vault:   { tag: 'Squad Shield',     line: 'Banks shielding, then barriers the whole squad.' },
+  bastion: { tag: 'Bodyguard',        line: 'Throws itself in front of the biggest hit each round.' },
+  bulwark: { tag: 'Blast Damper',     line: 'Soaks spread & detonation for the squad — the anti-Reactor.' },
+  conduit: { tag: 'Carry Amplifier',  line: 'Echoes your carry at full force — doubles its damage.' },
+  nexus:   { tag: 'Burst Enabler',    line: 'On command, the whole squad repeats its last turn.' },
+  link:    { tag: 'Field Medic',      line: 'Each round, shields whoever is hurt worst.' },
+  fang:    { tag: 'Assassin',         line: 'Ignores taunt — strikes the protected backline.' },
+  striker: { tag: 'Shield-Breaker',   line: 'Strips armor & shields off the target for the team.' },
+  claw:    { tag: 'Closer',           line: 'Hunts the lowest-HP enemy and executes.' },
+  spark:   { tag: 'Reactor Battery',  line: 'Its blast charges every allied Reactor.' },
+  flicker: { tag: 'Sustained Burner', line: 'Small detonations, early and often — relentless.' },
+  cinder:  { tag: 'Delayed Nuke',     line: 'Charges slow, then ends the round in one blast.' },
+};
+
+export function roleOf(idOrCreature) {
+  const id = typeof idOrCreature === 'string' ? idOrCreature : idOrCreature?.id;
+  return ROLES[id] ?? null;
+}
+
 // ─── Recruitment (vC-N) ──────────────────────────────────────────────────────
 // Most species start owned. A small "rare finds" set starts LOCKED: each is
 // first DISCOVERED by winning a thematically-matched contract (contracts.js
