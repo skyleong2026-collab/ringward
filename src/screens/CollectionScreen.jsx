@@ -3,7 +3,7 @@ import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
 import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
 import { xpProgress, getAuraStyle } from '../engine/progression.js';
-import { ringDef, rerollCost } from '../data/rings.js';
+import { ringDef, rerollCost, resolveSlots, squadResonance } from '../data/rings.js';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 import { useState, useEffect } from 'react';
@@ -267,37 +267,49 @@ function XpBar({ xp }) {
   );
 }
 
-function GearSelectModal({ unit, onEquipGear, onClose }) {
+// ─── Socket modal (§22.4) — fill one slot with a gear OR a module ─────────────
+// Slots are generic build space: a core carries one gear (its behavioral verb) and
+// fills the rest with modules (dials). The modal targets ONE slot; picking an item
+// sockets it there. socketInto (App) enforces one-gear / no-dupe-module, so picking
+// a gear that's already elsewhere just moves it. Items already socketed on this
+// core are tagged so the build reads at a glance.
+function SocketModal({ unit, slotIndex, onSocket, onClose }) {
+  const slot = unit.slots?.[slotIndex];
+  const cur = slot?.socket ?? null;
   const arch = ARCHETYPES[unit.archetype];
+  const socketedGearId = unit.slots?.find((s) => s.socket?.type === 'gear')?.socket.id ?? null;
+  const socketedModIds = new Set((unit.slots ?? []).filter((s) => s.socket?.type === 'module').map((s) => s.socket.id));
+
   const allGear = Object.values(GEAR);
   const archGear = allGear.filter((g) => g.archetype === unit.archetype);
+  const anyGear  = allGear.filter((g) => g.archetype === null);
   const otherGear = allGear.filter((g) => g.archetype !== unit.archetype && g.archetype !== null);
-  const anyArchGear = allGear.filter((g) => g.archetype === null);
+  const modules = Object.values(MODULES).filter((m) => !m.hidden);
 
-  function renderGear(gear, dim) {
-    const equipped = unit.gearId === gear.id;
+  function place(item) {
+    const isCurrent = cur && cur.type === item.type && cur.id === item.id;
+    onSocket(unit.instanceId, slotIndex, isCurrent ? null : item);
+    onClose();
+  }
+
+  function GearRow({ gear, dim }) {
+    const here = cur?.type === 'gear' && cur.id === gear.id;
+    const elsewhere = !here && socketedGearId === gear.id;
     return (
       <div
-        key={gear.id}
-        onClick={() => { onEquipGear(unit.instanceId, equipped ? null : gear.id); onClose(); }}
+        onClick={() => place({ type: 'gear', id: gear.id })}
         style={{
-          background: equipped ? gear.color + '18' : '#0d0d18',
-          border: `1px solid ${equipped ? gear.color + '55' : '#2a2a3a'}`,
-          borderRadius: 7,
-          padding: '10px 12px',
-          cursor: 'pointer',
-          marginBottom: 6,
-          opacity: dim ? 0.45 : 1,
+          background: here ? gear.color + '18' : '#0d0d18',
+          border: `1px solid ${here ? gear.color + '55' : '#2a2a3a'}`,
+          borderRadius: 7, padding: '10px 12px', cursor: 'pointer', marginBottom: 6, opacity: dim ? 0.45 : 1,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <span style={{ fontWeight: 700, fontSize: 12, color: gear.color, letterSpacing: 0.5 }}>{gear.name}</span>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {equipped && <span style={{ fontSize: 8, color: gear.color, letterSpacing: 1 }}>EQUIPPED</span>}
-            <span style={{
-              fontSize: 8, color: gear.color, background: gear.color + '18',
-              border: `1px solid ${gear.color}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1,
-            }}>{gear.callout}</span>
+            {here && <span style={{ fontSize: 8, color: gear.color, letterSpacing: 1 }}>IN THIS SLOT</span>}
+            {elsewhere && <span style={{ fontSize: 8, color: '#6a6a3a', letterSpacing: 0.5 }}>moves here</span>}
+            <span style={{ fontSize: 8, color: gear.color, background: gear.color + '18', border: `1px solid ${gear.color}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1 }}>{gear.callout}</span>
           </div>
         </div>
         <div style={{ fontSize: 10, color: dim ? '#555' : '#888', lineHeight: 1.4 }}>{gear.description}</div>
@@ -305,128 +317,81 @@ function GearSelectModal({ unit, onEquipGear, onClose }) {
     );
   }
 
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }}
-      onClick={onClose}
-    >
-      <div
-        style={{ background: '#0a0a14', border: '1px solid #2a2a3a', borderRadius: 10, padding: 16, maxWidth: 340, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP <GlossaryTerm term="gear" style={{ color: '#666' }}>GEAR</GlossaryTerm></div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#eee', marginTop: 2 }}>{unit.name}</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#444', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>×</button>
-        </div>
-
-        {archGear.length > 0 && (
-          <>
-            <div style={{ fontSize: 9, color: arch.color + 'aa', letterSpacing: 1.5, marginBottom: 8 }}>
-              {unit.archetype.toUpperCase()} GEAR
-            </div>
-            {archGear.map((g) => renderGear(g, false))}
-          </>
-        )}
-
-        {anyArchGear.length > 0 && (
-          <>
-            <div style={{ fontSize: 9, color: '#666', letterSpacing: 1.5, margin: '10px 0 8px' }}>ANY ARCHETYPE</div>
-            {anyArchGear.map((g) => renderGear(g, false))}
-          </>
-        )}
-
-        {otherGear.length > 0 && (
-          <>
-            <div style={{ fontSize: 9, color: '#2a2a3a', letterSpacing: 1.5, margin: '10px 0 8px' }}>OTHER ARCHETYPES</div>
-            {otherGear.map((g) => renderGear(g, true))}
-          </>
-        )}
-
-        {unit.gearId && (
-          <button
-            onClick={() => { onEquipGear(unit.instanceId, null); onClose(); }}
-            style={{
-              width: '100%', marginTop: 6, padding: '8px',
-              background: 'none', border: '1px solid #2a2a3a', borderRadius: 6,
-              color: '#444', fontSize: 11, cursor: 'pointer', letterSpacing: 1,
-            }}
-          >
-            Remove Gear
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ModuleSelectModal({ unit, onEquipModule, onClose }) {
-  const modules = Object.values(MODULES).filter((m) => !m.hidden);
-  const equippedIds = unit.moduleIds || [];
-  const atCap = equippedIds.length >= 3;
-
-  function renderModule(mod, i) {
-    const equipped = equippedIds.includes(mod.id);
-    const locked = atCap && !equipped;
+  function ModRow({ mod }) {
+    const here = cur?.type === 'module' && cur.id === mod.id;
+    const elsewhere = !here && socketedModIds.has(mod.id);
     return (
       <div
-        key={mod.id}
-        onClick={() => { if (!locked) onEquipModule(unit.instanceId, mod.id); }}
+        onClick={() => place({ type: 'module', id: mod.id })}
         style={{
-          background: equipped ? mod.color + '18' : '#0d0d18',
-          border: `1px solid ${equipped ? mod.color + '55' : '#2a2a3a'}`,
-          borderRadius: 7,
-          padding: '10px 12px',
-          cursor: locked ? 'default' : 'pointer',
-          marginBottom: 6,
-          opacity: locked ? 0.4 : 1,
+          background: here ? mod.color + '18' : '#0d0d18',
+          border: `1px solid ${here ? mod.color + '55' : '#2a2a3a'}`,
+          borderRadius: 7, padding: '10px 12px', cursor: 'pointer', marginBottom: 6, opacity: elsewhere ? 0.5 : 1,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <span style={{ fontWeight: 700, fontSize: 12, color: mod.color, letterSpacing: 0.5 }}>{mod.name}</span>
-          {equipped && <span style={{ fontSize: 8, color: mod.color, letterSpacing: 1 }}>EQUIPPED</span>}
+          {here && <span style={{ fontSize: 8, color: mod.color, letterSpacing: 1 }}>IN THIS SLOT</span>}
+          {elsewhere && <span style={{ fontSize: 8, color: '#5a5a6a', letterSpacing: 0.5 }}>moves here</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 8, color: mod.color, background: mod.color + '18', border: `1px solid ${mod.color}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1, flexShrink: 0 }}>
-            {mod.category}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 8, color: mod.color, background: mod.color + '18', border: `1px solid ${mod.color}35`, borderRadius: 3, padding: '1px 5px', letterSpacing: 1, flexShrink: 0 }}>{mod.category}</span>
           <div style={{ fontSize: 9, color: '#666' }}>{mod.description}</div>
         </div>
       </div>
     );
   }
 
+  const dormant = slot?.state === 'dormant';
+
   return (
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 16 }}
       onClick={onClose}
     >
       <div
-        style={{ background: '#0a0a14', border: '1px solid #2a2a3a', borderRadius: 10, padding: 16, maxWidth: 340, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
+        style={{ background: '#0a0a14', border: '1px solid #2a2a3a', borderRadius: 10, padding: 16, maxWidth: 340, width: '100%', maxHeight: '82vh', overflow: 'auto' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>EQUIP <GlossaryTerm term="module" style={{ color: '#666' }}>MODULES</GlossaryTerm> — {equippedIds.length}/3</div>
+            <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
+              SOCKET <GlossaryTerm term="slot" style={{ color: '#666' }}>SLOT</GlossaryTerm> {slotIndex + 1}
+            </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#eee', marginTop: 2 }}>{unit.name}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#444', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}>×</button>
         </div>
+        {dormant && (
+          <div style={{ fontSize: 9, color: '#d0902a', lineHeight: 1.5, marginBottom: 10, background: '#1a140622', border: '1px solid #d0902a33', borderRadius: 5, padding: '6px 8px' }}>
+            ◑ Dormant slot — whatever you socket here stays dark until this squad's resonance reaches R{slot.needResonance}. Field deeper company to wake it.
+          </div>
+        )}
 
-        {modules.map((mod, i) => renderModule(mod, i))}
+        {archGear.length > 0 && (<>
+          <div style={{ fontSize: 9, color: arch.color + 'aa', letterSpacing: 1.5, margin: '8px 0' }}>{unit.archetype.toUpperCase()} <GlossaryTerm term="gear" style={{ color: arch.color + 'aa' }}>GEAR</GlossaryTerm></div>
+          {archGear.map((g) => <GearRow key={g.id} gear={g} dim={false} />)}
+        </>)}
+        {anyGear.length > 0 && (<>
+          <div style={{ fontSize: 9, color: '#666', letterSpacing: 1.5, margin: '10px 0 8px' }}>ANY ARCHETYPE</div>
+          {anyGear.map((g) => <GearRow key={g.id} gear={g} dim={false} />)}
+        </>)}
+        {otherGear.length > 0 && (<>
+          <div style={{ fontSize: 9, color: '#2a2a3a', letterSpacing: 1.5, margin: '10px 0 8px' }}>OTHER ARCHETYPES</div>
+          {otherGear.map((g) => <GearRow key={g.id} gear={g} dim />)}
+        </>)}
 
-        {equippedIds.length > 0 && (
+        <div style={{ fontSize: 9, color: '#666', letterSpacing: 1.5, margin: '12px 0 8px' }}>
+          <GlossaryTerm term="module" style={{ color: '#666' }}>MODULES</GlossaryTerm> — dials
+        </div>
+        {modules.map((m) => <ModRow key={m.id} mod={m} />)}
+
+        {cur && (
           <button
-            onClick={onClose}
-            style={{
-              width: '100%', marginTop: 6, padding: '8px',
-              background: 'none', border: '1px solid #2a2a3a', borderRadius: 6,
-              color: '#888', fontSize: 11, cursor: 'pointer', letterSpacing: 1,
-            }}
+            onClick={() => { onSocket(unit.instanceId, slotIndex, null); onClose(); }}
+            style={{ width: '100%', marginTop: 6, padding: '8px', background: 'none', border: '1px solid #2a2a3a', borderRadius: 6, color: '#888', fontSize: 11, cursor: 'pointer', letterSpacing: 1 }}
           >
-            Done
+            Empty this slot
           </button>
         )}
       </div>
@@ -543,7 +508,60 @@ function ForgeModal({ unit, slag = 0, onReroll, onClose }) {
   );
 }
 
-function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, onOpenGearModal, onOpenModuleModal, onOpenModSelectModal, onOpenForge, onRankUp, shards }) {
+// §22.4 slot row — the core's build space. Each chip is a slot, resolved against
+// the squad's current resonance: locked (level too low), open (powered), or
+// dormant (earned but resonance-starved — a socketed item here stays dark). Tap an
+// unlocked slot to socket a gear or module.
+function SlotsRow({ unit, resonance = 0, onOpenSocket }) {
+  const ring = ringDef(unit.originRing);
+  const slots = resolveSlots(unit, resonance);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #111', paddingTop: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>SLOTS</span>
+        <span style={{ fontSize: 7, color: '#8a6a3a', letterSpacing: 0.5 }} title={`${ring.name} · resonance R${resonance}`}>
+          {ring.name.replace('The ', '')} · R{resonance}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {slots.map((s) => {
+          const item = s.socket ? (s.socket.type === 'gear' ? GEAR[s.socket.id] : MODULES[s.socket.id]) : null;
+          const locked = s.state === 'locked';
+          const dormant = s.state === 'dormant';
+          const baseColor = item?.color || '#444';
+          const glyph = locked ? '⊘' : dormant ? '◑' : item ? '●' : '+';
+          return (
+            <button
+              key={s.index}
+              onClick={() => { if (!locked) onOpenSocket(unit, s.index); }}
+              disabled={locked}
+              title={
+                locked ? `Locked — opens at Lv.${s.needLevel}`
+                : dormant ? `${item ? item.name + ' — ' : ''}dormant until R${s.needResonance}`
+                : item ? `${item.name} — powered` : 'Empty — tap to socket'
+              }
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                background: item ? baseColor + (dormant ? '10' : '20') : '#0d0d14',
+                border: `1px solid ${locked ? '#1a1a26' : dormant ? '#d0902a44' : item ? baseColor + '55' : '#1e1e2a'}`,
+                borderRadius: 5, padding: '3px 7px', cursor: locked ? 'default' : 'pointer',
+                opacity: locked ? 0.5 : (dormant && item) ? 0.6 : 1,
+              }}
+            >
+              <span style={{ fontSize: 8, color: locked ? '#333' : dormant ? '#d0902a' : item ? baseColor : '#3a6a4a' }}>{glyph}</span>
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 70,
+                color: item ? (dormant ? '#8a7a5a' : baseColor) : locked ? '#333' : '#3a3a4a' }}>
+                {item ? item.name : locked ? `Lv.${s.needLevel}` : 'socket'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, justFed, resonance, onOpenSocket, onOpenModSelectModal, onOpenForge, onRankUp, shards }) {
   const arch = ARCHETYPES[unit.archetype];
   const aura = getAuraStyle(unit.feedHistory);
   const canAdd = !inSquad && !squadFull;
@@ -624,43 +642,9 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
         )}
       </div>
 
+      <SlotsRow unit={unit} resonance={resonance} onOpenSocket={onOpenSocket} />
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #111', paddingTop: '4px' }}>
-        <div
-          onClick={() => onOpenGearModal(unit)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '4px 0',
-            cursor: 'pointer',
-          }}
-        >
-          <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>GEAR</span>
-          {unit.gearId ? (
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: GEAR[unit.gearId]?.color || '#888' }}>
-              {GEAR[unit.gearId]?.name || unit.gearId}
-            </span>
-          ) : (
-            <span style={{ fontSize: 9, color: '#222' }}>tap to equip</span>
-          )}
-        </div>
-
-        <div
-          onClick={() => onOpenModuleModal(unit)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '4px 0',
-            cursor: 'pointer',
-          }}
-        >
-          <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5 }}>MODULES</span>
-          {unit.moduleIds?.length > 0 ? (
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: '#888' }}>
-              {unit.moduleIds.map(id => MODULES[id]?.name || id).join(', ')}
-            </span>
-          ) : (
-            <span style={{ fontSize: 9, color: '#222' }}>tap to equip</span>
-          )}
-        </div>
-
         {onOpenForge && (
           <div
             onClick={() => onOpenForge(unit)}
@@ -727,9 +711,8 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   );
 }
 
-export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onEquipGear, onEquipModule, onEquipSigMod, onRankUp, onRerollStats, discoveredSpecies = [], onRecruit }) {
-  const [gearModalUnit, setGearModalUnit] = useState(null);
-  const [moduleModalUnit, setModuleModalUnit] = useState(null);
+export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onSocket, onEquipSigMod, onRankUp, onRerollStats, discoveredSpecies = [], onRecruit }) {
+  const [socketTarget, setSocketTarget] = useState(null); // { instanceId, slotIndex }
   const [modSelectUnit, setModSelectUnit] = useState(null);
   const [forgeUnit, setForgeUnit] = useState(null);
   const [recruitOpen, setRecruitOpen] = useState(false);
@@ -889,8 +872,8 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
               onFeed={onFeed}
               canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
               justFed={justFedInstanceId === u.instanceId}
-              onOpenGearModal={(u) => setGearModalUnit(u)}
-              onOpenModuleModal={(u) => setModuleModalUnit(u)}
+              resonance={squadResonance(activeSquad, u.instanceId)}
+              onOpenSocket={(unit, slotIndex) => setSocketTarget({ instanceId: unit.instanceId, slotIndex })}
               onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
               onOpenForge={onRerollStats ? (u) => setForgeUnit(u) : null}
               onRankUp={onRankUp}
@@ -922,8 +905,8 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
                 onFeed={onFeed}
                 canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
                 justFed={justFedInstanceId === u.instanceId}
-                onOpenGearModal={(u) => setGearModalUnit(u)}
-                onOpenModuleModal={(u) => setModuleModalUnit(u)}
+                resonance={0}
+                onOpenSocket={(unit, slotIndex) => setSocketTarget({ instanceId: unit.instanceId, slotIndex })}
                 onOpenModSelectModal={onEquipSigMod ? (u) => setModSelectUnit(u) : null}
                 onOpenForge={onRerollStats ? (u) => setForgeUnit(u) : null}
               onRankUp={onRankUp}
@@ -942,20 +925,18 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
           onClose={() => setRecruitOpen(false)}
         />
       )}
-      {gearModalUnit && (
-        <GearSelectModal
-          unit={gearModalUnit}
-          onEquipGear={onEquipGear}
-          onClose={() => setGearModalUnit(null)}
-        />
-      )}
-      {moduleModalUnit && onEquipModule && (
-        <ModuleSelectModal
-          unit={moduleModalUnit}
-          onEquipModule={onEquipModule}
-          onClose={() => setModuleModalUnit(null)}
-        />
-      )}
+      {socketTarget && onSocket && (() => {
+        const unit = collection.find((u) => u.instanceId === socketTarget.instanceId);
+        if (!unit) return null;
+        return (
+          <SocketModal
+            unit={unit}
+            slotIndex={socketTarget.slotIndex}
+            onSocket={onSocket}
+            onClose={() => setSocketTarget(null)}
+          />
+        );
+      })()}
       {modSelectUnit && onEquipSigMod && (
         <ModSelectModal
           unit={modSelectUnit}

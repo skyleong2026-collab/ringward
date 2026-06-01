@@ -117,6 +117,65 @@ export function resolveSlots(unit, resonance) {
   return buildSlots(unit.originRing, unit.level ?? 1, resonance, unit.slots);
 }
 
+// ─── Socketing (§22.4) ────────────────────────────────────────────────────────
+// Gear & modules live IN a core's slots. The engine reads ONE gearId plus a set of
+// moduleIds, so a core carries at most one gear (a single behavioral verb) and
+// fills its remaining slots with modules (dials). A socket = { type:'gear'|'module',
+// id }. Slot capacity is the §22 ring gate — depth buys build space.
+export const MAX_GEAR_PER_UNIT = 1;
+
+// Can this slot hold a socket? Any EARNED slot can — including a 'dormant' one.
+// Dormancy is a battle-time power state, not an equip lock: you kit a deep slot
+// now, it just stays dark until squad resonance wakes it. Only 'locked' (own level
+// too low) refuses a socket.
+export function isSocketable(slot) {
+  return !!slot && slot.state !== 'locked';
+}
+
+// Place `item` ({type,id} | null to clear) into slot `index`, returning a NEW
+// slots array. Enforces the build's structural rules so the engine never sees an
+// impossible loadout: one gear per core (a new gear evicts any other gear), and no
+// duplicate module id across slots (a re-socketed module moves rather than dupes).
+export function socketInto(slots, index, item) {
+  return slots.map((s, i) => {
+    if (i === index) return { ...s, socket: item ?? null };
+    if (item && s.socket) {
+      if (item.type === 'gear' && s.socket.type === 'gear') return { ...s, socket: null };
+      if (item.type === 'module' && s.socket.type === 'module' && s.socket.id === item.id) return { ...s, socket: null };
+    }
+    return s;
+  });
+}
+
+// Engine-input loadout for a core fielded at squad resonance R. Only POWERED
+// ('open') slots contribute their socket; 'dormant' (resonance-starved) and
+// 'locked' slots fall dark. This is the meta→engine translation that finally gives
+// dormancy teeth — a Resonator sitting in a dormant slot grants nothing until the
+// slot wakes. Returns the engine shape { gearId, moduleIds }.
+export function activeLoadout(unit, resonance = 0) {
+  const slots = resolveSlots(unit, resonance);
+  let gearId = null;
+  const moduleIds = [];
+  for (const s of slots) {
+    if (s.state !== 'open' || !s.socket) continue;
+    if (s.socket.type === 'gear') { if (!gearId) gearId = s.socket.id; }
+    else if (s.socket.type === 'module' && !moduleIds.includes(s.socket.id)) moduleIds.push(s.socket.id);
+  }
+  return { gearId, moduleIds };
+}
+
+// Map a fielded PLAYER squad to engine-ready units: each core's gearId/moduleIds
+// are overridden by its POWERED sockets at the squad's current resonance. Units
+// without §22 slots (a contract escortee, legacy data) pass through untouched so
+// their own flat loadout survives. Enemy squads are never run through this — they
+// carry their stored flat loadout.
+export function battleLoadout(squad = []) {
+  return (squad ?? []).map((u) => {
+    if (!u || !u.slots) return u;
+    return { ...u, ...activeLoadout(u, squadResonance(squad, u.instanceId)) };
+  });
+}
+
 // The FIXED stat budget a reroll redistributes = the core's base stat total
 // (HP + Attack + Armor + Speed). Per-ring budget normalization is a §22.10 dial;
 // for now the budget is simply the total the species already ships with, so

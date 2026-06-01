@@ -141,6 +141,12 @@ export const GLOSSARY = {
     short: 'Equipment that grants or rewrites a behavior (a verb).',
     long: "Gear is what a creature carries into the fight. Unlike a dial, gear gives a unit something to do — a new action, or a rewrite of an existing one. Verbs, not buffs: gear changes behavior, it doesn't just pad numbers.",
   },
+  slot: {
+    term: 'Slot',
+    cat: 'build',
+    short: 'A socket on a core for one gear or module. Deeper origin = more slots.',
+    long: "Slots are the build space inside a core — each holds one gear or one module. How many a core has is set by the ring it grew in: the deeper the origin, the more it carries. Slots open as the core Levels, but the deep ones come up dormant — earned, yet dark — until the squad's resonance is high enough to wake them. A socketed gear in a dormant slot does nothing until it lights.",
+  },
   rank: {
     term: 'Rank',
     cat: 'build',

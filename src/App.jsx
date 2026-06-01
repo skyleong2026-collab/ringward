@@ -23,7 +23,7 @@ import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
-import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag } from './data/rings.js';
+import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag, socketInto, battleLoadout } from './data/rings.js';
 import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
@@ -40,10 +40,29 @@ const VERSION = 'vC-U';
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
 const CREATURE_BY_ID = Object.fromEntries(CREATURES.map((c) => [c.id, c]));
+// §22.4 socket migration: pre-socketing saves stored gear/modules as flat
+// gearId/moduleIds. Seed those into the core's slots (gear first, then modules) so
+// no equipped item is lost when slots become the source of truth. Skips locked
+// slots (level too low) and stops when slots run out — a fully-kitted core whose
+// ring is shallower than its old loadout keeps what fits, gear prioritised. A core
+// that already has any socketed slot is left alone (idempotent).
+function seedSockets(unit) {
+  if (!unit.slots || unit.slots.some((s) => s.socket)) return unit;
+  const items = [];
+  if (unit.gearId) items.push({ type: 'gear', id: unit.gearId });
+  for (const m of unit.moduleIds ?? []) items.push({ type: 'module', id: m });
+  if (items.length === 0) return unit;
+  let i = 0;
+  const slots = unit.slots.map((s) =>
+    (s.state !== 'locked' && i < items.length) ? { ...s, socket: items[i++] } : s
+  );
+  return { ...unit, slots };
+}
+
 function migrateCollection(col) {
   return col.map((u) => {
     const base = CREATURE_BY_ID[u.id];
-    return {
+    return seedSockets({
       ...u,
       archetype: ARCHETYPE_MIGRATION[u.archetype] ?? u.archetype,
       signature: base?.signature ?? u.signature ?? null, // re-sync from definition: signature text is static per species, so saved snapshots must not go stale on a rename (vC-Q)
@@ -56,7 +75,7 @@ function migrateCollection(col) {
       originRing: u.originRing ?? DEFAULT_RING,
       statBudget: u.statBudget ?? statBudgetOf(base ?? u),
       slots: u.slots ?? buildSlots(u.originRing ?? DEFAULT_RING, u.level ?? 1),
-    };
+    });
   });
 }
 
@@ -147,6 +166,10 @@ function App() {
   // The squad the player has chosen to field. Basis for build-granted FOCUS
   // (data/focus.js) — bringing an Echo / focus gear buys intervention budget.
   const fieldedSquad = collection.filter((u) => squadIds.includes(u.instanceId));
+  // §22.4: the same squad resolved to its POWERED loadout (dormant/locked sockets
+  // fall dark). This is what the engine and FOCUS see — so focus-granting gear in
+  // a dormant slot grants nothing until resonance wakes it.
+  const battleSquad = battleLoadout(fieldedSquad);
 
   const [battleSeed, setBattleSeed] = useState(null);
   const [currentZone, setCurrentZone] = useState(null);
@@ -252,26 +275,19 @@ function App() {
     });
   }
 
-  function equipGear(instanceId, gearId) {
-    setCollection((prev) => {
-      const next = prev.map((u) =>
-        u.instanceId === instanceId ? { ...u, gearId: gearId ?? null } : u
-      );
-      persist(next, squadIds);
-      return next;
-    });
-  }
-
-  function equipModule(instanceId, moduleId) {
-    if (!moduleId) return;
+  // §22.4 socketing: place (or clear, item=null) a gear/module into a specific
+  // slot. Slots are the source of truth for a core's loadout; socketInto enforces
+  // the one-gear / no-duplicate-module rules. The engine still reads gearId/
+  // moduleIds, but those are now DERIVED from powered slots at battle entry
+  // (battleLoadout) — so a socket in a dormant slot is inert until resonance wakes
+  // it. Guard: never socket into a locked slot.
+  function socketSlot(instanceId, slotIndex, item) {
     setCollection((prev) => {
       const next = prev.map((u) => {
-        if (u.instanceId !== instanceId) return u;
-        const ids = u.moduleIds || [];
-        const nextIds = ids.includes(moduleId)
-          ? ids.filter((id) => id !== moduleId)
-          : [...ids, moduleId].slice(0, 3);
-        return { ...u, moduleIds: nextIds };
+        if (u.instanceId !== instanceId || !u.slots) return u;
+        const slot = u.slots[slotIndex];
+        if (!slot || (item && slot.state === 'locked')) return u;
+        return { ...u, slots: socketInto(u.slots, slotIndex, item) };
       });
       persist(next, squadIds);
       return next;
@@ -425,7 +441,7 @@ function App() {
   }
 
   function commitHunt() {
-    const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
+    const playerSquad = battleLoadout(collection.filter((u) => squadIds.includes(u.instanceId)));
     const seed = randomSeed();
     const res = resolveBattle(playerSquad, [currentWildTarget], seed);
     const caught = res.winner === 'A';
@@ -488,7 +504,7 @@ function App() {
   function handleTryAgain() {
     if (!currentEncounter) return;
     // §22.8 practice sandbox: just re-run the fight — no XP/stat application.
-    const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
+    const playerSquad = battleLoadout(collection.filter((u) => squadIds.includes(u.instanceId)));
     const seed = randomSeed();
     const res = resolveBattle(playerSquad, levelEnemySquad(currentEncounter.squad, currentEncounter.level), seed);
     setResult(res);
@@ -887,8 +903,7 @@ function App() {
             onContracts={() => setScreen('regions')}
             onPvp={openPvp}
             justFedInstanceId={justFedInstanceId}
-            onEquipGear={equipGear}
-            onEquipModule={equipModule}
+            onSocket={socketSlot}
             onEquipSigMod={equipSigMod}
             onRankUp={rankUpSignature}
             onRerollStats={rerollStats}
@@ -950,15 +965,15 @@ function App() {
         )}
         {screen === 'battle' && currentEncounter && battleSeed !== null && (
           <BattleScreen
-            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId)).map((u) => {
+            playerSquad={battleLoadout(collection.filter((u) => squadIds.includes(u.instanceId)).map((u) => {
               if (!dungeonRun) return u;
               const hp = dungeonRun.hpOverrides[u.instanceId];
               return hp !== undefined ? { ...u, currentHP: hp } : u;
-            })}
+            }))}
             enemySquad={levelEnemySquad(currentEncounter.squad, currentEncounter.level)}
             seed={battleSeed}
             onComplete={handleBattleComplete}
-            maxInterventions={buildFocus(fieldedSquad)}
+            maxInterventions={buildFocus(battleSquad)}
             onForfeit={() => (dungeonRun ? handleDungeonFail() : setScreen('encounters'))}
             forfeitLabel={dungeonRun ? 'Leaving ends the dungeon run. Your roster is unharmed.' : 'Leave this battle and return to encounters. Nothing is lost.'}
           />
@@ -1026,14 +1041,14 @@ function App() {
         )}
         {screen === 'reconbattle' && currentContract && reconAxis && battleSeed !== null && (
           <BattleScreen
-            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            playerSquad={battleLoadout(collection.filter((u) => squadIds.includes(u.instanceId)))}
             enemySquad={levelEnemySquad(
               [currentContract.squad[currentContract.intel[reconAxis].fragmentIndex]],
               currentContract.level,
             )}
             seed={battleSeed}
             onComplete={handleReconComplete}
-            maxInterventions={battleFocus(fieldedSquad, currentContract.modifier.interventionBudget)}
+            maxInterventions={battleFocus(battleSquad, currentContract.modifier.interventionBudget)}
             modifiers={contractModifiers(currentContract)}
             bannerLabel={`SCOUT · ${currentContract.intel[reconAxis].label.toUpperCase()}`}
             onForfeit={() => { setReconAxis(null); setScreen('contract'); }}
@@ -1042,17 +1057,17 @@ function App() {
         )}
         {screen === 'contractbattle' && currentContract && battleSeed !== null && (
           <BattleScreen
-            playerSquad={contractPlayerSquad(
+            playerSquad={battleLoadout(contractPlayerSquad(
               currentContract,
               collection.filter((u) => squadIds.includes(u.instanceId)),
-            )}
+            ))}
             enemySquad={levelEnemySquad(
               currentContract.squad,
               currentContract.isRival ? currentContract.level : contractEnemyLevel(currentContract, selectedDifficulty),
             )}
             seed={battleSeed}
             onComplete={handleContractComplete}
-            maxInterventions={battleFocus(fieldedSquad, currentContract.modifier.interventionBudget)}
+            maxInterventions={battleFocus(battleSquad, currentContract.modifier.interventionBudget)}
             detonationClock={currentContract.winCondition.detonationLimit ?? null}
             clockLabel={currentContract.winCondition.clockLabel}
             holdCondition={currentContract.winCondition.hold ?? null}
@@ -1079,11 +1094,11 @@ function App() {
         )}
         {screen === 'pvpbattle' && pvpOpponent && battleSeed !== null && (
           <BattleScreen
-            playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            playerSquad={battleLoadout(collection.filter((u) => squadIds.includes(u.instanceId)))}
             enemySquad={hydratePvpSquad(pvpOpponent.squad)}
             seed={battleSeed}
             onComplete={handlePvpComplete}
-            maxInterventions={buildFocus(fieldedSquad)}
+            maxInterventions={buildFocus(battleSquad)}
             onForfeit={() => handlePvpComplete({ winner: 'B', forfeit: true, rounds: 0 })}
             forfeitLabel="Concede the match. Counts as a loss; rating drops. No roster change."
           />
