@@ -3,6 +3,7 @@ import { generateSpotterRead } from '../engine/spotter.js';
 import { applyLevel } from '../engine/progression.js';
 import { INTEL_AXES, countRevealed, payoutRepAmountWithDifficulty, DIFFICULTIES, DIFFICULTY_ORDER } from '../data/contracts.js';
 import { ARTIFACTS_BY_ID } from '../data/artifacts.js';
+import { focusBreakdown } from '../data/focus.js';
 
 // ─── ContractScreen (§20.8 + §20.8.4 Intel) ───────────────────────────────────
 // The contract entry frame. It opens PARTIALLY HIDDEN: composition, behavior and
@@ -253,6 +254,48 @@ export default function ContractScreen({ contract, playerSquad, intel, reconFeed
           </div>
         </div>
       )}
+
+      {/* ── FOCUS — build-granted intervention budget (vC-P) ── */}
+      {(() => {
+        const fb = focusBreakdown(playerSquad);
+        const cap = contract.modifier.interventionBudget;
+        const capped = cap != null && fb.total > cap;
+        const final = cap != null ? Math.min(fb.total, cap) : fb.total;
+        return (
+          <div style={{ background: '#080c12', border: '1px solid #15233a', borderRadius: 6, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 8, color: '#3a6a8a', letterSpacing: 2, fontFamily: 'monospace' }}>
+                ◼ FOCUS — interventions this contract
+              </div>
+              <div style={{ fontSize: 8, color: '#2c4a66', letterSpacing: 0.5 }}>your squad grants it</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {fb.parts.map((p, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {i > 0 && <span style={{ color: '#2c4a66', fontSize: 12 }}>+</span>}
+                  <span style={{ fontSize: 10, color: '#5a7a94' }}>
+                    {p.label} <span style={{ color: '#7fb0d4', fontWeight: 700 }}>{p.value}</span>
+                  </span>
+                </span>
+              ))}
+              <span style={{ color: '#2c4a66', fontSize: 12 }}>=</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: capped ? '#5a6a7a' : '#7fb0d4' }}>
+                {fb.total}
+              </span>
+              {capped && (
+                <span style={{ fontSize: 10, color: '#c98a3a' }}>
+                  → capped to <span style={{ fontWeight: 800 }}>{final}</span> (signal suppression)
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 9, color: '#33333f', lineHeight: 1.6, marginTop: 8 }}>
+              {fb.echoes === 0 && fb.gearBonus === 0
+                ? 'A bare squad reads one move. Field an Echo or equip a Resonator to buy more interventions.'
+                : 'Echoes and focus gear are your conduit for operator focus — they buy intervention authority.'}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Win condition + payout dial */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

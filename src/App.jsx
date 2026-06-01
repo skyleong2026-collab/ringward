@@ -16,6 +16,7 @@ import ContractResult from './screens/ContractResult.jsx';
 import PvpScreen from './screens/PvpScreen.jsx';
 import RegionScreen from './screens/RegionScreen.jsx';
 import { REGION_BY_ID } from './data/regions.js';
+import { buildFocus, battleFocus } from './data/focus.js';
 import { fetchOpponentPool, recordMatch, myRating } from './engine/pvp.js';
 import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
@@ -32,7 +33,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-O';
+const VERSION = 'vC-P';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -127,6 +128,10 @@ function App() {
       return [];
     }
   });
+
+  // The squad the player has chosen to field. Basis for build-granted FOCUS
+  // (data/focus.js) — bringing an Echo / focus gear buys intervention budget.
+  const fieldedSquad = collection.filter((u) => squadIds.includes(u.instanceId));
 
   const [battleSeed, setBattleSeed] = useState(null);
   const [currentZone, setCurrentZone] = useState(null);
@@ -931,6 +936,7 @@ function App() {
             enemySquad={levelEnemySquad(currentEncounter.squad, currentEncounter.level)}
             seed={battleSeed}
             onComplete={handleBattleComplete}
+            maxInterventions={buildFocus(fieldedSquad)}
             onForfeit={() => (dungeonRun ? handleDungeonFail() : setScreen('encounters'))}
             forfeitLabel={dungeonRun ? 'Leaving ends the dungeon run. Your roster is unharmed.' : 'Leave this battle and return to encounters. Nothing is lost.'}
           />
@@ -1004,7 +1010,7 @@ function App() {
             )}
             seed={battleSeed}
             onComplete={handleReconComplete}
-            maxInterventions={currentContract.modifier.interventionBudget}
+            maxInterventions={battleFocus(fieldedSquad, currentContract.modifier.interventionBudget)}
             modifiers={contractModifiers(currentContract)}
             bannerLabel={`RECON · ${currentContract.intel[reconAxis].label.toUpperCase()}`}
             onForfeit={() => { setReconAxis(null); setScreen('contract'); }}
@@ -1023,7 +1029,7 @@ function App() {
             )}
             seed={battleSeed}
             onComplete={handleContractComplete}
-            maxInterventions={currentContract.modifier.interventionBudget}
+            maxInterventions={battleFocus(fieldedSquad, currentContract.modifier.interventionBudget)}
             detonationClock={currentContract.winCondition.detonationLimit ?? null}
             clockLabel={currentContract.winCondition.clockLabel}
             holdCondition={currentContract.winCondition.hold ?? null}
@@ -1054,6 +1060,7 @@ function App() {
             enemySquad={hydratePvpSquad(pvpOpponent.squad)}
             seed={battleSeed}
             onComplete={handlePvpComplete}
+            maxInterventions={buildFocus(fieldedSquad)}
             onForfeit={() => handlePvpComplete({ winner: 'B', forfeit: true, rounds: 0 })}
             forfeitLabel="Concede the match. Counts as a loss; rating drops. No roster change."
           />

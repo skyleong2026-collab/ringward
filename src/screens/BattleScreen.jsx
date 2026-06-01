@@ -345,14 +345,17 @@ export default function BattleScreen({
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 4 }}>
-            {Array.from({ length: maxInterventions }).map((_, i) => (
-              <div key={i} style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: i < interventionsLeft ? '#4a90d9' : '#1a1a2a',
-                border: '1px solid #252535',
-              }} />
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="FOCUS — your intervention budget, granted by your fielded squad (Echoes + focus gear), capped by the contract.">
+            <span style={{ fontSize: 8, color: '#3a6a8a', letterSpacing: 1.5 }}>FOCUS</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {Array.from({ length: maxInterventions }).map((_, i) => (
+                <div key={i} style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: i < interventionsLeft ? '#4a90d9' : '#1a1a2a',
+                  border: '1px solid #252535',
+                }} />
+              ))}
+            </div>
           </div>
 
           {phase !== 'complete' && (

@@ -21,8 +21,9 @@ export const GEAR = {
   resonator: {
     id: 'resonator', name: 'Resonator', slot: 'gear', archetype: 'Echo',
     trigger: 'onEcho', effect: 'empower',
-    description: 'The first echo each round fires at full power.',
+    description: 'The first echo each round fires at full power. Opens an extra channel for operator focus (+1 intervention).',
     callout: 'Resonance', color: '#7ed321', starter: true,
+    grantsFocus: 1, // FOCUS layer (vC-P) — read by data/focus.js, never by the engine
   },
   chainlink: {
     id: 'chainlink', name: 'Chain Link', slot: 'gear', archetype: 'Echo',
