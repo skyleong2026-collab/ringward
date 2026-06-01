@@ -23,7 +23,7 @@ import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
-import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag, socketInto, battleLoadout } from './data/rings.js';
+import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag, socketInto, battleLoadout, ringForZoneTier } from './data/rings.js';
 import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
@@ -79,11 +79,11 @@ function migrateCollection(col) {
   });
 }
 
-function createCaughtInstance(creature, zoneName) {
+function createCaughtInstance(creature, zoneName, originRing = DEFAULT_RING) {
   const instanceId = `w${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-  // §22: a caught core's origin ring is stamped at incubation. Zone→ring mapping
-  // is deferred (§22.10 dial); default until then.
-  const originRing = DEFAULT_RING;
+  // §22.7: a caught core's origin ring is stamped at incubation, by the depth of
+  // the zone it came from (commitHunt passes ringForZoneTier(zone.tier)). Recruits
+  // and tier-less GPS spawns fall back to the default ring.
   return {
     instanceId,
     ...creature,
@@ -472,7 +472,7 @@ function App() {
         // If caught, add the new unit (if reserve has room)
         const reserve = next.filter((u) => !squadIds.includes(u.instanceId));
         if (caught && reserve.length < 24) {
-          const newUnit = createCaughtInstance(currentWildTarget, currentZone.name);
+          const newUnit = createCaughtInstance(currentWildTarget, currentZone.name, ringForZoneTier(currentZone.tier));
           const withCatch = [...next, newUnit];
           persist(withCatch, squadIds);
           return withCatch;

@@ -76,6 +76,18 @@ export function ringDef(ring) {
   return RINGS[ring] ?? RINGS[DEFAULT_RING];
 }
 
+// §22.7 zone depth → origin ring. Walk is the core faucet, and a core's origin is
+// stamped by where it's caught: the deeper the zone, the deeper the ring (bigger
+// budget, more slots, resonance-gated upper slots). Drop is RESERVED for the
+// starter trio (the mentor's gift), so caught cores top out at Deep. Zones carry a
+// 1-based `tier`; map it monotonically. Unknown/tier-less zones (GPS spawns,
+// recruits) fall back to the default ring. §22.10 dial.
+export const ZONE_TIER_RING = { 1: 'Rim', 2: 'Reaches', 3: 'Deep' };
+
+export function ringForZoneTier(tier) {
+  return ZONE_TIER_RING[tier] ?? DEFAULT_RING;
+}
+
 // Slot states (§22.5):
 //   'locked'  — own level too low (permanent progress; opens by levelling)
 //   'open'    — usable; socket a gear or module
