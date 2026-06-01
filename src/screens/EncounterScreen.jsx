@@ -106,7 +106,7 @@ function EncounterCard({ encounter, playerSquadSize, onRun, history }) {
           marginTop: 4,
         }}
       >
-        {playerSquadSize > 0 ? 'Run Battle' : 'Add units to squad first'}
+        {playerSquadSize > 0 ? 'Practice Run' : 'Add units to squad first'}
       </button>
     </div>
   );
@@ -131,7 +131,10 @@ export default function EncounterScreen({ encounters, playerSquadSize, onRun, on
       </div>
 
       <div style={{ fontSize: 10, color: '#444', letterSpacing: 2 }}>
-        CHOOSE ENCOUNTER
+        PRACTICE — CHOOSE ENCOUNTER
+      </div>
+      <div style={{ fontSize: 10, color: '#555', lineHeight: 1.5, marginTop: -4 }}>
+        A no-stakes sandbox to read matchups and test builds. No XP or rewards — level up on Walk &amp; Dungeon runs.
       </div>
 
       {encounters.map((enc) => (

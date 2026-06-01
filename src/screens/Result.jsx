@@ -325,7 +325,7 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
   );
 }
 
-export default function Result({ result, onTryAgain, onNewBattle, onDungeonContinue, onDungeonFail }) {
+export default function Result({ result, practice = false, onTryAgain, onNewBattle, onDungeonContinue, onDungeonFail }) {
   const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, gearProcs, battleLog } = result;
   const { squadA, squadB } = telemetry;
 
@@ -364,6 +364,11 @@ export default function Result({ result, onTryAgain, onNewBattle, onDungeonConti
           <span style={{ color: '#333', margin: '0 8px' }}>·</span>
           <span style={{ fontFamily: 'monospace', fontSize: 11 }}>seed:{seed.toString(16).toUpperCase().padStart(8, '0')}</span>
         </div>
+        {practice && (
+          <div style={{ fontSize: 10, color: '#8888aa', letterSpacing: 1, marginTop: 8, textTransform: 'uppercase' }}>
+            ◇ Practice — no rewards. Sharpen your read; level up on Walk &amp; Dungeon runs.
+          </div>
+        )}
       </div>
 
       {/* Match stats */}
@@ -454,7 +459,7 @@ export default function Result({ result, onTryAgain, onNewBattle, onDungeonConti
                     key={`${u.id}-${i}`}
                     unit={u}
                     isWinnerSquad={isWinner}
-                    xpGain={side === 'A' ? xpRewards?.[u.instanceId] : undefined}
+                    xpGain={(!practice && side === 'A') ? xpRewards?.[u.instanceId] : undefined}
                     battleLog={battleLog}
                   />
                 ))}

@@ -863,7 +863,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
               textTransform: 'uppercase',
             }}
           >
-            Battle →
+            Practice →
           </button>
         </div>
       </div>

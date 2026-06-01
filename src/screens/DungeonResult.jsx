@@ -63,6 +63,7 @@ export default function DungeonResult({ dungeonRun, runLog, collection, squadIds
   const color = dungeon.color;
   const insight = computeRunInsight(runLog, failed, failedAt);
   const totalXp = runLog?.reduce((s, e) => s + (e.xpEarned || 0), 0) || 0;
+  const totalSlag = runLog?.reduce((s, e) => s + (e.slagEarned || 0), 0) || 0;
 
   const cleared = runLog?.filter((e) => e.won).map((e) => ({ encounterId: e.encounterId, isBoss: e.isBoss })) || [];
   const failedEncounter = failed ? { encounterId: failedAt, isBoss: dungeon.nodes[dungeon.nodes.length - 1]?.encounterId === failedAt } : null;
@@ -81,8 +82,11 @@ export default function DungeonResult({ dungeonRun, runLog, collection, squadIds
           {failed ? 'RUN FAILED' : 'DUNGEON CLEARED'}
         </div>
         <div style={{ fontSize: 11, color: '#444', marginTop: 4 }}>{dungeon.name}</div>
-        {totalXp > 0 && (
-          <div style={{ fontSize: 12, color: '#7ed321', marginTop: 8 }}>+{totalXp} XP earned</div>
+        {(totalXp > 0 || totalSlag > 0) && (
+          <div style={{ fontSize: 12, marginTop: 8, display: 'flex', gap: 12, justifyContent: 'center' }}>
+            {totalXp > 0 && <span style={{ color: '#7ed321' }}>+{totalXp} XP</span>}
+            {totalSlag > 0 && <span style={{ color: '#8a8a5a' }}>+{totalSlag} ⚒ slag</span>}
+          </div>
         )}
       </div>
 

@@ -63,6 +63,15 @@ export function rerollCost(ring) {
   return REROLL_COST[ring] ?? REROLL_COST[DEFAULT_RING];
 }
 
+// §22.8 Dungeon faucet — Dungeon "uniquely produces concentrated slag". Each
+// cleared node pays slag (boss nodes pay more); slag is awarded as nodes are
+// won, so a run that ends early still keeps what it earned. §22.10 strawman.
+export const DUNGEON_SLAG = { node: 8, boss: 25 };
+
+export function dungeonSlag(isBoss) {
+  return isBoss ? DUNGEON_SLAG.boss : DUNGEON_SLAG.node;
+}
+
 export function ringDef(ring) {
   return RINGS[ring] ?? RINGS[DEFAULT_RING];
 }

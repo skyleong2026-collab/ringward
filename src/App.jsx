@@ -23,7 +23,7 @@ import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
-import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost } from './data/rings.js';
+import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag } from './data/rings.js';
 import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
@@ -487,34 +487,7 @@ function App() {
 
   function handleTryAgain() {
     if (!currentEncounter) return;
-    // Apply XP and survival updates from previous battle before running next
-    if (result?.xpRewards) {
-      setCollection((prev) => {
-        const nextCollection = prev.map((u) => {
-          const xpGain = result.xpRewards[u.instanceId];
-          if (!xpGain) return u;
-          const newXp = u.xp + xpGain;
-          const survivalIncrement = result.survivalUpdates?.[u.instanceId] || 0;
-          const battleUpdate = result.battleUpdates?.[u.instanceId];
-          const newSurvivalStreak = battleUpdate?.alive ? (u.survivalStreak || 0) + 1 : 0;
-          const newEnemyMemory = battleUpdate?.enemyNames
-            ? [...(u.enemyMemory || []), ...battleUpdate.enemyNames].filter((v, i, a) => a.indexOf(v) === i)
-            : u.enemyMemory;
-          return {
-            ...u,
-            xp: newXp,
-            level: getLevel(newXp),
-            survivalCount: (u.survivalCount || 0) + survivalIncrement,
-            battleCount: (u.battleCount || 0) + (battleUpdate?.battleCount || 0),
-            winCount: (u.winCount || 0) + (battleUpdate?.winCount || 0),
-            survivalStreak: newSurvivalStreak,
-            enemyMemory: newEnemyMemory,
-          };
-        });
-        persist(nextCollection, squadIds);
-        return nextCollection;
-      });
-    }
+    // §22.8 practice sandbox: just re-run the fight — no XP/stat application.
     const playerSquad = collection.filter((u) => squadIds.includes(u.instanceId));
     const seed = randomSeed();
     const res = resolveBattle(playerSquad, levelEnemySquad(currentEncounter.squad, currentEncounter.level), seed);
@@ -522,34 +495,9 @@ function App() {
   }
 
   function handleNewBattle() {
-    // Apply XP and survival updates to collection before leaving result screen
-    if (result?.xpRewards) {
-      setCollection((prev) => {
-        const nextCollection = prev.map((u) => {
-          const xpGain = result.xpRewards[u.instanceId];
-          if (!xpGain) return u;
-          const newXp = u.xp + xpGain;
-          const survivalIncrement = result.survivalUpdates?.[u.instanceId] || 0;
-          const battleUpdate = result.battleUpdates?.[u.instanceId];
-          const newSurvivalStreak = battleUpdate?.alive ? (u.survivalStreak || 0) + 1 : 0;
-          const newEnemyMemory = battleUpdate?.enemyNames
-            ? [...(u.enemyMemory || []), ...battleUpdate.enemyNames].filter((v, i, a) => a.indexOf(v) === i)
-            : u.enemyMemory;
-          return {
-            ...u,
-            xp: newXp,
-            level: getLevel(newXp),
-            survivalCount: (u.survivalCount || 0) + survivalIncrement,
-            battleCount: (u.battleCount || 0) + (battleUpdate?.battleCount || 0),
-            winCount: (u.winCount || 0) + (battleUpdate?.winCount || 0),
-            survivalStreak: newSurvivalStreak,
-            enemyMemory: newEnemyMemory,
-          };
-        });
-        persist(nextCollection, squadIds);
-        return nextCollection;
-      });
-    }
+    // §22.8: the Encounters board is now a NO-STAKES PRACTICE sandbox — no XP,
+    // no stat/streak gains (leveling lives in Walk + Dungeon). Only the win/loss
+    // scoreboard below is kept; it's a tally, not power.
     // Record encounter history
     if (currentEncounter && result) {
       const newHistory = { ...encounterHistory };
@@ -627,7 +575,15 @@ function App() {
     for (const unit of result.telemetry.squadA) {
       hpSnapshot[unit.instanceId] = { current: Math.round(unit.currentHP), max: unit.maxHP, pct: unit.currentHP / unit.maxHP };
     }
-    const newLog = [...dungeonRun.runLog, { encounterId: currentEncounter.id, won: true, xpEarned, isBoss, hpSnapshot }];
+    // §22.8 faucet: Dungeon pays concentrated slag per cleared node (boss pays
+    // more). Granted now, so a run that ends early keeps its earned slag.
+    const slagEarned = dungeonSlag(isBoss);
+    setCurrencies((prev) => {
+      const next = { ...prev, slag: (prev.slag ?? 0) + slagEarned };
+      persistCurrencies(next);
+      return next;
+    });
+    const newLog = [...dungeonRun.runLog, { encounterId: currentEncounter.id, won: true, xpEarned, slagEarned, isBoss, hpSnapshot }];
     const nextNodeIndex = dungeonRun.nodeIndex + 1;
 
     setResult(null);
@@ -1010,6 +966,7 @@ function App() {
         {screen === 'result' && result && (
           <Result
             result={result}
+            practice={!dungeonRun}
             onTryAgain={dungeonRun ? null : handleTryAgain}
             onNewBattle={dungeonRun ? null : handleNewBattle}
             onDungeonContinue={dungeonRun ? handleDungeonContinue : null}
