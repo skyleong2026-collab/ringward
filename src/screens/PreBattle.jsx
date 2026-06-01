@@ -1,8 +1,15 @@
 import { ARCHETYPES, archetypeLabel, roleOf } from '../data/creatures.js';
 import { generateSpotterRead } from '../engine/spotter.js';
+import { rateEncounter } from '../engine/threat.js';
 import { applyLevel } from '../engine/progression.js';
 import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 import { ringDef, squadResonance, resolveSlots } from '../data/rings.js';
+
+const SIZE_STYLE = {
+  fair:         { color: '#3a5a3a', label: null },
+  outnumbered:  { color: '#d0902a', label: 'OUTNUMBERED' },
+  overwhelming: { color: '#d0021b', label: 'OVERWHELMING' },
+};
 
 const SLOT_STYLE = {
   open:    { color: '#7ed321', label: 'open' },
@@ -159,6 +166,11 @@ export default function PreBattle({ encounter, playerSquad, enemyLevel, onCommit
   // Enemies scale to the fielded squad in practice (App passes enemyLevel); fall
   // back to the encounter's designed level if not provided.
   const encLevel = enemyLevel ?? encounter.level;
+  // Composition threat: what this fight IS and what build it demands (threat.js).
+  // The harness shows comp + body count decide binary fights — surface both so a
+  // loss reads as "wrong tool", not "unfair".
+  const threat = rateEncounter(encounter.squad, playerSquad.length);
+  const sizeStyle = SIZE_STYLE[threat.sizeTier];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -207,6 +219,50 @@ export default function PreBattle({ encounter, playerSquad, enemyLevel, onCommit
             {line}
           </div>
         ))}
+      </div>
+
+      {/* Counter-read — what this fight demands (threat.js). The deciding build axis
+          is composition; this names it so buildcraft is legible, not guesswork. */}
+      <div style={{
+        background: '#0a0805',
+        border: '1px solid #1a1408',
+        borderLeft: `2px solid ${threat.bodyCliff ? '#d0021b' : '#8a6a3a'}`,
+        borderRadius: 5,
+        padding: '12px 15px',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 8,
+        }}>
+          <span style={{ fontSize: 8, color: '#6a532a', letterSpacing: 2, fontFamily: 'monospace' }}>
+            ◆ READ — {threat.label.toUpperCase()}
+          </span>
+          {sizeStyle.label && (
+            <span style={{
+              fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
+              color: sizeStyle.color,
+              background: sizeStyle.color + '14',
+              border: `1px solid ${sizeStyle.color}3a`,
+              borderRadius: 3, padding: '2px 7px',
+            }}>
+              {sizeStyle.label} · {threat.size}v{playerSquad.length}
+            </span>
+          )}
+        </div>
+        {threat.counterRole && (
+          <div style={{ fontSize: 11, color: '#c0a060', fontWeight: 700, marginBottom: 4, letterSpacing: 0.3 }}>
+            Bring a {threat.counterRole}.
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: '#7a6a4a', lineHeight: 1.6 }}>
+          {threat.counterWhy}
+        </div>
+        {threat.bodyCliff && (
+          <div style={{ fontSize: 10, color: '#d0021b', marginTop: 7, lineHeight: 1.5 }}>
+            They outnumber you by {threat.size - playerSquad.length}. At this gap, no
+            composition holds — even the right build loses on bodies alone.
+          </div>
+        )}
       </div>
 
       {/* Your squad */}
