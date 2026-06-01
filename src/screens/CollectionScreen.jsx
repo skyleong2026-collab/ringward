@@ -2,8 +2,8 @@ import { ARCHETYPES, CREATURES, CREATURE_BY_ID, RECRUITABLE, RECRUITABLE_IDS, ar
 import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
 import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
-import { xpProgress, getAuraStyle } from '../engine/progression.js';
-import { ringDef, rerollCost, resolveSlots, squadResonance } from '../data/rings.js';
+import { xpProgress, getAuraStyle, getLevel } from '../engine/progression.js';
+import { ringDef, rerollCost, resolveSlots, squadResonance, ringLevelCap } from '../data/rings.js';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 import { useState, useEffect } from 'react';
@@ -244,8 +244,8 @@ function SignatureRow({ unit, onRankUp, shards = 0 }) {
   );
 }
 
-function XpBar({ xp }) {
-  const prog = xpProgress(xp);
+function XpBar({ xp, cap }) {
+  const prog = xpProgress(xp, cap);
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#444', marginBottom: 2 }}>
@@ -662,7 +662,7 @@ function UnitCard({ unit, inSquad, squadFull, onToggleSquad, onFeed, canFeed, ju
       <SignatureRow unit={unit} onRankUp={onRankUp} shards={shards} />
       {onOpenModSelectModal && <ModSlotsRow unit={unit} onOpenModSelectModal={onOpenModSelectModal} />}
 
-      <XpBar xp={unit.xp} />
+      <XpBar xp={unit.xp} cap={ringLevelCap(unit.originRing)} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
         <button
@@ -709,6 +709,15 @@ function hasSameSpeciesToFeed(unit, collection, squadIds) {
   return collection.some(
     (u) => u.id === unit.id && u.instanceId !== unit.instanceId && !squadIds.includes(u.instanceId)
   );
+}
+
+// Feed is allowed only if a same-species feeder exists AND the core isn't already
+// at its origin-ring level cap (else feeding would burn a feeder for no level — a
+// Rim core stops at L3, Reaches L5, etc.).
+function canLevelUp(unit, collection, squadIds) {
+  const cap = ringLevelCap(unit.originRing);
+  if (getLevel(unit.xp, cap) >= cap) return false;
+  return hasSameSpeciesToFeed(unit, collection, squadIds);
 }
 
 export default function CollectionScreen({ collection, squadIds, currencies = {}, onToggleSquad, onFeed, onEncounters, onWalk, onDungeon, onContracts, onPvp, justFedInstanceId, onSocket, onEquipSigMod, onRankUp, onRerollStats, discoveredSpecies = [], onRecruit }) {
@@ -870,7 +879,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
               squadFull={squadFull}
               onToggleSquad={onToggleSquad}
               onFeed={onFeed}
-              canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
+              canFeed={canLevelUp(u, collection, squadIds)}
               justFed={justFedInstanceId === u.instanceId}
               resonance={squadResonance(activeSquad, u.instanceId)}
               onOpenSocket={(unit, slotIndex) => setSocketTarget({ instanceId: unit.instanceId, slotIndex })}
@@ -903,7 +912,7 @@ export default function CollectionScreen({ collection, squadIds, currencies = {}
                 squadFull={squadFull}
                 onToggleSquad={onToggleSquad}
                 onFeed={onFeed}
-                canFeed={hasSameSpeciesToFeed(u, collection, squadIds)}
+                canFeed={canLevelUp(u, collection, squadIds)}
                 justFed={justFedInstanceId === u.instanceId}
                 resonance={0}
                 onOpenSocket={(unit, slotIndex) => setSocketTarget({ instanceId: unit.instanceId, slotIndex })}

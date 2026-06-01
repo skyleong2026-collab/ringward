@@ -1,5 +1,6 @@
 import { ARCHETYPES, archetypeAbbr } from '../data/creatures.js';
 import { xpProgress, getAuraStyle, XP_PER_FEED } from '../engine/progression.js';
+import { ringLevelCap } from '../data/rings.js';
 import { useState, useRef, useEffect } from 'react';
 
 function FodderCard({ unit, selected, onToggle, isLastCopy }) {
@@ -63,10 +64,11 @@ export default function FeedModal({ target, availableFodder, allCollection, squa
     );
   }
 
-  const prog = xpProgress(target.xp);
+  const cap = ringLevelCap(target.originRing);
+  const prog = xpProgress(target.xp, cap);
   const gainXp = selectedIds.length * XP_PER_FEED;
   const newXp = target.xp + gainXp;
-  const newProg = xpProgress(newXp);
+  const newProg = xpProgress(newXp, cap);
   // Same-species only, from reserve (not squad), excluding the target itself
   const dominated = availableFodder.filter(
     (u) => u.instanceId !== target.instanceId && u.id === target.id && !squadIds.includes(u.instanceId)

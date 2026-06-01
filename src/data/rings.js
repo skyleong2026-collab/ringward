@@ -76,6 +76,13 @@ export function ringDef(ring) {
   return RINGS[ring] ?? RINGS[DEFAULT_RING];
 }
 
+// A core's level ceiling = its origin ring's cap (Rim 3 / Reaches 5 / Deep 7 /
+// Drop 10). Passed into progression.getLevel so depth gates how high a core grows
+// — and thus how many of its resonance-gated upper slots it can ever reach.
+export function ringLevelCap(ring) {
+  return ringDef(ring).levelCap;
+}
+
 // §22.7 zone depth → origin ring. Walk is the core faucet, and a core's origin is
 // stamped by where it's caught: the deeper the zone, the deeper the ring (bigger
 // budget, more slots, resonance-gated upper slots). Drop is RESERVED for the

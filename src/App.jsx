@@ -23,7 +23,7 @@ import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
-import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag, socketInto, battleLoadout, ringForZoneTier } from './data/rings.js';
+import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag, socketInto, battleLoadout, ringForZoneTier, ringLevelCap } from './data/rings.js';
 import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
@@ -400,7 +400,7 @@ function App() {
           return {
             ...u,
             xp: newXp,
-            level: getLevel(newXp),
+            level: getLevel(newXp, ringLevelCap(u.originRing)),
             feedCount: u.feedCount + fodderInstanceIds.length,
             feedHistory: [...u.feedHistory, ...feedEntries],
           };
@@ -461,7 +461,7 @@ function App() {
           return {
             ...u,
             xp: newXp,
-            level: getLevel(newXp),
+            level: getLevel(newXp, ringLevelCap(u.originRing)),
             survivalCount: (u.survivalCount || 0) + (res.survivalUpdates?.[u.instanceId] || 0),
             battleCount: (u.battleCount || 0) + (battleUpdate?.battleCount || 0),
             winCount: (u.winCount || 0) + (battleUpdate?.winCount || 0),

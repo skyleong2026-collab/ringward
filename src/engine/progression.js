@@ -1,6 +1,12 @@
 export const XP_PER_FEED = 60;
-export const MAX_LEVEL = 5;
-const THRESHOLDS = [0, 100, 250, 500, 1000];
+// §22.10: the deepest origin ring (Drop) caps at L10. A core's ACTUAL ceiling is
+// its origin-ring cap (rings.js levelCap: Rim 3 / Reaches 5 / Deep 7 / Drop 10),
+// passed into getLevel/xpProgress; MAX_LEVEL is just the absolute top of the curve.
+export const MAX_LEVEL = 10;
+// XP curve. L1–L5 are UNCHANGED and must stay so — applyLevel at L5 is golden-bound
+// (leveledEdge scenario). L6–L10 are appended §22.10 strawman so Deep/Drop cores can
+// actually reach their resonance-gated upper slots. Tune freely past index 4.
+const THRESHOLDS = [0, 100, 250, 500, 1000, 1700, 2700, 4200, 6400, 9600];
 
 // ─── Level scaling (Phase 17) ──────────────────────────────────────────────────
 // Identity-preserving growth: multiplicative so each archetype's silhouette is
@@ -31,16 +37,21 @@ export function applyLevel(creature) {
   };
 }
 
-export function getLevel(xp) {
+// `cap` is the core's origin-ring level ceiling (rings.ringLevelCap). XP beyond the
+// cap's threshold no longer raises the level — a Rim core stays L3, a Reaches core
+// stays L5 (preserving prior behaviour exactly, since everything was Reaches before
+// origin rings). Defaults to MAX_LEVEL for callers that don't gate by ring.
+export function getLevel(xp, cap = MAX_LEVEL) {
   for (let i = THRESHOLDS.length - 1; i >= 0; i--) {
-    if (xp >= THRESHOLDS[i]) return i + 1;
+    if (xp >= THRESHOLDS[i]) return Math.min(i + 1, cap);
   }
   return 1;
 }
 
-export function xpProgress(xp) {
-  const level = getLevel(xp);
-  if (level >= MAX_LEVEL) return { level, current: xp, needed: null, pct: 100 };
+export function xpProgress(xp, cap = MAX_LEVEL) {
+  const level = getLevel(xp, cap);
+  // At the ring cap (or the absolute top), the bar reads MAX — no next threshold.
+  if (level >= cap || level >= MAX_LEVEL) return { level, current: xp, needed: null, pct: 100 };
   const base = THRESHOLDS[level - 1];
   const next = THRESHOLDS[level];
   return {
