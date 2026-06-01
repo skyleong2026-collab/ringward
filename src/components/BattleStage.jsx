@@ -316,8 +316,8 @@ export function BattleStage({ playerUnits, enemyUnits, step }) {
       </svg>
 
       {/* side labels */}
-      <div style={{ position: 'absolute', left: 8, top: 6, fontSize: 7, letterSpacing: 2, color: '#222' }}>YOUR SQUAD</div>
-      <div style={{ position: 'absolute', right: 8, top: 6, fontSize: 7, letterSpacing: 2, color: '#222' }}>ENEMY</div>
+      <div style={{ position: 'absolute', left: 8, top: 6, fontSize: 7, letterSpacing: 2, color: '#4a6a8a', fontWeight: 700 }}>YOUR SQUAD</div>
+      <div style={{ position: 'absolute', right: 8, top: 6, fontSize: 7, letterSpacing: 2, color: '#8a4a4a', fontWeight: 700 }}>ENEMY</div>
 
       {/* tokens */}
       {playerUnits.map((u, i) => (

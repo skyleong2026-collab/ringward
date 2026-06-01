@@ -19,6 +19,8 @@ export const CREATURES = [
     armor: 24,
     speed: 2,
     flavor: 'Immovable.',
+    signature: { id: 'bank', name: 'Bank', kind: 'active', live: true,
+      text: 'Stores overflow shielding. Active: spend an intervention to release the bank as a barrier across the whole squad.' },
   },
   {
     id: 'bastion',
@@ -29,6 +31,8 @@ export const CREATURES = [
     armor: 22,
     speed: 3,
     flavor: 'The wall holds.',
+    signature: { id: 'intercept', name: 'Intercept', kind: 'passive', live: true,
+      text: 'Bodyblocks the single biggest incoming hit aimed at an ally each round — the dedicated bodyguard.' },
   },
   {
     id: 'bulwark',
@@ -39,6 +43,8 @@ export const CREATURES = [
     armor: 20,
     speed: 4,
     flavor: 'Slow. Relentless.',
+    signature: { id: 'aegis', name: 'Aegis', kind: 'passive', live: true,
+      text: 'While it lives, spread and detonation damage to the whole squad is reduced — the anti-Spark anchor.' },
   },
 
   // ── Echos: Moderate everything ──
@@ -51,6 +57,8 @@ export const CREATURES = [
     armor: 12,
     speed: 6,
     flavor: 'Amplifies everything.',
+    signature: { id: 'amplify', name: 'Amplify', kind: 'passive', live: true,
+      text: 'Its echo of the strongest ally action lands at full power, not half — drafts to double your carry.' },
   },
   {
     id: 'nexus',
@@ -61,6 +69,8 @@ export const CREATURES = [
     armor: 11,
     speed: 7,
     flavor: 'Everything connects here.',
+    signature: { id: 'cascade', name: 'Cascade', kind: 'active', live: true,
+      text: 'Active: spend an intervention to make every ally immediately repeat their last action — the burst turn.' },
   },
   {
     id: 'link',
@@ -71,6 +81,8 @@ export const CREATURES = [
     armor: 13,
     speed: 5,
     flavor: 'The network holds.',
+    signature: { id: 'tether', name: 'Tether', kind: 'passive', live: true,
+      text: 'A defensive Echo — each round it extends a protective shield to your most-wounded ally.' },
   },
 
   // ── Swifts: High Attack, Low HP, Low Armor ──
@@ -83,6 +95,8 @@ export const CREATURES = [
     armor: 5,
     speed: 10,
     flavor: 'First. Always.',
+    signature: { id: 'flank', name: 'Flank', kind: 'passive', live: true,
+      text: 'Ignores enemy taunt and strikes the protected backline — the tank-bypass assassin.' },
   },
   {
     id: 'striker',
@@ -93,6 +107,8 @@ export const CREATURES = [
     armor: 6,
     speed: 9,
     flavor: 'Precision over power.',
+    signature: { id: 'sunder', name: 'Sunder', kind: 'passive', live: true,
+      text: 'Its hits strip armor and shielding from the target — the shield-breaker for cracking enemy tanks.' },
   },
   {
     id: 'claw',
@@ -103,6 +119,8 @@ export const CREATURES = [
     armor: 7,
     speed: 8,
     flavor: 'Waits for the wound.',
+    signature: { id: 'bloodscent', name: 'Bloodscent', kind: 'passive', live: true,
+      text: 'Always hunts the lowest-HP enemy, ignoring taunt, with a wider execute window — the closer.' },
   },
 
   // ── Sparks: Low HP, Low starting Attack — dangerous late ──
@@ -115,6 +133,8 @@ export const CREATURES = [
     armor: 8,
     speed: 7,
     flavor: 'Small. Growing.',
+    signature: { id: 'chainIgniter', name: 'Chain Igniter', kind: 'passive', live: true,
+      text: 'When it detonates, allied Sparks gain charge — the build-around glue for a multi-Spark squad.' },
   },
   {
     id: 'flicker',
@@ -125,6 +145,8 @@ export const CREATURES = [
     armor: 7,
     speed: 6,
     flavor: 'Give it time.',
+    signature: { id: 'sputter', name: 'Sputter', kind: 'passive', live: true,
+      text: 'Detonates early and often for less each time — sustained pressure instead of one big blast.' },
   },
   {
     id: 'cinder',
@@ -135,5 +157,21 @@ export const CREATURES = [
     armor: 9,
     speed: 5,
     flavor: 'Patient. Patient. Lethal.',
+    signature: { id: 'bankedHeat', name: 'Banked Heat', kind: 'passive', live: true,
+      text: 'Charges slowly but detonates huge — the delayed nuke you play around.' },
   },
 ];
+
+export const CREATURE_BY_ID = Object.fromEntries(CREATURES.map((c) => [c.id, c]));
+
+// ─── Recruitment (vC-N) ──────────────────────────────────────────────────────
+// Most species start owned. A small "rare finds" set starts LOCKED: each is
+// first DISCOVERED by winning a thematically-matched contract (contracts.js
+// `discovers`), then RECRUITED into the stable by spending Shards. One per
+// DPS archetype so the locked roster reads as a clear progression goal.
+export const RECRUITABLE = {
+  link:   { cost: 10, hint: 'Discovered by holding the Light crossing.' },   // Echo
+  claw:   { cost: 12, hint: 'Discovered by cracking a Shadow formation.' },  // Swift
+  cinder: { cost: 14, hint: 'Discovered by quieting the Signal.' },          // Spark
+};
+export const RECRUITABLE_IDS = Object.keys(RECRUITABLE);

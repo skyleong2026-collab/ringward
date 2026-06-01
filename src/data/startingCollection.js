@@ -22,7 +22,9 @@ function inst(creature, instanceId) {
   };
 }
 
-// 17 units, includes duplicates for feeding
+// 14 units, includes duplicates for feeding. link/claw/cinder are RECRUITABLE
+// (vC-N) — they start LOCKED, discovered via contracts then recruited with
+// Shards, so they are intentionally absent from the starting stable.
 export function buildStartingCollection() {
   return [
     inst(c('vault'),    'u01'),
@@ -33,14 +35,11 @@ export function buildStartingCollection() {
     inst(c('conduit'),  'u06'),
     inst(c('conduit'),  'u07'),
     inst(c('nexus'),    'u08'),
-    inst(c('link'),     'u09'),
     inst(c('fang'),     'u10'),
     inst(c('fang'),     'u11'),
     inst(c('striker'),  'u12'),
-    inst(c('claw'),     'u13'),
     inst(c('spark'),    'u14'),
     inst(c('spark'),    'u15'),
     inst(c('flicker'),  'u16'),
-    inst(c('cinder'),   'u17'),
   ];
 }

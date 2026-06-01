@@ -9,8 +9,9 @@ import { ARCHETYPES } from '../data/creatures.js';
 // Verb toggle: REDIRECT (repoint the acting unit's target) | ANCHOR (lock an
 // enemy out of its next action). Both draw from the shared 3-intervention budget.
 // anchorTargets: always the player's enemies (squad B alive), regardless of who's acting.
-function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onResonate, onResume, anchorTargets }) {
+function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onResonate, onResume, onSignatureActive, anchorTargets }) {
   const [verb, setVerb] = useState('redirect');
+  const squadActives = step.squadActives ?? [];
 
   const actorColor  = ARCHETYPES[step.actor.archetype]?.color ?? '#888';
   const targetColor = ARCHETYPES[step.proposedTarget.archetype]?.color ?? '#888';
@@ -48,6 +49,24 @@ function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onR
         <span style={{ fontSize: 10, color: '#333' }}>→</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: targetColor }}>{step.proposedTarget.name}</span>
       </div>
+
+      {/* charged active signatures (vC-G) — squad-level, spend an intervention */}
+      {canAct && squadActives.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 7, color: '#9b6bd6', letterSpacing: 1.5 }}>✦ SIGNATURE READY</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {squadActives.map((a) => (
+              <button key={a.type} onClick={() => onSignatureActive(a.type)} style={{
+                flex: 1, padding: '7px 6px', background: '#160e22', cursor: 'pointer',
+                border: '1px solid #9b6bd655', borderRadius: 5, color: '#cba6e6',
+                fontSize: 9, fontWeight: 800, letterSpacing: 1,
+              }}>
+                {a.type === 'release' ? `RELEASE · ${a.unitName} (+${a.amount})` : `CASCADE · ${a.unitName}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* verb toggle */}
       {canAct && (
@@ -203,12 +222,34 @@ function CombatLog({ entries }) {
 }
 
 // ─── BattleScreen ─────────────────────────────────────────────────────────────
-export default function BattleScreen({ playerSquad, enemySquad, seed, onComplete }) {
+// factionColor — optional hex tint for the battle header (contract/rival battles).
+// Applied as a very subtle border + glow so it reads faction without distracting.
+const FACTION_HEX = {
+  Shadow: '#9b6bd6',
+  Light:  '#4a90d9',
+  Wild:   '#3a8a4a',
+};
+
+export default function BattleScreen({
+  playerSquad, enemySquad, seed, onComplete,
+  maxInterventions = 3, detonationClock = null, clockLabel = 'SIGNAL', bannerLabel = null,
+  holdCondition = null, modifiers = undefined, factionColor = null,
+  onForfeit = null, forfeitLabel = 'Forfeit counts as a loss. No roster change, no stat penalty.',
+}) {
+  const [confirmForfeit, setConfirmForfeit] = useState(false);
+  // Playback speed (1×/2×/4×), persisted. Default 1× preserves the §19.2
+  // witnessing tempo. At 4× the battle fast-forwards and interventions go dark.
+  const [speed, setSpeed] = useState(() => {
+    const saved = Number(localStorage.getItem('8gents_battle_speed'));
+    return [1, 2, 4].includes(saved) ? saved : 1;
+  });
+  const changeSpeed = (s) => { setSpeed(s); try { localStorage.setItem('8gents_battle_speed', String(s)); } catch { /* ignore */ } };
+  const interventionsLive = speed < 4; // fast-forward drops player authoring
   const {
-    start, pause, resume, redirect, anchor, resonate,
+    start, pause, resume, redirect, anchor, resonate, signatureActive,
     phase, currentStep, unitsSnapshot,
-    combatLog, interventionsLeft, result,
-  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed });
+    combatLog, interventionsLeft, enemyDetonations, result,
+  } = useBattleRunner({ squadA: playerSquad, squadB: enemySquad, seed, maxInterventions, detonationClock, holdCondition, modifiers, speed });
 
   useEffect(() => { start(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -223,8 +264,28 @@ export default function BattleScreen({ playerSquad, enemySquad, seed, onComplete
   const isPaused = phase === 'paused';
   const isAtPendingAction = isPaused && currentStep?.type === 'pending_action';
 
+  const fc = factionColor ? (FACTION_HEX[factionColor] ?? factionColor) : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* faction header tint — a subtle 1px border flash for contract/rival battles */}
+      {fc && (
+        <div style={{
+          height: 2, borderRadius: 1,
+          background: `linear-gradient(90deg, transparent, ${fc}88, transparent)`,
+          marginBottom: -4,
+        }} />
+      )}
+      {/* recon banner — marks a low-stakes scouting fight (§20.8.4) */}
+      {bannerLabel && (
+        <div style={{
+          background: '#0a0814', border: '1px solid #2a1f3a', borderRadius: 5,
+          padding: '7px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontSize: 9, color: '#9b6bd6', letterSpacing: 2, fontWeight: 700 }}>◇ {bannerLabel}</span>
+          <span style={{ fontSize: 8, color: '#555', letterSpacing: 1 }}>LOW STAKES — INTEL ONLY</span>
+        </div>
+      )}
       {/* header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -236,8 +297,56 @@ export default function BattleScreen({ playerSquad, enemySquad, seed, onComplete
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Hold clock (§20.8.5) — rounds held + the escortee's status */}
+          {holdCondition != null && (() => {
+            const esc = unitsSnapshot.A.find((u) => u.instanceId === holdCondition.escorteeInstanceId);
+            const held = Math.min(Math.max(0, round - 1), holdCondition.rounds);
+            const escPct = esc ? Math.max(0, esc.currentHP) / esc.maxHP : 0;
+            const escColor = !esc?.alive ? '#d0021b' : escPct < 0.35 ? '#ff6b35' : '#4a90d9';
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 8, color: '#3a6a8a', letterSpacing: 1.5 }}>HOLD {held}/{holdCondition.rounds}</span>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {Array.from({ length: holdCondition.rounds }).map((_, i) => (
+                    <div key={i} style={{
+                      width: 4, height: 9, borderRadius: 1,
+                      background: i < held ? '#4a90d9' : '#13131f',
+                      border: `1px solid ${i < held ? '#4a90d9' : '#23233a'}`,
+                    }} />
+                  ))}
+                </div>
+                <span title="escortee" style={{
+                  fontSize: 8, color: escColor, letterSpacing: 0.5, fontFamily: 'monospace',
+                  borderLeft: '1px solid #1a1a2a', paddingLeft: 6,
+                }}>
+                  ▲ {esc?.alive ? Math.round(esc.currentHP) : 'DOWN'}
+                </span>
+              </div>
+            );
+          })()}
+          {/* Signal clock (§20.8.5) — each enemy detonation advances the signal */}
+          {detonationClock != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 8, color: '#7a5a2a', letterSpacing: 1.5 }}>{clockLabel}</span>
+              <div style={{ display: 'flex', gap: 3 }}>
+                {Array.from({ length: detonationClock }).map((_, i) => {
+                  const lit = i < enemyDetonations;
+                  const isFinal = i === detonationClock - 1;
+                  return (
+                    <div key={i} style={{
+                      width: 9, height: 9, borderRadius: 2, transform: 'rotate(45deg)',
+                      background: lit ? (isFinal ? '#ff6b35' : '#f5a623') : '#1a1208',
+                      border: `1px solid ${lit ? (isFinal ? '#ff6b35' : '#f5a623') : '#3a2a14'}`,
+                      boxShadow: lit ? `0 0 6px ${isFinal ? '#ff6b35' : '#f5a623'}88` : 'none',
+                      transition: 'all 0.25s',
+                    }} />
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 4 }}>
-            {Array.from({ length: 3 }).map((_, i) => (
+            {Array.from({ length: maxInterventions }).map((_, i) => (
               <div key={i} style={{
                 width: 6, height: 6, borderRadius: '50%',
                 background: i < interventionsLeft ? '#4a90d9' : '#1a1a2a',
@@ -259,11 +368,60 @@ export default function BattleScreen({ playerSquad, enemySquad, seed, onComplete
               {isPaused ? 'RESUME' : '⏸ PAUSE'}
             </button>
           )}
+          {phase !== 'complete' && onForfeit && (
+            <button
+              onClick={() => { pause(); setConfirmForfeit(true); }}
+              style={{
+                padding: '6px 10px', background: 'none', border: '1px solid #3a1a1a',
+                borderRadius: 4, color: '#8a4a4a', fontSize: 10, fontWeight: 700,
+                letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+              }}
+            >
+              ⚑ Forfeit
+            </button>
+          )}
+          {/* Speed toggle — 1× keeps the witnessing tempo; 4× fast-forwards and
+              drops interventions (you've stopped authoring the fight). */}
+          {phase !== 'complete' && (
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              {[1, 2, 4].map((s) => (
+                <button key={s} onClick={() => changeSpeed(s)} title={s === 4 ? 'Fast-forward — interventions off' : `${s}× speed`} style={{
+                  padding: '6px 7px', background: speed === s ? '#1e2a3a' : 'none',
+                  border: `1px solid ${speed === s ? '#4a90d9' : '#1e1e2a'}`, borderRadius: 4,
+                  color: speed === s ? '#7fb0e0' : '#444', fontSize: 9, fontWeight: 700,
+                  cursor: 'pointer', letterSpacing: 0.5,
+                }}>{s}×</button>
+              ))}
+            </div>
+          )}
           {phase === 'complete' && (
             <span style={{ fontSize: 9, color: '#333', letterSpacing: 1 }}>DONE</span>
           )}
         </div>
       </div>
+
+      {/* forfeit confirmation */}
+      {confirmForfeit && (
+        <div style={{
+          background: '#160a0a', border: '1px solid #d0021b55', borderRadius: 7,
+          padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#e06a6a', letterSpacing: 1 }}>Forfeit this battle?</div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 5, lineHeight: 1.6 }}>{forfeitLabel}</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <button onClick={() => { setConfirmForfeit(false); resume(); }} style={{
+              padding: '10px', background: '#1a1a2a', border: '1px solid #3a3a5a', borderRadius: 6,
+              color: '#aaa', fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+            }}>Keep Fighting</button>
+            <button onClick={() => { setConfirmForfeit(false); onForfeit(); }} style={{
+              padding: '10px', background: '#5a1414', border: 'none', borderRadius: 6,
+              color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+            }}>Forfeit</button>
+          </div>
+        </div>
+      )}
 
       {/* the witnessing stage — primary channel */}
       <BattleStage
@@ -272,17 +430,30 @@ export default function BattleScreen({ playerSquad, enemySquad, seed, onComplete
         step={currentStep}
       />
 
-      {/* intervention panel — only while paused */}
-      {isAtPendingAction && (
+      {/* intervention panel — only while paused, and only when not fast-forwarding */}
+      {isAtPendingAction && interventionsLive && (
         <PendingActionPanel
           step={currentStep}
           interventionsLeft={interventionsLeft}
           onRedirect={redirect}
           onAnchor={anchor}
           onResonate={resonate}
+          onSignatureActive={signatureActive}
           onResume={resume}
           anchorTargets={unitsSnapshot.B.filter((u) => u.alive)}
         />
+      )}
+      {isAtPendingAction && !interventionsLive && (
+        <div style={{
+          background: '#0d0d18', border: '1px solid #1e1e2e', borderRadius: 7,
+          padding: '10px 13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontSize: 10, color: '#666', letterSpacing: 0.5 }}>Interventions off at 4× — drop to 2× to author the fight.</span>
+          <button onClick={resume} style={{
+            padding: '7px 12px', background: '#1a1a2a', border: '1px solid #3a3a5a', borderRadius: 5,
+            color: '#8888ff', fontSize: 10, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase',
+          }}>Resume</button>
+        </div>
       )}
 
       {/* combat log — demoted secondary readout */}

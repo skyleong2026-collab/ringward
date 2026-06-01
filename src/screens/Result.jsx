@@ -570,7 +570,7 @@ export default function Result({ result, onTryAgain, onNewBattle, onDungeonConti
             textTransform: 'uppercase',
           }}
         >
-          New Battle
+          Roster
         </button>
           </>
         )}

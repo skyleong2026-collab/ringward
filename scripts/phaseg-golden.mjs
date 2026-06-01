@@ -16,10 +16,10 @@ const SCENARIOS = {
     A: () => [mk('vault', 'a1', 'lastwall', ['earlyWall', 'hardplate']), mk('bastion', 'a2', 'ironhide', [])],
     B: () => [mk('fang', 'b1', 'quickstrike', ['deepCut']), mk('striker', 'b2', 'killingMomentum', ['secondWind'])],
     seed: 11,
-    // Phase 17: timeout now decided by board control (units alive, then squad HP
-    // fraction) instead of raw HP pool. Both squads end with 1 unit standing, and
-    // the Swift survivor retains a larger share of its pool → B takes the timeout.
-    golden: { winner: 'B', rounds: 10, aliveA: ['a1'], aliveB: ['b2'] },
+    // vC-H RPS re-bless: Guardian RETALIATION now grinds the fragile Swifts down
+    // — the Guardian squad wins outright (was a Swift timeout). This is the
+    // "tank beats burst" edge of the rock-paper-scissors cycle, captured here.
+    golden: { winner: 'A', rounds: 9, aliveA: ['a1'], aliveB: [] },
   },
   echoVsSpark: {
     A: () => [mk('conduit', 'a1', 'chainlink', ['longEcho', 'pureTone']), mk('link', 'a2', 'resonator', [])],
@@ -35,15 +35,19 @@ const SCENARIOS = {
     A: () => [mk('vault', 'a1', 'ironhide', [], 1), mk('fang', 'a2', 'quickstrike', [], 1)],
     B: () => [mk('vault', 'b1', 'ironhide', [], 5), mk('fang', 'b2', 'quickstrike', [], 5)],
     seed: 7,
-    golden: { winner: 'B', rounds: 10, aliveA: ['a2'], aliveB: ['b1', 'b2'] },
+    // vC-H re-bless: with retaliation, B (Lv.5 Guardian+Swift) wipes A (Lv.1)
+    // faster — resolves round 7, A fully cleared. The level-curve invariant still
+    // holds: the higher-level side wins decisively.
+    golden: { winner: 'B', rounds: 7, aliveA: [], aliveB: ['b1', 'b2'] },
   },
   launchMix: {
     A: () => [mk('vault', 'a1', 'mirrorplate', ['hairTrigger']), mk('fang', 'a2', 'glassworkCore', [])],
     B: () => [mk('conduit', 'b1', 'openChannel', []), mk('spark', 'b2', 'pyreHeart', [])],
     seed: 33,
-    // Phase 17: Spark HP bump (b2) lets it survive one extra round before its
-    // squad is wiped — battle now resolves in 9 rounds. Winner/survivors unchanged.
-    golden: { winner: 'A', rounds: 9, aliveA: ['a1', 'a2'], aliveB: [] },
+    // vC-H re-bless: the Spark (b2) now charges as a pure charger and detonates
+    // harder, so B is cleared a few rounds sooner — resolves round 6.
+    // Winner/survivors unchanged.
+    golden: { winner: 'A', rounds: 6, aliveA: ['a1', 'a2'], aliveB: [] },
   },
 };
 
