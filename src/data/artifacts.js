@@ -46,29 +46,29 @@ export const ARTIFACTS = {
   // ── Resonance / synthesis ──
   harmonicConduit: {
     id: 'harmonicConduit', name: 'Harmonic Conduit', tier: 'engine', family: 'Resonance',
-    text: 'Resonate chains through one additional free ally (two allies join the burst).',
+    text: 'Sync chains through one additional free ally (two allies join the burst).',
   },
   discordantResonance: {
     id: 'discordantResonance', name: 'Discordant Resonance', tier: 'engine', family: 'Resonance',
-    text: 'Resonate may send the pulled ally at a second enemy in the same burst.',
+    text: 'Sync may send the pulled ally at a second enemy in the same burst.',
   },
   echoOfIntent: {
     id: 'echoOfIntent', name: 'Echo of Intent', tier: 'synthesis', family: 'Resonance',
-    text: 'Resonate may pull an ally that has ALREADY acted; it acts again at 0.5×.',
+    text: 'Sync may pull an ally that has ALREADY acted; it acts again at 0.5×.',
   },
-  // ── Charge / Spark ──
+  // ── Charge / Reactor ──
   volatilePrimer: {
     id: 'volatilePrimer', name: 'Volatile Primer', tier: 'foundation', family: 'Charge',
-    text: 'This Spark detonates one stack earlier (threshold −1).',
+    text: 'This Reactor detonates one stack earlier (threshold −1).',
     note: 'An honest dial — included to show the floor.',
   },
   storedLightning: {
     id: 'storedLightning', name: 'Stored Lightning', tier: 'engine', family: 'Charge',
-    text: 'Overkill from a detonation becomes charge on the nearest allied Spark.',
+    text: 'Overkill from a detonation becomes charge on the nearest allied Reactor.',
   },
   chainReaction: {
     id: 'chainReaction', name: 'Chain Reaction', tier: 'synthesis', family: 'Charge',
-    text: 'When a Spark detonates, every ally holding any charge releases at 50%.',
+    text: 'When a Reactor detonates, every ally holding any charge releases at 50%.',
   },
   // ── Guardian / protection ──
   bulwarkTithe: {

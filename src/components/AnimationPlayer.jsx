@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ARCHETYPES } from '../data/creatures.js';
+import { ARCHETYPES, archetypeLabel } from '../data/creatures.js';
 
 // AnimationPlayer displays a creature sprite with optional VFX color overlay
 // Props:
@@ -188,7 +188,7 @@ export function AnimationPlayer({
           {creature.name.toUpperCase()}
         </div>
         <div style={{ fontSize: 8, color: `${overlayColor}80`, marginTop: 2, letterSpacing: 0.3 }}>
-          {creature.archetype}
+          {archetypeLabel(creature.archetype)}
         </div>
       </div>
     </div>

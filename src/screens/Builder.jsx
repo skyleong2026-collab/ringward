@@ -1,4 +1,4 @@
-import { CREATURES, ARCHETYPES } from '../data/creatures.js';
+import { CREATURES, ARCHETYPES, archetypeAbbr } from '../data/creatures.js';
 
 const ARCHETYPE_ORDER = ['Anchor', 'Relay', 'Predator', 'Ember'];
 
@@ -53,7 +53,7 @@ function CreatureCard({ creature, onClick, inSquad, disabled }) {
             flexShrink: 0,
           }}
         >
-          {creature.archetype.slice(0, 3).toUpperCase()}
+          {archetypeAbbr(creature.archetype)}
         </span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

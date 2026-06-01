@@ -16,9 +16,9 @@ export function generateSpotterRead(playerSquad, enemySquad) {
 
   // Line 1 — what YOUR squad is built to do
   if (myGuardian > 0 && mySpark > 0) {
-    lines.push('Guardian buys time. Spark climbs behind it. This comp rewards fights that go long.');
+    lines.push('Guardian buys time. Reactor climbs behind it. This comp rewards fights that go long.');
   } else if (mySpark > 0 && myGuardian === 0) {
-    lines.push('Your Spark needs time to scale. Nothing is buying it. Early pressure cuts the payoff short.');
+    lines.push('Your Reactor needs time to scale. Nothing is buying it. Early pressure cuts the payoff short.');
   } else if (mySwift >= 2 && myGuardian > 0) {
     lines.push('Execute pressure is high here. Guardian covers the open flank.');
   } else if (mySwift >= 2 && myGuardian === 0) {
@@ -41,7 +41,7 @@ export function generateSpotterRead(playerSquad, enemySquad) {
   if (theirSwift >= 2 && myGuardian === 0) {
     line2 = 'Their Swifts find exposed targets immediately.';
   } else if (mySpark > 0 && theirGuardian >= 2) {
-    line2 = 'Your Spark may outscale their wall — if it survives long enough.';
+    line2 = 'Your Reactor may outscale their wall — if it survives long enough.';
   } else if (mySwift > 0 && theirGuardian >= 2) {
     line2 = 'Their Guardians absorb early execute pressure. Swifts need to be patient.';
   } else if (mySpark > 0 && theirSpark > 0) {

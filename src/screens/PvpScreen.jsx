@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { ARCHETYPES } from '../data/creatures.js';
+import { ARCHETYPES, archetypeLabel } from '../data/creatures.js';
 import { myDefense, fetchLeaderboard, submitDefense, pvpIsMock, myRating } from '../engine/pvp.js';
 
 // ─── PvpScreen (vC-K refresh) ─────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export default function PvpScreen({
                 <div key={u.instanceId ?? i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
                   <span style={{ fontSize: 11, color: '#ccc', fontWeight: 600, flex: 1 }}>{u.name}</span>
-                  <span style={{ fontSize: 9, color: color }}>{u.archetype}</span>
+                  <span style={{ fontSize: 9, color: color }}>{archetypeLabel(u.archetype)}</span>
                   <span style={{ fontSize: 8, color: '#444' }}>Lv.{u.level ?? 1}</span>
                 </div>
               );

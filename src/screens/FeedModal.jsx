@@ -1,4 +1,4 @@
-import { ARCHETYPES } from '../data/creatures.js';
+import { ARCHETYPES, archetypeAbbr } from '../data/creatures.js';
 import { xpProgress, getAuraStyle, XP_PER_FEED } from '../engine/progression.js';
 import { useState, useRef, useEffect } from 'react';
 
@@ -29,7 +29,7 @@ function FodderCard({ unit, selected, onToggle, isLastCopy }) {
         {unit.name}
       </div>
       <div style={{ fontSize: 9, color, letterSpacing: 1 }}>
-        {unit.archetype.slice(0, 3).toUpperCase()}
+        {archetypeAbbr(unit.archetype)}
       </div>
       {isLastCopy && (
         <div style={{ fontSize: 9, color: '#c8691a', marginTop: 4 }}>⚠ last copy</div>

@@ -5,8 +5,15 @@ export const ARCHETYPES = {
   Guardian: { color: '#4a90d9', label: 'Guardian' },
   Echo:     { color: '#7ed321', label: 'Echo' },
   Swift:    { color: '#d0021b', label: 'Swift' },
-  Spark:    { color: '#f5a623', label: 'Spark' },
+  Spark:    { color: '#f5a623', label: 'Reactor' }, // key stays 'Spark' (engine/goldens); display = Reactor (vC-Q rename)
 };
+
+// Display helpers — the internal archetype KEY ('Spark') is engine/golden-bound
+// and never shown; everything player-facing routes through these so a rename is
+// a one-line label change (vC-Q).
+const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'RCT' };
+export function archetypeLabel(key) { return ARCHETYPES[key]?.label ?? key; }
+export function archetypeAbbr(key) { return ARCHETYPE_ABBR[key] ?? (key ?? '').slice(0, 3).toUpperCase(); }
 
 export const CREATURES = [
   // ── Guardians: High HP, High Armor, Low Attack ──
@@ -44,7 +51,7 @@ export const CREATURES = [
     speed: 4,
     flavor: 'Slow. Relentless.',
     signature: { id: 'aegis', name: 'Aegis', kind: 'passive', live: true,
-      text: 'While it lives, spread and detonation damage to the whole squad is reduced — the anti-Spark anchor.' },
+      text: 'While it lives, spread and detonation damage to the whole squad is reduced — the anti-Reactor anchor.' },
   },
 
   // ── Echos: Moderate everything ──
@@ -134,7 +141,7 @@ export const CREATURES = [
     speed: 7,
     flavor: 'Small. Growing.',
     signature: { id: 'chainIgniter', name: 'Chain Igniter', kind: 'passive', live: true,
-      text: 'When it detonates, allied Sparks gain charge — the build-around glue for a multi-Spark squad.' },
+      text: 'When it detonates, allied Reactors gain charge — the build-around glue for a multi-Reactor squad.' },
   },
   {
     id: 'flicker',

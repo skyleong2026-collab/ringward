@@ -1,6 +1,6 @@
 import { ARTIFACTS_BY_ID, ARTIFACT_TIERS } from '../data/artifacts.js';
 import { DIFFICULTIES } from '../data/contracts.js';
-import { CREATURE_BY_ID, RECRUITABLE } from '../data/creatures.js';
+import { CREATURE_BY_ID, RECRUITABLE, archetypeLabel } from '../data/creatures.js';
 
 // ─── ContractResult (§20.8) ───────────────────────────────────────────────────
 // The payout frame. On a win: the artifact this contract grants is unlocked into
@@ -168,7 +168,7 @@ export default function ContractResult({ contract, outcome, onRetry, onDone }) {
               return (
                 <div key={id} style={{ marginBottom: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 900, color: '#5abf8a', letterSpacing: 0.5 }}>{cr.name}</span>
-                  <span style={{ fontSize: 10, color: '#666', marginLeft: 8 }}>{cr.archetype}</span>
+                  <span style={{ fontSize: 10, color: '#666', marginLeft: 8 }}>{archetypeLabel(cr.archetype)}</span>
                   <span style={{ fontSize: 10, color: '#3a9a6a', marginLeft: 8 }}>· recruit for {RECRUITABLE[id]?.cost} ◈</span>
                 </div>
               );

@@ -73,7 +73,7 @@ function PendingActionPanel({ step, interventionsLeft, onRedirect, onAnchor, onR
         <div style={{ display: 'flex', gap: 6 }}>
           {verbs.map((id) => {
             const accent = id === 'resonate' ? '#b06bff' : '#4a90d9';
-            const label = id === 'anchor' ? '⚓ ANCHOR' : id === 'resonate' ? '◇ RESONATE' : 'REDIRECT';
+            const label = id === 'anchor' ? '⚓ STALL' : id === 'resonate' ? '◇ SYNC' : 'REDIRECT';
             return (
               <button key={id} onClick={() => setVerb(id)} style={{
                 flex: 1, padding: '5px 0', background: 'none', cursor: 'pointer',

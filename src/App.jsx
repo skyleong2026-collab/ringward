@@ -33,7 +33,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vC-P';
+const VERSION = 'vC-Q';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -44,7 +44,7 @@ function migrateCollection(col) {
     return {
       ...u,
       archetype: ARCHETYPE_MIGRATION[u.archetype] ?? u.archetype,
-      signature: u.signature ?? base?.signature ?? null,
+      signature: base?.signature ?? u.signature ?? null, // re-sync from definition: signature text is static per species, so saved snapshots must not go stale on a rename (vC-Q)
       sigModIds: u.sigModIds ?? [],   // vC-K: add slot array for pre-vC-K saves
       sigRank: u.sigRank ?? 1,        // vC-M: signature rank for pre-vC-M saves
     };
@@ -1012,7 +1012,7 @@ function App() {
             onComplete={handleReconComplete}
             maxInterventions={battleFocus(fieldedSquad, currentContract.modifier.interventionBudget)}
             modifiers={contractModifiers(currentContract)}
-            bannerLabel={`RECON · ${currentContract.intel[reconAxis].label.toUpperCase()}`}
+            bannerLabel={`SCOUT · ${currentContract.intel[reconAxis].label.toUpperCase()}`}
             onForfeit={() => { setReconAxis(null); setScreen('contract'); }}
             forfeitLabel="Break off the scout. The axis stays hidden — no cost, you can try again."
           />

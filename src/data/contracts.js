@@ -32,7 +32,7 @@ export const CONTRACTS = [
     discovers: ['cinder'], // vC-N: winning unlocks Ashwing for recruitment
     // ── Fiction ──
     situation:
-      'A Spark phenomenon is overcharging in the rail yard. Left alone it keeps building — each surge wider than the last. The client wants it quiet before it finishes the third.',
+      'A Reactor phenomenon is overcharging in the rail yard. Left alone it keeps building — each surge wider than the last. The client wants it quiet before it finishes the third.',
     stakes:
       'Walk away and the yard is lost to the surge. The client remembers who answers and who does not.',
     // ── Mechanic ──
@@ -44,9 +44,9 @@ export const CONTRACTS = [
       interventionBudget: 1, // parameter on the existing intervention system
     },
     winCondition: {
-      // Defeat the squad before its Spark completes a 3rd detonation.
+      // Defeat the squad before its Reactor completes a 3rd detonation.
       detonationLimit: 3, // the visible clock — 3rd enemy detonation = the signal completes = loss
-      summary: 'Defeat the squad before its Spark completes a 3rd detonation.',
+      summary: 'Defeat the squad before its Reactor completes a 3rd detonation.',
       clockLabel: 'SIGNAL',
     },
     payout: {
@@ -71,11 +71,11 @@ export const CONTRACTS = [
       composition: {
         label: 'Composition', glyph: '◇', fragmentIndex: 0, // the Guardian anchor
         hidden: 'Lineup unknown — you do not know what you are walking into.',
-        revealed: 'A Guardian anchors the formation, shielding a lone Spark, with a Swift on the flank.',
+        revealed: 'A Guardian anchors the formation, shielding a lone Reactor, with a Swift on the flank.',
         scoutLine: 'Probe the anchor to read the shape of the squad.',
       },
       behavior: {
-        label: 'Behavior', glyph: '◈', fragmentIndex: 1, // the Spark itself
+        label: 'Behavior', glyph: '◈', fragmentIndex: 1, // the Reactor itself
         hidden: "The phenomenon's trick is unknown — what is it actually doing?",
         revealed: 'The Signal charges fast and detonates across your whole squad. Left alone it only grows.',
         scoutLine: 'Engage the Signal alone to witness how it builds and bursts.',
@@ -88,9 +88,9 @@ export const CONTRACTS = [
       },
     },
     // ── Enemy build ──
-    // Centered on a Spark that charges fast (banked-heat dial → +2 stoke/round)
+    // Centered on a Reactor that charges fast (banked-heat dial → +2 stoke/round)
     // so the 3rd detonation is a genuine threat inside the round budget. The
-    // Guardian buys the Spark time; the Swift punishes a slow opener. No combat
+    // Guardian buys the Reactor time; the Swift punishes a slow opener. No combat
     // math is changed — bankedHeat is an existing module dial.
     level: 3,
     squad: [
@@ -103,7 +103,7 @@ export const CONTRACTS = [
   // ── "Hold the Crossing" (Light) — Test 3 (§20.8.5) ────────────────────────
   // A protect contract with a different modifier, to test whether build
   // *diversity* emerges (§20.8.6 Test 3). The single-target halving punishes a
-  // pure-burst answer; the Wild surge's threat is its Sparks, whose detonations
+  // pure-burst answer; the Wild surge's threat is its Reactors, whose detonations
   // are spreads — UNAFFECTED by the halving — so they bloom across the Beacon
   // unless cleared. Spread/chain offense (Echo) clears them; pure Swift cannot.
   {
@@ -119,7 +119,7 @@ export const CONTRACTS = [
     modifier: {
       headline: 'Single-target attacks land at half. Chains and spreads land full.',
       detail:
-        'Pure burst will not clear the surge in time — the threat is the Sparks, and they bloom wide. Bring something that spreads.',
+        'Pure burst will not clear the surge in time — the threat is the Reactors, and they bloom wide. Bring something that spreads.',
       interventionBudget: 3,
       singleTargetDamageScale: 0.5, // §20.8.5 modifier — engine-level, defaulted off elsewhere
     },
@@ -147,7 +147,7 @@ export const CONTRACTS = [
       flavor: 'It only has to stay lit.',
     },
     level: 3,
-    // Wild surge: two overcharging Sparks (the real, spread-damage threat) plus
+    // Wild surge: two overcharging Reactors (the real, spread-damage threat) plus
     // two Swift bodies (single-target, blunted by the modifier).
     squad: [
       { ...c('spark'), name: 'Emberling', moduleIds: ['bankedHeat'] },
@@ -159,14 +159,14 @@ export const CONTRACTS = [
       composition: {
         label: 'Composition', glyph: '◇', fragmentIndex: 1, // a Swift body
         hidden: 'Lineup unknown — you do not know the shape of the surge.',
-        revealed: 'A Wild surge: fast Swift bodies swarming around overcharging Sparks.',
+        revealed: 'A Wild surge: fast Swift bodies swarming around overcharging Reactors.',
         scoutLine: 'Cut down one of the runners to read the swarm.',
       },
       behavior: {
-        label: 'Behavior', glyph: '◈', fragmentIndex: 0, // a Spark
+        label: 'Behavior', glyph: '◈', fragmentIndex: 0, // a Reactor
         hidden: 'The surge has a trick — something about it is not just numbers.',
-        revealed: 'The Sparks detonate wide — area bursts that ignore the single-target rule. Kill them before they bloom.',
-        scoutLine: 'Engage a Spark alone to see how it blooms.',
+        revealed: 'The Reactors detonate wide — area bursts that ignore the single-target rule. Kill them before they bloom.',
+        scoutLine: 'Engage a Reactor alone to see how it blooms.',
       },
       threat: {
         label: 'Threat', glyph: '✸', fragmentIndex: 3, // a Swift
@@ -288,14 +288,14 @@ export const CONTRACTS = [
 
   // ── "The Last Threshold" (Shadow) — rep ladder rung 4 ────────────────────────
   // Shadow's hardest standard clearance. A complete cell — Guardian anchor,
-  // Spark accelerant, Swift closer. No weak link. Unlocks at Shadow rep ≥ 7.
+  // Reactor accelerant, Swift closer. No weak link. Unlocks at Shadow rep ≥ 7.
   {
     id: 'the-last-threshold',
     client: 'Shadow',
     region: 'ironfield',
     name: 'The Last Threshold',
     situation:
-      "Shadow's hardest clearance. A mixed cell holding a critical junction — Guardian anchor up front, Spark accelerating behind the shield, Swift closer waiting for any hesitation. A complete threat. No gaps.",
+      "Shadow's hardest clearance. A mixed cell holding a critical junction — Guardian anchor up front, Reactor accelerating behind the shield, Swift closer waiting for any hesitation. A complete threat. No gaps.",
     stakes:
       "Clear this and Shadow's deepest access opens. Fail and the junction stays locked. This is the job that separates operators from amateurs.",
     modifier: {
@@ -314,20 +314,20 @@ export const CONTRACTS = [
       credits: 150, shards: 18,
       summary: 'Culling Order artifact · Shadow standing',
     },
-    rewardsLine: 'Requires a balanced squad that answers Guardian, Spark, and Swift simultaneously.',
+    rewardsLine: 'Requires a balanced squad that answers Guardian, Reactor, and Swift simultaneously.',
     winLine: "The threshold falls. Shadow's deepest door opens.",
     intel: {
       composition: {
         label: 'Composition', glyph: '◇', fragmentIndex: 0,
         hidden: 'Squad unknown.',
-        revealed: 'A complete cell: Guardian anchor, Spark accelerant, Swift closer. No weak link — every archetype represented.',
+        revealed: 'A complete cell: Guardian anchor, Reactor accelerant, Swift closer. No weak link — every archetype represented.',
         scoutLine: 'Probe the anchor to read the whole formation.',
       },
       behavior: {
         label: 'Behavior', glyph: '◈', fragmentIndex: 1,
         hidden: 'Their approach is unknown.',
-        revealed: 'The Spark builds heat behind the Guardian shield — banked energy accelerating toward detonation. The Swift closes on anything that hesitates.',
-        scoutLine: 'Engage the Spark to see how the heat builds.',
+        revealed: 'The Reactor builds heat behind the Guardian shield — banked energy accelerating toward detonation. The Swift closes on anything that hesitates.',
+        scoutLine: 'Engage the Reactor to see how the heat builds.',
       },
       threat: {
         label: 'Threat', glyph: '✸', fragmentIndex: 2,

@@ -1,4 +1,4 @@
-import { ARCHETYPES, CREATURES, CREATURE_BY_ID, RECRUITABLE, RECRUITABLE_IDS } from '../data/creatures.js';
+import { ARCHETYPES, CREATURES, CREATURE_BY_ID, RECRUITABLE, RECRUITABLE_IDS, archetypeLabel } from '../data/creatures.js';
 import { GEAR } from '../data/gear.js';
 import { MODULES } from '../data/modules.js';
 import { SIG_MODS, SIG_MODS_BY_ID, SIG_RANK_MAX, sigModRankedText, sigRankUpCost } from '../data/sigMods.js';
@@ -7,13 +7,13 @@ import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { useState, useEffect } from 'react';
 import { MAX_SQUAD } from '../config.js';
 
-const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'SPK' };
+const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'RCT' };
 
 // Each creature's signature — its defining behavioral identity (vC-F). Looked up
 // from CREATURES by creature id so it shows even on collections saved earlier.
 const SIG_BY_CREATURE = Object.fromEntries(CREATURES.map((c) => [c.id, c.signature]).filter(([, s]) => s));
 
-// ─── Signature Modifier UI (vC-K) ─────────────────────────────────────────────
+// ─── Signature Glyph UI (vC-K; "Signature Modifier" renamed → Glyph in vC-Q) ───
 
 function ModSelectModal({ unit, onEquipSigMod, onClose }) {
   const equipped = unit.sigModIds ?? [];
@@ -29,7 +29,7 @@ function ModSelectModal({ unit, onEquipSigMod, onClose }) {
         borderRadius: '12px 12px 0 0', padding: '16px 16px 28px', maxHeight: '70vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 9, color: '#444', letterSpacing: 2 }}>SIGNATURE MODIFIERS — {unit.name}</div>
+          <div style={{ fontSize: 9, color: '#444', letterSpacing: 2 }}>SIGNATURE GLYPHS — {unit.name}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
         </div>
         <div style={{ fontSize: 9, color: '#333', marginBottom: 12, lineHeight: 1.5 }}>
@@ -119,7 +119,7 @@ function RecruitModal({ discoveredSpecies, ownedIds, shards, onRecruit, onClose 
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 900, color: arch.color, letterSpacing: 0.5 }}>{cr.name}</span>
-                    <span style={{ fontSize: 9, color: '#777' }}>{cr.archetype}</span>
+                    <span style={{ fontSize: 9, color: '#777' }}>{archetypeLabel(cr.archetype)}</span>
                     {owned && <span style={{ fontSize: 7, color: '#5abf8a', letterSpacing: 1, border: '1px solid #3a9a6a55', borderRadius: 2, padding: '1px 5px' }}>IN STABLE</span>}
                   </div>
                   {cr.signature && <div style={{ fontSize: 9, color: '#888', lineHeight: 1.5, marginTop: 3 }}>{cr.signature.name} — {cr.signature.text}</div>}
@@ -151,7 +151,7 @@ function ModSlotsRow({ unit, onOpenModSelectModal }) {
   const equipped = unit.sigModIds ?? [];
   return (
     <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5, flexShrink: 0 }}>MOD</span>
+      <span style={{ fontSize: 7, color: '#2a2a3a', letterSpacing: 1.5, flexShrink: 0 }}>GLYPH</span>
       {[0, 1].map((slot) => {
         const modId = equipped[slot];
         const mod = modId ? SIG_MODS_BY_ID[modId] : null;
@@ -225,7 +225,7 @@ function SignatureRow({ unit, onRankUp, shards = 0 }) {
           <button
             onClick={() => canAfford && onRankUp(unit.instanceId)}
             disabled={!canAfford}
-            title={canAfford ? `Rank up to ${rank + 1} — strengthens slotted modifiers` : `Need ${cost} ◈ shards to rank up`}
+            title={canAfford ? `Rank up to ${rank + 1} — strengthens slotted glyphs` : `Need ${cost} ◈ shards to rank up`}
             style={{
               fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
               color: canAfford ? '#cba6e6' : '#3a3a4a',

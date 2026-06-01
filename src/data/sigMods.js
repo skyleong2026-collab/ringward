@@ -53,7 +53,7 @@ export const SIG_MODS = [
     name: 'Surge',
     glyph: '⚡',
     color: '#f5a623',
-    text: 'Spark: detonates 1 stoke earlier. Others: +1 speed.',
+    text: 'Reactor: detonates 1 stoke earlier. Others: +1 speed.',
     flavor: 'Push the threshold.',
     bestOn: ['Spark'],
   },
@@ -109,7 +109,7 @@ export function sigModRankedText(modId, rank = 1) {
     case 'echoStrike': return `After each hit, replays the strike at ${Math.round(v * 100)}% damage on the same target.`;
     case 'pierce':     return `Attacks ignore ${v} points of armor.`;
     case 'fortify':    return `+${Math.round((v - 1) * 100)}% maximum HP.`;
-    case 'surge':      return `Spark: detonates ${v} stoke${v > 1 ? 's' : ''} earlier. Others: +${v} speed.`;
+    case 'surge':      return `Reactor: detonates ${v} stoke${v > 1 ? 's' : ''} earlier. Others: +${v} speed.`;
     case 'resilient':  return v > 0
       ? `Survives the first lethal hit, reviving at ${Math.round(v * 100)}% HP (once per battle).`
       : 'Survives the first lethal hit at 1 HP (once per battle).';

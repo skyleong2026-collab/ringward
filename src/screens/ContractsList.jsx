@@ -111,7 +111,7 @@ function RepLadder({ faction, rep }) {
           const current = i === rung;
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
-              <div title={`${r.label} (rep ${r.rep})`} style={{
+              <div title={`${r.label} (standing ${r.rep})`} style={{
                 width: current ? 10 : 7, height: current ? 10 : 7,
                 borderRadius: '50%', flexShrink: 0,
                 background: filled ? fs.color : '#1e1e2a',
