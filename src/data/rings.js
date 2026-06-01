@@ -195,10 +195,7 @@ export function battleLoadout(squad = []) {
   });
 }
 
-// The FIXED stat budget a reroll redistributes = the core's base stat total
-// (HP + Attack + Armor + Speed). Per-ring budget normalization is a §22.10 dial;
-// for now the budget is simply the total the species already ships with, so
-// existing balance is preserved and current stats are themselves a valid roll.
+// The base stat total (HP + Attack + Armor + Speed) — the species' shipped sum.
 export function statBudgetOf(creature) {
   return (
     (creature?.hp ?? 0) +
@@ -206,4 +203,38 @@ export function statBudgetOf(creature) {
     (creature?.armor ?? 0) +
     (creature?.speed ?? 0)
   );
+}
+
+// §22.7 per-ring stat budget — "deeper origin ring = bigger stat budget". The ring
+// scales a core's combat budget by this multiplier; Reaches = 1.0 is the baseline
+// (everything was Reaches before origin rings, so existing balance is untouched),
+// Rim is leaner, Deep/Drop are the bigger chassis (Drop = the endgame max). The
+// budget is stamped at incubation and is FIXED — the Forge only redistributes it,
+// never grows it (§22.9 anti-treadmill). §22.10 strawman dials — tune for balance.
+export const RING_BUDGET_MULT = { Rim: 0.9, Reaches: 1.0, Deep: 1.2, Drop: 1.4 };
+
+export function ringBudgetMult(ring) {
+  return RING_BUDGET_MULT[ring] ?? RING_BUDGET_MULT[DEFAULT_RING];
+}
+
+// A core's combat stats scaled to its origin ring. SPEED is left UNSCALED — turn
+// order is archetype identity (mirrors progression.js never scaling speed by
+// level), so depth buys HP/Attack/Armor, not a faster clock. Returns the four
+// stats; the ring budget is exactly their sum, so a fresh core is fully allocated
+// (sum === statBudget) and is itself a valid roll.
+export function ringScaledStats(creature, ring) {
+  const m = ringBudgetMult(ring);
+  return {
+    hp:     Math.round((creature?.hp ?? 0) * m),
+    attack: Math.round((creature?.attack ?? 0) * m),
+    armor:  Math.round((creature?.armor ?? 0) * m),
+    speed:  creature?.speed ?? 0,
+  };
+}
+
+// The fixed budget for a core of this species at this ring = the sum of its
+// ring-scaled stats (so sum === budget holds exactly, no rounding drift).
+export function ringStatBudget(creature, ring) {
+  const s = ringScaledStats(creature, ring);
+  return s.hp + s.attack + s.armor + s.speed;
 }

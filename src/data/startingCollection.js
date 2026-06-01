@@ -1,5 +1,5 @@
 import { CREATURES } from './creatures.js';
-import { DEFAULT_RING, buildSlots, statBudgetOf } from './rings.js';
+import { DEFAULT_RING, buildSlots, ringScaledStats, ringStatBudget } from './rings.js';
 
 const c = (id) => CREATURES.find((u) => u.id === id);
 
@@ -7,6 +7,9 @@ function inst(creature, instanceId, originRing = DEFAULT_RING) {
   return {
     instanceId,
     ...creature,
+    // §22.7 stats scaled to the origin ring (Reaches = 1.0 baseline; Deep/Drop
+    // bigger). Overrides the species base after the spread.
+    ...ringScaledStats(creature, originRing),
     xp: 0,
     level: 1,
     feedCount: 0,
@@ -23,7 +26,7 @@ function inst(creature, instanceId, originRing = DEFAULT_RING) {
     // §22 origin-ring layer — fixed stat budget a reroll redistributes + slots
     // gated by level/resonance. Engine never reads these (golden-safe).
     originRing,
-    statBudget: statBudgetOf(creature),
+    statBudget: ringStatBudget(creature, originRing),
     slots: buildSlots(originRing, 1),
   };
 }

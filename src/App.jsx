@@ -23,7 +23,7 @@ import { resolveBattle } from './engine/battleStepEngine.js';
 import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
-import { DEFAULT_RING, buildSlots, statBudgetOf, rerollCost, dungeonSlag, socketInto, battleLoadout, ringForZoneTier, ringLevelCap } from './data/rings.js';
+import { DEFAULT_RING, buildSlots, statBudgetOf, ringScaledStats, ringStatBudget, rerollCost, dungeonSlag, socketInto, battleLoadout, ringForZoneTier, ringLevelCap } from './data/rings.js';
 import { sigRankUpCost } from './data/sigMods.js';
 import { ENCOUNTERS } from './data/encounters.js';
 import { DUNGEONS } from './data/dungeons.js';
@@ -73,7 +73,10 @@ function migrateCollection(col) {
       // leveled snapshot; slots seed from ring + current level (resonance comes
       // at squad-set). All additive — the engine never reads these.
       originRing: u.originRing ?? DEFAULT_RING,
-      statBudget: u.statBudget ?? statBudgetOf(base ?? u),
+      // Stamped budget is preserved if present (it's fixed at incubation). For
+      // pre-§22 saves it's filled from the ring-scaled total — Reaches = 1.0, so
+      // pre-existing (all-Reaches) cores get exactly their species total, unchanged.
+      statBudget: u.statBudget ?? ringStatBudget(base ?? u, u.originRing ?? DEFAULT_RING),
       slots: u.slots ?? buildSlots(u.originRing ?? DEFAULT_RING, u.level ?? 1),
     });
   });
@@ -87,6 +90,8 @@ function createCaughtInstance(creature, zoneName, originRing = DEFAULT_RING) {
   return {
     instanceId,
     ...creature,
+    // §22.7 combat stats scaled to the stamped origin ring (Reaches baseline).
+    ...ringScaledStats(creature, originRing),
     xp: 0,
     level: 1,
     feedCount: 0,
@@ -103,7 +108,7 @@ function createCaughtInstance(creature, zoneName, originRing = DEFAULT_RING) {
     sigModIds: [],
     sigRank: 1,
     originRing,
-    statBudget: statBudgetOf(creature),
+    statBudget: ringStatBudget(creature, originRing),
     slots: buildSlots(originRing, 1),
   };
 }

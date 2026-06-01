@@ -249,7 +249,11 @@ function XpBar({ xp, cap }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#444', marginBottom: 2 }}>
-        <span>Lv.{prog.level}</span>
+        {/* Show current level out of the origin-ring ceiling, so the cap (how far
+            this core can ever grow) is always visible — Drop reaches 10, Reaches 5. */}
+        <span title={`Levels to ${cap} — set by origin ring`}>
+          Lv.{prog.level}<span style={{ color: '#333' }}> / {cap}</span>
+        </span>
         {prog.needed
           ? <span>{prog.current}/{prog.needed}</span>
           : <span style={{ color: '#7ed321' }}>MAX</span>
