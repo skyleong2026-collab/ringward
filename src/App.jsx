@@ -20,7 +20,7 @@ import { REGION_BY_ID } from './data/regions.js';
 import { buildFocus, battleFocus } from './data/focus.js';
 import { fetchOpponentPool, recordMatch, myRating } from './engine/pvp.js';
 import { resolveBattle } from './engine/battleStepEngine.js';
-import { levelEnemySquad, rollSpawnLevel } from './engine/squad.js';
+import { levelEnemySquad, rollSpawnLevel, scaledEnemyLevel } from './engine/squad.js';
 import { randomSeed } from './engine/rng.js';
 import { buildStartingCollection } from './data/startingCollection.js';
 import { DEFAULT_RING, buildSlots, statBudgetOf, ringScaledStats, ringStatBudget, rerollCost, dungeonSlag, socketInto, battleLoadout, ringForZoneTier, ringLevelCap } from './data/rings.js';
@@ -511,7 +511,9 @@ function App() {
     // §22.8 practice sandbox: just re-run the fight — no XP/stat application.
     const playerSquad = battleLoadout(collection.filter((u) => squadIds.includes(u.instanceId)));
     const seed = randomSeed();
-    const res = resolveBattle(playerSquad, levelEnemySquad(currentEncounter.squad, currentEncounter.level), seed);
+    // Practice scales foes to the fielded squad (§22.8 sandbox stays a real test).
+    const enemyLevel = scaledEnemyLevel(currentEncounter, fieldedSquad);
+    const res = resolveBattle(playerSquad, levelEnemySquad(currentEncounter.squad, enemyLevel), seed);
     setResult(res);
   }
 
@@ -964,6 +966,7 @@ function App() {
           <PreBattle
             encounter={currentEncounter}
             playerSquad={collection.filter((u) => squadIds.includes(u.instanceId))}
+            enemyLevel={dungeonRun ? currentEncounter.level : scaledEnemyLevel(currentEncounter, fieldedSquad)}
             onCommit={commitBattle}
             onBack={() => dungeonRun ? setScreen('dungeon') : setScreen('encounters')}
           />
@@ -975,7 +978,7 @@ function App() {
               const hp = dungeonRun.hpOverrides[u.instanceId];
               return hp !== undefined ? { ...u, currentHP: hp } : u;
             }))}
-            enemySquad={levelEnemySquad(currentEncounter.squad, currentEncounter.level)}
+            enemySquad={levelEnemySquad(currentEncounter.squad, dungeonRun ? currentEncounter.level : scaledEnemyLevel(currentEncounter, fieldedSquad))}
             seed={battleSeed}
             onComplete={handleBattleComplete}
             maxInterventions={buildFocus(battleSquad)}

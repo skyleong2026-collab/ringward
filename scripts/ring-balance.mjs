@@ -14,7 +14,7 @@ import { CREATURES } from '../src/data/creatures.js';
 import { resolveBattle } from '../src/engine/battleStepEngine.js';
 import { ringScaledStats, ringLevelCap } from '../src/data/rings.js';
 import { ENCOUNTERS } from '../src/data/encounters.js';
-import { levelEnemySquad } from '../src/engine/squad.js';
+import { levelEnemySquad, scaledEnemyLevel } from '../src/engine/squad.js';
 
 const c = (id) => CREATURES.find((u) => u.id === id);
 const SEEDS = Array.from({ length: 40 }, (_, i) => i * 13 + 5);
@@ -97,5 +97,20 @@ for (const [label, extra] of socketTests) {
   const starved = winRate(trio('Drop', 7), mirror);                 // ~50% baseline (near-mirror)
   const bloomed = winRate(trio('Drop', 7, extra), mirror);          // same trio, gear powered
   console.log(`  ${pad(label, 46)}  starved ${pad(starved + '%', 5)} → bloomed ${pad(bloomed + '%', 5)}  (Δ ${bloomed - starved >= 0 ? '+' : ''}${bloomed - starved})`);
+}
+
+console.log('\n══ D. Enemy scaling — does scaling practice foes to squad level keep fights contested? ══');
+console.log('   Drop trio vs a sample encounter, FIXED level vs SCALED (squad avg + edge). Want');
+console.log('   scaled fights pulled toward ~40–60%, not 100%. Edge sweep picks the dial.\n');
+const sampleEncs = [ENCOUNTERS[0], ENCOUNTERS[1], ENCOUNTERS[6]]; // Patrol, Iron Wall, Overdrive
+for (const trioLvl of [5, 10]) {
+  const A = trio('Drop', trioLvl);
+  console.log(`  Trio @ L${trioLvl}:`);
+  for (const enc of sampleEncs) {
+    const fixed = winRate(A, levelEnemySquad(enc.squad, enc.level ?? 1));
+    const cells = [0, 1, 2, 3].map((edge) =>
+      pad(winRate(A, levelEnemySquad(enc.squad, scaledEnemyLevel(enc, A, edge))) + '%', 7));
+    console.log(`    ${pad(enc.name, 14)} fixed ${pad(fixed + '%', 5)} | scaled edge0/1/2/3:${cells.join('')}`);
+  }
 }
 console.log('');

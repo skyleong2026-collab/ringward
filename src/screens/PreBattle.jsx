@@ -154,8 +154,11 @@ function EnemyRow({ unit, level, threatLabel, isLast }) {
   );
 }
 
-export default function PreBattle({ encounter, playerSquad, onCommit, onBack }) {
+export default function PreBattle({ encounter, playerSquad, enemyLevel, onCommit, onBack }) {
   const spotterRead = generateSpotterRead(playerSquad, encounter.squad);
+  // Enemies scale to the fielded squad in practice (App passes enemyLevel); fall
+  // back to the encounter's designed level if not provided.
+  const encLevel = enemyLevel ?? encounter.level;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -227,7 +230,7 @@ export default function PreBattle({ encounter, playerSquad, onCommit, onBack }) 
           <EnemyRow
             key={i}
             unit={u}
-            level={encounter.level}
+            level={encLevel}
             threatLabel={spotterRead.threatLabels[i]}
             isLast={i === encounter.squad.length - 1}
           />
