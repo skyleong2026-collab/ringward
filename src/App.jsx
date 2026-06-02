@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import CollectionScreen from './screens/CollectionScreen.jsx';
 import { IntroFrame } from './screens/IntroFrame.jsx';
+import { GuidedCoach } from './screens/GuidedCoach.jsx';
 import EncounterScreen from './screens/EncounterScreen.jsx';
 import PreBattle from './screens/PreBattle.jsx';
 import WorldScreen from './screens/WorldScreen.jsx';
@@ -258,6 +259,16 @@ function App() {
   function dismissIntro() {
     try { localStorage.setItem('8gents_seen_intro', '1'); } catch { /* best-effort */ }
     setShowIntro(false);
+  }
+  // First-run "how to win" walkthrough — shows once after the intro, re-openable
+  // from the briefing. Gated separately from the intro so existing Handlers (who've
+  // already seen the lore frame) still get the mechanics thread on next load.
+  const [showGuide, setShowGuide] = useState(() => {
+    try { return localStorage.getItem('8gents_seen_guide') !== '1'; } catch { return true; }
+  });
+  function dismissGuide() {
+    try { localStorage.setItem('8gents_seen_guide', '1'); } catch { /* best-effort */ }
+    setShowGuide(false);
   }
 
   function persist(newCollection, newSquadIds, newEncounterHistory = encounterHistory) {
@@ -872,7 +883,7 @@ function App() {
           RINGWARD
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => setShowIntro(true)} title="Field briefing" style={{
+          <button onClick={() => { setShowIntro(true); setShowGuide(true); }} title="Field briefing" style={{
             fontSize: 9, color: '#8a8a9a', background: '#12121c',
             padding: '4px 9px', borderRadius: 4, letterSpacing: 1,
             fontFamily: 'monospace', border: '1px solid #2a2a3a', fontWeight: 600,
@@ -994,6 +1005,7 @@ function App() {
             onNewBattle={dungeonRun ? null : handleNewBattle}
             onDungeonContinue={dungeonRun ? handleDungeonContinue : null}
             onDungeonFail={dungeonRun ? handleDungeonFail : null}
+            onFixSquad={dungeonRun ? null : () => { setResult(null); setScreen('collection'); }}
           />
         )}
         {screen === 'dungeon' && (
@@ -1133,6 +1145,7 @@ function App() {
       )}
 
       {showIntro && <IntroFrame onBegin={dismissIntro} />}
+      {!showIntro && showGuide && <GuidedCoach onClose={dismissGuide} />}
     </div>
   );
 }

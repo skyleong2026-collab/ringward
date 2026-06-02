@@ -95,4 +95,57 @@ export function rateEncounter(enemySquad = [], playerSize = 3) {
   };
 }
 
+// ─── Defeat coach — turn a loss into one concrete next move (meta layer) ───────
+//
+// After a loss the player asks exactly two things: WHY, and WHAT do I change.
+// The READ panel already diagnoses the enemy; this answers it against the squad
+// the player actually fielded, in priority order, so the prescription is singular
+// (one cause, one fix) rather than a wall of advice. Stays pure: it reads only
+// archetype + size + the caller's role lookup. `roleTagOf(unit)` returns a unit's
+// ROLES tag string (e.g. 'Blast Damper') — passed in so this never imports data.
+//
+// Severity is also the SHAPE of the answer:
+//   'cliff' — outnumbered past the body cliff; honestly, no build wins. Don't send
+//             the player to the Stable to chase a fix that doesn't exist.
+//   'comp'  — they fielded no answer to the enemy's spike. Name the counter role.
+//   'gear'  — right idea, wrong margin. Point at the gear that buys headroom.
+export function coachDefeat(playerSquad = [], enemySquad = [], roleTagOf = () => null) {
+  const rating = rateEncounter(enemySquad, playerSquad.length);
+
+  // 1) Body cliff first — the build-proof loss. A roster change can't save it, so
+  //    don't pretend it can; redirect to fight selection instead of the Stable.
+  if (rating.bodyCliff) {
+    return {
+      severity: 'cliff',
+      cause: `Outnumbered ${rating.size} to ${playerSquad.length}. That gap, not your build, lost this.`,
+      fix: 'No company of three holds a fight it brings too few bodies to — I measured it, and the line never bends. Take the ones marked FAIR or OUTNUMBERED. Leave this until you field deeper.',
+      goStable: false,
+    };
+  }
+
+  // 2) Wrong tool — did the player bring the role this enemy demands?
+  const counter = rating.counterRole;
+  if (counter) {
+    const hasCounter = playerSquad.some((u) => roleTagOf(u) === counter);
+    if (!hasCounter) {
+      return {
+        severity: 'comp',
+        cause: `They run as a ${rating.label}, and you brought no answer to it.`,
+        fix: `Field a ${counter}. ${rating.counterWhy}`,
+        goStable: true,
+      };
+    }
+  }
+
+  // 3) Right idea, wrong margin — lean on gear that buys a level of headroom.
+  return {
+    severity: 'gear',
+    cause: counter
+      ? `You had the right shape for a ${rating.label} — it just came up short.`
+      : 'A close one. No single thing they did, no single thing you missed.',
+    fix: 'Socket gear that buys tempo or survival — Quickstrike, Sentinel, or Resonator each earn you about a level of headroom. Tune the squad in your Stable, then run it back.',
+    goStable: true,
+  };
+}
+
 export const COMPOSITION_PROFILES = PROFILES;

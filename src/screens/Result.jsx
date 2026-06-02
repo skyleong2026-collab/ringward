@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ARCHETYPES } from '../data/creatures.js';
+import { ARCHETYPES, roleOf } from '../data/creatures.js';
 import { GEAR } from '../data/gear.js';
 import { MODULES_BY_ID } from '../data/modules.js';
+import { coachDefeat } from '../engine/threat.js';
 
 function findDeathCause(unitName, battleLog) {
   if (!battleLog) return null;
@@ -325,7 +326,40 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
   );
 }
 
-export default function Result({ result, practice = false, onTryAgain, onNewBattle, onDungeonContinue, onDungeonFail }) {
+// ─── Defeat coach (vC-T) — the Spotter's read on WHY you lost and WHAT to change.
+// Shown only on a player loss, in the Spotter's folk-mentor voice. Reuses the same
+// meta intelligence as the pre-battle READ, so the diagnosis and the prescription
+// rhyme. `severity` styles the panel and decides whether we offer the Stable jump
+// (a body-cliff loss has no roster fix, so we don't pretend it does).
+const COACH_STYLE = {
+  cliff: { accent: '#d0021b', bg: '#1a0d0d', tag: 'OUTNUMBERED' },
+  comp:  { accent: '#e8a040', bg: '#1a1408', tag: 'WRONG TOOL' },
+  gear:  { accent: '#7ed321', bg: '#0d1a0d', tag: 'CLOSE ONE' },
+};
+function DefeatCoach({ playerSquad, enemySquad, onFixSquad }) {
+  const coach = coachDefeat(playerSquad, enemySquad, (u) => roleOf(u.id)?.tag ?? null);
+  const s = COACH_STYLE[coach.severity] ?? COACH_STYLE.gear;
+  return (
+    <div style={{ background: s.bg, border: `1px solid ${s.accent}44`, borderLeft: `3px solid ${s.accent}`, borderRadius: 8, padding: '13px 15px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 9, color: '#1e3a5f', letterSpacing: 2 }}>◼ SPOTTER</span>
+        <span style={{ fontSize: 8, color: s.accent, background: s.accent + '1a', border: `1px solid ${s.accent}44`, borderRadius: 3, padding: '1px 6px', letterSpacing: 1 }}>{s.tag}</span>
+      </div>
+      <div style={{ fontSize: 13, color: '#e6e6ee', lineHeight: 1.6, fontWeight: 600, marginBottom: 5 }}>{coach.cause}</div>
+      <div style={{ fontSize: 12, color: '#9a9aaa', lineHeight: 1.65 }}>{coach.fix}</div>
+      {coach.goStable && onFixSquad && (
+        <button
+          onClick={onFixSquad}
+          style={{ marginTop: 11, width: '100%', padding: '10px', background: s.accent, border: 'none', borderRadius: 6, color: '#0a0a14', fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: 'pointer', textTransform: 'uppercase' }}
+        >
+          Tune the squad →
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function Result({ result, practice = false, onTryAgain, onNewBattle, onDungeonContinue, onDungeonFail, onFixSquad }) {
   const { winner, rounds, telemetry, outcomeText, coachingLine, seed, xpRewards, gearProcs, battleLog } = result;
   const { squadA, squadB } = telemetry;
 
@@ -370,6 +404,11 @@ export default function Result({ result, practice = false, onTryAgain, onNewBatt
           </div>
         )}
       </div>
+
+      {/* Defeat coach — only on a player loss; the Spotter's why + one fix */}
+      {winner === 'B' && (
+        <DefeatCoach playerSquad={squadA} enemySquad={squadB} onFixSquad={onFixSquad} />
+      )}
 
       {/* Match stats */}
       <MatchStats squadA={squadA} squadB={squadB} battleLog={battleLog} winner={winner} />
