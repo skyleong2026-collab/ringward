@@ -136,3 +136,13 @@ Direction-independent wins I'll ship now regardless: **HP/shield bars** and **re
 4. **FOCUS:** rework it into off-turn reactions, or retire it entirely?
 5. **Auto mode:** keep it for grinding, or go manual-only?
 6. **First slice:** which character do you want to feel first — the Reactor (aggressive charge-dump) or the Echo (support multiplier)?
+
+---
+
+## 10. Walking (later phase — banked 2026-06-01, do NOT build yet)
+
+Walking gives you **gear, not creatures.** It's Explorer + Farmer ("I found something" / "I earned something"), not Hunter. You catch creatures by playing; walking is where you hunt rare gear.
+
+- **The loot must change how a creature fights, not just bump a number.** Weak: "+4 Attack." Strong: "Ignite also burns the two enemies next to the target," "start each fight with 20 charge," "Overload leaves a burning puddle." Plain stat runes = common filler; the rare chase loot rewrites a skill (Ignite/Overload/charge).
+- **No GPS needed for v1.** Both features, per Sky (2026-06-01): (1) a creature goes on an **expedition** (a timer/run you start in-app) and comes back with a rune; (2) **real player walking speeds the expedition up.** Can't-walk players still get loot on the timer; walkers get rewarded with speed. Never required, never gated behind distance. Real GPS is a later, bigger add that just becomes another way to start the same expeditions.
+- **Order:** build this only after 2-3 creatures each fight differently — otherwise it's loot for a one-creature game.
