@@ -1,201 +1,105 @@
-// Gear-as-power deep-dive (north-star buildcraft).
+// Gear-as-power deep-dive — CORRECTED methodology (north-star buildcraft).
 //
-// comp-counter.mjs found gear ON vs OFF = Δ0 at parity, and concluded "archetype
-// comp is the build axis, gear is sub-threshold". That conclusion is SUSPECT: a
-// gear only matters if its TRIGGER fires AND the effect changes an outcome. The
-// Δ0 test put gear in matchups where the trigger may never have fired (Quickstrike
-// = onKill in a slow Guardian fight = inert). This harness separates the two:
+// HISTORY (kept as a warning): the first version of this harness measured "win%
+// of geared squad vs its own bare twin" and concluded gear was LIVE POWER. A later
+// pass measured "geared vs a real foe minus bare vs the same foe" and got +0
+// everywhere. BOTH were misleading, for the same reason: the frozen engine's
+// outcomes are BINARY (a win/loss CLIFF at a power threshold), so any single
+// win-rate sample lands in stomp territory (100%/0%) unless it happens to sit
+// exactly on the cliff. The bare-twin mirror accidentally sat on a cliff (50%
+// coinflip) → gear looked decisive; a real foe sat off it → gear looked dead.
 //
-//   For each gear, build a MIRROR (identical squad + level, one side geared) in a
-//   matchup DESIGNED to fire its trigger, then report BOTH:
-//     • proc/game — did the trigger actually fire? (reads battleLog events)
-//     • win% of the geared side — given it fired, did it move the outcome?
+// The HONEST metric: gear doesn't make a fixed fight "closer" — it MOVES THE CLIFF.
+// So measure how many FOE LEVELS a gear buys: the highest foe level at which the
+// squad still wins, geared vs bare. shift = geared_ceiling − bare_ceiling, in
+// levels of difficulty. That is gear's real, snowball-proof contribution.
 //
-//   procs≈0            → inert in this matchup (trigger never fires)
-//   procs>0, win≈50    → fires but cosmetic (snowball swamps it)
-//   procs>0, win>>50   → LIVE POWER — gear swings fights when its trigger is live
-//
-// Mirror baseline is exactly 50% (both sides identical), so any swing is the gear.
-// Frozen engine unmodified — this only BUILDS inputs + READS the log.
+// Corollary that ties the two fronts together: a gear's shift only CASHES OUT when
+// the fight sits near the cliff (parity). Away from the cliff, every gear is +0 —
+// which is why composition-aware matchmaking (fights at parity) is the lever that
+// makes ALL buildcraft legible. Frozen engine unmodified — this only builds inputs.
 import { CREATURES } from '../src/data/creatures.js';
 import { resolveBattle } from '../src/engine/battleStepEngine.js';
 
 const c = (id) => CREATURES.find((u) => u.id === id);
-const SEEDS = Array.from({ length: 50 }, (_, i) => i * 7 + 3);
+const u = (id, iid, level, gearId = null, moduleIds = []) => ({ ...c(id), instanceId: iid, id: iid, level, gearId, moduleIds });
+const SEEDS = Array.from({ length: 40 }, (_, i) => i * 11 + 3);
 const pad = (s, n) => String(s).padStart(n);
 const padr = (s, n) => String(s).padEnd(n);
 
-// A battle-ready unit at a level, with optional gear/modules.
-function u(id, iid, level, gearId = null, moduleIds = []) {
-  return { ...c(id), instanceId: iid, id: iid, level, gearId, moduleIds };
-}
-
-// Count gear_proc + module_proc events for a given id across the whole log.
-function countProcs(battleLog, id) {
-  let n = 0;
-  for (const { events } of battleLog) {
-    for (const e of events) {
-      if ((e.type === 'gear_proc' && e.gearId === id) ||
-          (e.type === 'module_proc' && e.moduleId === id)) n++;
-    }
-  }
-  return n;
-}
-
-// win% of A vs B + avg procs/game of `procId` on A's side, over seeds + both flips.
-function measure(A, B, procId) {
-  let aw = 0, g = 0, procs = 0;
+function winRate(S, F) {
+  let w = 0, g = 0;
   for (const seed of SEEDS) for (const flip of [false, true]) {
-    const r = flip ? resolveBattle(B, A, seed) : resolveBattle(A, B, seed);
-    if (flip ? r.winner === 'B' : r.winner === 'A') aw++;
-    procs += countProcs(r.battleLog, procId);
+    const r = flip ? resolveBattle(F, S, seed) : resolveBattle(S, F, seed);
+    if (flip ? r.winner === 'B' : r.winner === 'A') w++;
     g++;
   }
-  return { win: Math.round((aw / g) * 100), procPerGame: +(procs / g).toFixed(1) };
+  return w / g;
+}
+function countProcs(battleLog, id) {
+  let n = 0;
+  for (const { events } of battleLog) for (const e of events)
+    if ((e.type === 'gear_proc' && e.gearId === id) || (e.type === 'module_proc' && e.moduleId === id)) n++;
+  return n;
+}
+// Highest foe level at which `squad` still wins ≥50% — its difficulty ceiling.
+function cliff(squad, foeFn) {
+  let last = 0;
+  for (let fl = 1; fl <= 16; fl++) if (winRate(squad, foeFn(fl)) >= 0.5) last = fl;
+  return last;
+}
+// procs/game for `gearId` measured at the squad's own cliff level (where it matters).
+function procsAtCliff(squad, foeFn, level, gearId) {
+  if (level === 0) level = 5;
+  const F = foeFn(level);
+  let procs = 0, g = 0;
+  for (const seed of SEEDS) { procs += countProcs(resolveBattle(squad, F, seed).battleLog, gearId); g++; }
+  return +(procs / g).toFixed(1);
 }
 
-const tag = (win, proc) =>
-  proc < 0.2 ? 'INERT (trigger never fires)' :
-  win >= 60  ? '◀ LIVE POWER' :
-  win >= 54  ? 'fires + tips' :
-  'fires but COSMETIC (snowball swamps)';
-
-// ── Each test: a squad + the unit that carries the gear + an opponent built to
-// fire the trigger. The geared squad plays vs the SAME squad bare. ──────────────
-const L = 5;
-const TESTS = [
-  {
-    gear: 'quickstrike', name: 'Quickstrike (onKill → extra action)',
-    squad: () => [u('striker', 'p0', L, 'quickstrike'), u('fang', 'p1', L), u('claw', 'p2', L)],
-    bare:  () => [u('striker', 'p0', L), u('fang', 'p1', L), u('claw', 'p2', L)],
-    foe:   () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)], // fragile → kills
-  },
-  {
-    gear: 'killingMomentum', name: 'Killing Momentum (onKill → refund + widen)',
-    squad: () => [u('fang', 'p0', L, 'killingMomentum'), u('striker', 'p1', L), u('claw', 'p2', L)],
-    bare:  () => [u('fang', 'p0', L), u('striker', 'p1', L), u('claw', 'p2', L)],
-    foe:   () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)],
-  },
-  {
-    gear: 'lastwall', name: 'Lastwall (onWouldFall → survive + reflect)',
-    squad: () => [u('vault', 'p0', L, 'lastwall'), u('conduit', 'p1', L), u('striker', 'p2', L)],
-    bare:  () => [u('vault', 'p0', L), u('conduit', 'p1', L), u('striker', 'p2', L)],
-    foe:   () => [u('fang', 'e0', L), u('striker', 'e1', L), u('claw', 'e2', L)], // burst → near-death
-  },
-  {
-    gear: 'ironhide', name: 'Ironhide (onShieldBreak → reform)',
-    squad: () => [u('vault', 'p0', L, 'ironhide'), u('bastion', 'p1', L), u('conduit', 'p2', L)],
-    bare:  () => [u('vault', 'p0', L), u('bastion', 'p1', L), u('conduit', 'p2', L)],
-    foe:   () => [u('fang', 'e0', L), u('striker', 'e1', L), u('claw', 'e2', L)],
-  },
-  {
-    gear: 'kindling', name: 'Kindling (onAllyFall → inherit power)',
-    squad: () => [u('spark', 'p0', L, 'kindling'), u('flicker', 'p1', L), u('cinder', 'p2', L)],
-    bare:  () => [u('spark', 'p0', L), u('flicker', 'p1', L), u('cinder', 'p2', L)],
-    foe:   () => [u('fang', 'e0', L), u('striker', 'e1', L), u('claw', 'e2', L)], // kills allies → fires
-  },
-  {
-    gear: 'chainlink', name: 'Chain Link (onEcho → jump to 2nd)',
-    squad: () => [u('conduit', 'p0', L, 'chainlink'), u('nexus', 'p1', L), u('striker', 'p2', L)],
-    bare:  () => [u('conduit', 'p0', L), u('nexus', 'p1', L), u('striker', 'p2', L)],
-    foe:   () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)],
-  },
-  {
-    gear: 'resonator', name: 'Resonator (onEcho → first echo full power)',
-    squad: () => [u('conduit', 'p0', L, 'resonator'), u('striker', 'p1', L), u('fang', 'p2', L)],
-    bare:  () => [u('conduit', 'p0', L), u('striker', 'p1', L), u('fang', 'p2', L)],
-    foe:   () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)],
-  },
-  {
-    gear: 'glassworkCore', name: 'Glasswork Core (onInit → armor→attack)',
-    squad: () => [u('bastion', 'p0', L, 'glassworkCore'), u('conduit', 'p1', L), u('striker', 'p2', L)],
-    bare:  () => [u('bastion', 'p0', L), u('conduit', 'p1', L), u('striker', 'p2', L)],
-    foe:   () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)],
-  },
-  {
-    gear: 'sentinel', name: 'Sentinel (onAllyTargeted → intercept)',
-    squad: () => [u('bastion', 'p0', L, 'sentinel'), u('conduit', 'p1', L), u('striker', 'p2', L)],
-    bare:  () => [u('bastion', 'p0', L), u('conduit', 'p1', L), u('striker', 'p2', L)],
-    foe:   () => [u('fang', 'e0', L), u('striker', 'e1', L), u('claw', 'e2', L)],
-  },
-  {
-    gear: 'mirrorplate', name: 'Mirrorplate (onShieldBreak → reflect burst)',
-    squad: () => [u('vault', 'p0', L, 'mirrorplate'), u('bastion', 'p1', L), u('conduit', 'p2', L)],
-    bare:  () => [u('vault', 'p0', L), u('bastion', 'p1', L), u('conduit', 'p2', L)],
-    foe:   () => [u('fang', 'e0', L), u('striker', 'e1', L), u('claw', 'e2', L)],
-  },
-  {
-    gear: 'openChannel', name: 'Open Channel (onEcho → chain + mark)',
-    squad: () => [u('conduit', 'p0', L, 'openChannel'), u('nexus', 'p1', L), u('striker', 'p2', L)],
-    bare:  () => [u('conduit', 'p0', L), u('nexus', 'p1', L), u('striker', 'p2', L)],
-    foe:   () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)],
-  },
-  {
-    gear: 'pyreHeart', name: 'Pyre Heart (onWouldFall → pass flame + detonate)',
-    squad: () => [u('spark', 'p0', L, 'pyreHeart'), u('flicker', 'p1', L), u('cinder', 'p2', L)],
-    bare:  () => [u('spark', 'p0', L), u('flicker', 'p1', L), u('cinder', 'p2', L)],
-    foe:   () => [u('fang', 'e0', L), u('striker', 'e1', L), u('claw', 'e2', L)],
-  },
-];
-
-console.log('\n══ GEAR AS POWER — proc rate + win-swing in a MIRROR built to fire each trigger ══');
-console.log('   Geared squad vs the SAME squad bare (50% baseline). vs a foe that fires the trigger.\n');
-console.log('   ' + padr('gear', 42) + pad('proc/game', 11) + pad('win%', 7) + '   verdict');
-for (const t of TESTS) {
-  const m = measure(t.squad(), t.bare(), t.gear);
-  console.log('   ' + padr(t.name, 42) + pad(m.procPerGame, 11) + pad(m.win + '%', 7) +
-    '   ' + tag(m.win, m.procPerGame));
-}
-
-// ── Dial test: does a MODULE amplify the verb it tunes? (dial-doctrine) ─────────
-console.log('\n══ DIALS — does a module move the geared verb? (gear vs gear+module mirror) ══\n');
-const dialTests = [
-  ['Quickstrike + Second Wind (fire twice)', 'secondWind',
-    () => [u('striker', 'p0', L, 'quickstrike', ['secondWind']), u('fang', 'p1', L), u('claw', 'p2', L)],
-    () => [u('striker', 'p0', L, 'quickstrike'), u('fang', 'p1', L), u('claw', 'p2', L)],
-    () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)]],
-  ['Striker + Deep Cut (wider execute)', 'deepCut',
-    () => [u('striker', 'p0', L, 'quickstrike', ['deepCut']), u('fang', 'p1', L), u('claw', 'p2', L)],
-    () => [u('striker', 'p0', L, 'quickstrike'), u('fang', 'p1', L), u('claw', 'p2', L)],
-    () => [u('spark', 'e0', L), u('flicker', 'e1', L), u('cinder', 'e2', L)]],
-  ['Vault + Hardplate (tougher shield)', 'hardplate',
-    () => [u('vault', 'p0', L, 'ironhide', ['hardplate']), u('bastion', 'p1', L), u('conduit', 'p2', L)],
-    () => [u('vault', 'p0', L, 'ironhide'), u('bastion', 'p1', L), u('conduit', 'p2', L)],
-    () => [u('fang', 'e0', L), u('striker', 'e1', L), u('claw', 'e2', L)]],
-];
-console.log('   ' + padr('dial on top of gear', 42) + pad('proc/game', 11) + pad('win%', 7) + '   (vs gear-only = 50%)');
-for (const [label, procId, withDial, without, foe] of dialTests) {
-  const m = measure(withDial(), without(), procId);
-  console.log('   ' + padr(label, 42) + pad(m.procPerGame, 11) + pad(m.win + '%', 7) +
-    '   ' + (m.win >= 54 ? '◀ dial tips it' : m.win <= 46 ? '◀ dial HURTS' : 'no swing'));
-}
-
-// ── Robustness: are the inert/cosmetic gears weak EVERYWHERE, or just vs Swifts?
-// Re-test the questionable ones across alternate foes + a LONGER fight (higher
-// level = more HP = more rounds for slow triggers to matter). ──────────────────
-console.log('\n══ ROBUSTNESS — questionable gears across alternate foes (is it the matchup?) ══\n');
-const FOES = {
-  swifts:   () => [u('fang', 'e0', 7), u('striker', 'e1', 7), u('claw', 'e2', 7)],
-  reactors: () => [u('spark', 'e0', 7), u('flicker', 'e1', 7), u('cinder', 'e2', 7)],
-  wall:     () => [u('vault', 'e0', 7), u('bastion', 'e1', 7), u('bulwark', 'e2', 7)],
+const PL = 5; // player level fixed; we measure how high a FOE level the squad clears.
+const GEAR_OF = {
+  Quickstrike: 'quickstrike', 'Killing Momentum': 'killingMomentum', Lastwall: 'lastwall',
+  Ironhide: 'ironhide', Mirrorplate: 'mirrorplate', Sentinel: 'sentinel', Kindling: 'kindling',
+  Resonator: 'resonator', 'Chain Link': 'chainlink', 'Open Channel': 'openChannel', 'Glasswork Core': 'glassworkCore',
 };
-const robust = [
-  ['ironhide',  () => [u('vault', 'p0', 7, 'ironhide'),  u('bastion', 'p1', 7), u('conduit', 'p2', 7)],
-                () => [u('vault', 'p0', 7),               u('bastion', 'p1', 7), u('conduit', 'p2', 7)]],
-  ['kindling',  () => [u('spark', 'p0', 7, 'kindling'),   u('flicker', 'p1', 7), u('cinder', 'p2', 7)],
-                () => [u('spark', 'p0', 7),               u('flicker', 'p1', 7), u('cinder', 'p2', 7)]],
-  ['resonator', () => [u('conduit', 'p0', 7, 'resonator'),u('striker', 'p1', 7), u('fang', 'p2', 7)],
-                () => [u('conduit', 'p0', 7),             u('striker', 'p1', 7), u('fang', 'p2', 7)]],
-  ['chainlink', () => [u('conduit', 'p0', 7, 'chainlink'),u('nexus', 'p1', 7),   u('striker', 'p2', 7)],
-                () => [u('conduit', 'p0', 7),             u('nexus', 'p1', 7),   u('striker', 'p2', 7)]],
+// [name, carrier+squad fn (carrier is index 0), foe family]. Foe chosen to put the
+// carrier's trigger in play (swifts threaten Guardians; reactors reward focus-kills).
+const TESTS = [
+  ['Quickstrike',     () => [u('striker', 'p', PL), u('fang', 'f', PL), u('claw', 'k', PL)],   (fl) => [u('spark', 'e0', fl), u('flicker', 'e1', fl), u('cinder', 'e2', fl)]],
+  ['Killing Momentum',() => [u('fang', 'p', PL), u('striker', 'f', PL), u('claw', 'k', PL)],    (fl) => [u('spark', 'e0', fl), u('flicker', 'e1', fl), u('cinder', 'e2', fl)]],
+  ['Lastwall',        () => [u('vault', 'p', PL), u('conduit', 'f', PL), u('striker', 'k', PL)],(fl) => [u('fang', 'e0', fl), u('striker', 'e1', fl), u('claw', 'e2', fl)]],
+  ['Ironhide',        () => [u('vault', 'p', PL), u('bastion', 'f', PL), u('conduit', 'k', PL)],(fl) => [u('fang', 'e0', fl), u('striker', 'e1', fl), u('claw', 'e2', fl)]],
+  ['Mirrorplate',     () => [u('vault', 'p', PL), u('bastion', 'f', PL), u('conduit', 'k', PL)],(fl) => [u('fang', 'e0', fl), u('striker', 'e1', fl), u('claw', 'e2', fl)]],
+  ['Sentinel',        () => [u('bastion', 'p', PL), u('conduit', 'f', PL), u('striker', 'k', PL)],(fl) => [u('fang', 'e0', fl), u('striker', 'e1', fl), u('claw', 'e2', fl)]],
+  ['Kindling',        () => [u('spark', 'p', PL), u('flicker', 'f', PL), u('cinder', 'k', PL)], (fl) => [u('conduit', 'e0', fl), u('link', 'e1', fl), u('nexus', 'e2', fl)]],
+  ['Resonator',       () => [u('conduit', 'p', PL), u('striker', 'f', PL), u('fang', 'k', PL)], (fl) => [u('spark', 'e0', fl), u('flicker', 'e1', fl), u('cinder', 'e2', fl)]],
+  ['Chain Link',      () => [u('conduit', 'p', PL), u('nexus', 'f', PL), u('striker', 'k', PL)],(fl) => [u('spark', 'e0', fl), u('flicker', 'e1', fl), u('cinder', 'e2', fl)]],
+  ['Open Channel',    () => [u('conduit', 'p', PL), u('nexus', 'f', PL), u('striker', 'k', PL)],(fl) => [u('spark', 'e0', fl), u('flicker', 'e1', fl), u('cinder', 'e2', fl)]],
+  ['Glasswork Core',  () => [u('bastion', 'p', PL), u('conduit', 'f', PL), u('striker', 'k', PL)],(fl) => [u('spark', 'e0', fl), u('flicker', 'e1', fl), u('cinder', 'e2', fl)]],
 ];
-console.log('   ' + padr('gear', 12) + Object.keys(FOES).map((f) => pad('vs ' + f, 16)).join(''));
-for (const [id, geared, bare] of robust) {
-  const cells = Object.values(FOES).map((foe) => {
-    const m = measure(geared(), bare(), id);
-    return pad(`${m.win}% (${m.procPerGame}p)`, 16);
-  });
-  console.log('   ' + padr(id, 12) + cells.join(''));
+
+const tag = (shift) =>
+  shift >= 2 ? '◀ strong (+' + shift + ' lvls)' :
+  shift === 1 ? 'buys 1 lvl' :
+  shift <= -1 ? '🔴 TRAP (' + shift + ' lvls)' :
+  'neutral here';
+
+console.log('\n══ CLIFF-SHIFT — how many FOE LEVELS each gear buys (player fixed L5) ══');
+console.log('   Gear MOVES the win/loss cliff; it does not make a fixed fight closer.');
+console.log('   shift = geared ceiling − bare ceiling. proc/gm sampled at the bare ceiling.\n');
+console.log('   ' + padr('gear', 20) + pad('bare', 8) + pad('geared', 9) + pad('shift', 8) + pad('proc/gm', 10) + '  verdict');
+for (const [name, sqFn, foe] of TESTS) {
+  const gearId = GEAR_OF[name];
+  const bareSq = sqFn().map((x) => ({ ...x, gearId: null }));
+  const gearSq = sqFn().map((x, i) => (i === 0 ? { ...x, gearId } : x));
+  const b = cliff(bareSq, foe);
+  const g = cliff(gearSq, foe);
+  const pr = procsAtCliff(gearSq, foe, b, gearId);
+  console.log('   ' + padr(name, 20) + pad('foe L' + b, 8) + pad('foe L' + g, 9) +
+    pad((g - b >= 0 ? '+' : '') + (g - b), 8) + pad(pr, 10) + '  ' + tag(g - b));
 }
-console.log('\n   (win% of geared mirror | procs/game in parens; 50% = gear changed nothing)');
-console.log('');
+console.log('\n   Takeaway: gear that buys levels = tempo/focus/survival-at-the-cliff. Traps SPREAD');
+console.log('   damage (echo jump) when the cliff fight needs FOCUSED kills. All of it only cashes');
+console.log('   out near the cliff — off-cliff every gear is +0, so matchmaking-to-parity is the');
+console.log('   lever that makes buildcraft legible.\n');

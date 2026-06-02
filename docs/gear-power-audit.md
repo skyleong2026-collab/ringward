@@ -2,85 +2,77 @@
 
 **Date:** 2026-06-01 · **Harness:** `scripts/gear-dig.mjs` · **Engine:** frozen (measured, not modified)
 
-## The question
+> **Correction (2026-06-01, same day):** the first version of this audit reported a
+> "3 live / 5 inert / 3 cosmetic" taxonomy. **That was wrong — a harness bug.** It
+> measured each geared squad against *its own bare twin* (an accidental coinflip),
+> not against a real foe. Fixing it produced "+0 everywhere," which was *also*
+> misleading. Both errors share one root cause, and chasing it produced the correct
+> metric below. The original taxonomy should not be trusted; this version supersedes it.
 
-`comp-counter.mjs` found gear ON vs OFF = **Δ0** at parity and concluded "archetype
-composition is the build axis; gear is sub-threshold." This audit tests that
-conclusion properly, because it was suspect: **a gear only matters if its trigger
-*fires* AND the effect changes an outcome.** The Δ0 test placed gear in matchups
-where the trigger may never have fired (Quickstrike = onKill, in a slow fight = inert).
+## Why win-rate was the wrong lens
 
-Method: for each gear, a **mirror** (identical squad + level, one side geared) in a
-matchup built to fire its trigger. Mirror baseline is exactly 50%, so any swing is
-the gear. We report **proc/game** (did it fire?) and **win%** (did it convert?),
-over 50 seeds × both flips. Confirmed matchup-invariant across Swift/Reactor/Wall foes.
+The frozen engine's outcomes are **binary**: there's a win/loss **cliff** at a power
+threshold (see `comp-counter.mjs` — fights are 100% or 0%, rarely between). So *any*
+single win-rate sample lands in stomp territory unless it happens to sit exactly on
+the cliff. The bare-twin mirror accidentally sat on a cliff (50% coinflip) → gear
+looked decisive (71–100%). A real foe sat off the cliff → gear looked dead (+0). Neither
+described gear's actual contribution.
 
-## Result — gear is BIMODAL, not uniformly cosmetic
+## The right metric: gear MOVES the cliff
 
-| Gear | Trigger → Effect | proc/game | win% | Verdict |
-|------|------------------|:---------:|:----:|---------|
-| **Lastwall** | onWouldFall → survive + reflect | 2.0 | **100%** | 🟢 LIVE POWER |
-| **Open Channel** | onEcho → chain + **mark** | 2.0 | **76%** | 🟢 LIVE POWER |
-| **Quickstrike** | onKill → extra action | 0.5 | **71%** | 🟢 LIVE POWER |
-| Killing Momentum | onKill → refund + widen | 0.5 | 50% | ⚪ cosmetic |
-| Chain Link | onEcho → jump to 2nd | 1.0 | 50% | ⚪ cosmetic |
-| Resonator | onEcho → first echo full power | 3.5 | 50% | ⚪ cosmetic |
-| Glasswork Core | onInit → armor→attack | 1.0 | **0%** | 🔴 trap (−EV) |
-| Ironhide | onShieldBreak → reform | 0 | 50% | ⚫ INERT |
-| Mirrorplate | onShieldBreak → reflect burst | 0 | 50% | ⚫ INERT |
-| Sentinel | onAllyTargeted → intercept | 0 | 50% | ⚫ INERT |
-| Kindling | onAllyFall → inherit | 0 | 50% | ⚫ INERT |
-| Pyre Heart | onWouldFall → pass flame + detonate | 0 | 50% | ⚫ INERT |
+Gear doesn't make a fixed fight closer — it shifts *where the cliff falls*. Measure
+**how many foe levels a gear buys**: the highest foe level at which the squad still
+wins, geared minus bare. Player fixed at L5; 40 seeds × both flips.
 
-**3/12 live · 3/12 cosmetic · 1/12 trap · 5/12 inert.**
+| Gear | bare ceiling | geared ceiling | **shift** | Read |
+|------|:---:|:---:|:---:|------|
+| **Sentinel** | foe L9 | foe L11 | **+2** | intercept tanks the burst that starts the enemy snowball |
+| **Resonator** | foe L11 | foe L13 | **+2** | full-power echo adds real focused output at the cliff |
+| **Quickstrike** | foe L7 | foe L9 | **+2** | extra action on kill → tempo compounds |
+| **Killing Momentum** | foe L7 | foe L8 | **+1** | kill-refund, weaker than Quickstrike |
+| Lastwall | foe L7 | foe L7 | +0 | neutral *here* — the vault wins without ever being threatened |
+| Ironhide | foe L8 | foe L8 | +0 | same: shield never forms when the carrier isn't pressured |
+| Mirrorplate | foe L8 | foe L8 | +0 | same |
+| Kindling | foe L6 | foe L6 | +0 | fires, but the fragile Spark carrier dies before it pays off |
+| Glasswork Core | foe L8 | foe L8 | +0 | armor→attack is a wash in this matchup |
+| **Chain Link** | foe L10 | foe L8 | **−2** | 🔴 **TRAP** — echo *spreads* to a 2nd target, delaying focused kills |
+| **Open Channel** | foe L10 | foe L8 | **−2** | 🔴 **TRAP** — same; the chain costs you the swarm race |
 
-## The pattern — the snowball is a TEMPO/SURVIVAL filter
+## What's actually true
 
-The frozen engine snowballs on any early lead. So a gear converts to wins **only if
-its effect changes who acts or who survives *early*** — before the snowball locks:
+1. **Gear delivers power — measured in levels of difficulty bought.** Quickstrike,
+   Sentinel, Resonator each buy ~2 foe levels; Killing Momentum ~1. "Expressive
+   buildcraft" is real here. The earlier "gear is cosmetic" panic was a measurement
+   artifact.
+2. **The shift only cashes out near the cliff (parity).** Off the cliff — the common
+   case under the snowball — *every* gear is +0, because the fight is already decided.
+   **This is the punchline: the lever that makes ALL gear matter is composition-aware
+   matchmaking** (fights at parity), not gear internals. The two fronts are one.
+3. **Two real traps:** Chain Link & Open Channel *lower* your ceiling vs a swarm,
+   because spreading echo damage to a second target delays the focused kills a swarm
+   race demands. This is the one genuinely engine-worthy finding — and even it may be
+   working-as-intended RPS (chains are multi-target tools, just wrong vs swarms).
+4. **"Neutral" defensive gear isn't broken** — Lastwall/Ironhide/Mirrorplate are +0
+   only because the carrier isn't threatened in these matchups. In a fight that
+   actually pressures the Guardian, they should pay (untested here; the trigger needs
+   the carrier near death).
 
-- **Tempo** (Quickstrike: extra action) → more turns → snowball compounds it → win.
-- **Survival** (Lastwall: don't die + reflect the burst) → denies the enemy the
-  early kill that would start *their* snowball → win.
-- **Focus** (Open Channel: *mark* a target so the next ally hits it harder) →
-  concentrates fire → faster kill → tempo → win. **This is the key tell:** Open
-  Channel (mark, 76%) and Chain Link (plain jump, 50%) are the same archetype/trigger —
-  the one that creates focus-fire converts, the one that adds flat spread damage does not.
+## So: is a frozen-engine balance pass warranted?
 
-What does **not** convert:
-- **Flat extra damage** (Resonator's full-power echo, Chain Link's jump, Killing
-  Momentum's widen) — fires reliably (Resonator 3.5×/game!) but the snowball already
-  decided the fight before the marginal damage matters. Pure flair.
-- **Narrow-state triggers** (onShieldBreak, onAllyFall, onAllyTargeted) — the state
-  is rarely reached in a fast 3v3, so the gear **never fires**. Half the pool.
-- **Glasswork Core** actively loses: trading a Guardian's armor for attack removes the
-  tankiness that was winning the fight.
+**Largely no — the premise dissolved when the harness bug was fixed.** The original
+plan (widen 5 inert triggers, reshape cosmetic effects) was chasing a phantom. The
+honest conclusions:
 
-## Dials are doubly dead
+- **Master lever = matchmaking to parity** (already in flight: `threat.js` counter-read +
+  enemy scaling). Put fights on the cliff and the gear that buys levels starts deciding
+  them. No engine change needed.
+- **Narrow engine candidate:** the Chain Link / Open Channel anti-swarm trap — *if*
+  Sky judges it a bug rather than intended RPS. Small, surgical, would re-bless only
+  the goldens that field those gears.
+- **Optional:** make the cliff *softer* (reduce the snowball in the core damage/
+  retaliation/execute math) so fights are closer more often and buildcraft expresses
+  across a wider band. This is a deep combat-feel change touching the whole game and
+  every golden — a deliberate Sky-owned direction, not a quick fix.
 
-Second Wind / Deep Cut fired **0×** even stacked on a live gear: they need the base
-gear to proc in a *specific* way (Second Wind needs 2+ Quickstrikes in one round;
-Deep Cut needs an execute) and that condition is rarer than the gear itself. Hardplate
-fired but moved nothing. The "a dial tunes the verb" loop is currently the weakest
-part of the whole system — the conditions gating the dials are too narrow to trigger.
-
-## What this means for the north star
-
-"Expressive buildcraft" **is** achievable here — but the real build axis is **tempo +
-survival + focus-fire**, not "optimize incremental modifiers." That's a legible,
-satisfying axis. The work is to make the *pool* match it. Levers, by cost:
-
-1. **Curate the available/featured pool toward tempo/survival/focus verbs** (data-only,
-   no engine change, ships today): lean on Quickstrike / Lastwall / Open Channel
-   archetypes; demote or retag the flat-damage gear as low-tier flair.
-2. **Fix the inert gear** (needs engine work — out of scope here): widen the trigger
-   conditions (onShieldBreak/onAllyFall/onAllyTargeted) so they actually fire in a 3v3,
-   or replace them. 5/12 gears doing literally nothing is the biggest single problem.
-3. **Re-shape cosmetic effects into tempo/focus shapes** (engine work): e.g. Resonator's
-   echo could grant the echoer a mark/tempo bonus instead of raw damage.
-4. **Loosen dial trigger conditions** (engine work) or they remain dead content.
-5. **Make the tempo/survival nature legible** (data/UI): current descriptions read as
-   flat flavor; they undersell which gear actually wins fights.
-
-**Decision for Sky:** #1 and #5 are safe, ship-now, data-only. #2–#4 touch the frozen
-engine and are a deliberate balance pass — your call on scope and timing.
+**Decision for Sky:** which (if any) of those three — and the snowball-softening one
+is the only thing that would make gear matter *without* relying on matchmaking.
