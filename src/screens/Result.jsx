@@ -326,7 +326,7 @@ function UnitRow({ unit, isWinnerSquad, xpGain, battleLog }) {
   );
 }
 
-// ─── Defeat coach (vC-T) — the Spotter's read on WHY you lost and WHAT to change.
+// ─── Defeat coach (vC-V) — the Spotter's read on WHY you lost and WHAT to change.
 // Shown only on a player loss, in the Spotter's folk-mentor voice. Reuses the same
 // meta intelligence as the pre-battle READ, so the diagnosis and the prescription
 // rhyme. `severity` styles the panel and decides whether we offer the Stable jump

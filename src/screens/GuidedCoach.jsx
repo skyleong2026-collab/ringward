@@ -1,4 +1,4 @@
-// GuidedCoach.jsx — the first-run "how to win" walkthrough + training drill (vC-T).
+// GuidedCoach.jsx — the first-run "how to win" walkthrough + training drill (vC-V).
 //
 // Answers the framing-gap verdict's open half: the IntroFrame sets the PULL but
 // teaches no mechanics, and the Spotter only defines words on demand — so a new
