@@ -7,14 +7,13 @@
 //   • Buzzline (Echo)   — barely hurts anything; doubles your OTHER creature's hits.
 //   • Zipsnap (Assassin)— leaps on the lowest-HP enemy; Execute kills anything <50%
 //                         and refunds its cooldowns so it can chain kills.
-// You field 2 of the 3, so the squad you pick changes the fight (Amplify→Overload,
-// Cascade→Execute chains, burn-then-execute, …).
+// You field 2 of the 3, so the squad you pick changes the fight.
 //
-// DELIBERATELY ISOLATED: its own tiny deterministic turn loop. It does NOT import or
-// touch battleStepEngine.js or the goldens — the frozen engine stays frozen. No RNG.
-// Throwaway-grade; if the loop sings we generalize it into a real engine later.
+// Layout is RESPONSIVE (readable on browser / iPad / iPhone): one app, big text,
+// columns stack on narrow screens. DELIBERATELY ISOLATED — its own tiny deterministic
+// turn loop, does NOT touch battleStepEngine.js or the goldens. No RNG. Throwaway-grade.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
 import { CREATURES } from '../data/creatures.js';
 
@@ -26,7 +25,20 @@ const WIN = '#7ed321';
 const LOSS = '#d0021b';
 const BURN_DMG = 18, BURN_TURNS = 3, BURN_CHARGE = 6, CRIT_MASS = 80, CHARGE_MAX = 100;
 
+// Type scale — bumped up from the old 8-11px so it's actually readable.
+const T = { micro: 11, small: 13, body: 14, label: 15, sub: 16, head: 18, huge: 26 };
+
 const sprite = (id) => CREATURES.find((c) => c.id === id);
+
+function useVW() {
+  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  useEffect(() => {
+    const f = () => setW(window.innerWidth);
+    window.addEventListener('resize', f);
+    return () => window.removeEventListener('resize', f);
+  }, []);
+  return w;
+}
 
 // ── The 3 creatures (kit + the one-line read) ──────────────────────────────────
 const ROSTER = {
@@ -63,14 +75,14 @@ const alivePlayers = (sq) => sq.filter((u) => u.hp > 0);
 const aliveEnemies = (es) => es.filter((e) => e.hp > 0);
 const lowestEnemy = (es) => aliveEnemies(es).sort((a, b) => a.hp - b.hp)[0];
 
-function Bar({ value, max, color, height = 7, label }) {
+function Bar({ value, max, color, height = 10, label }) {
   const pct = clamp((value / max) * 100, 0, 100);
   return (
     <div style={{ width: '100%' }}>
-      <div style={{ height, background: '#1a1a26', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a2a3a' }}>
+      <div style={{ height, background: '#1a1a26', borderRadius: 5, overflow: 'hidden', border: '1px solid #2a2a3a' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width .35s ease' }} />
       </div>
-      {label && <div style={{ fontSize: 8, color: '#777', marginTop: 2, fontFamily: 'monospace' }}>{label}</div>}
+      {label && <div style={{ fontSize: T.micro, color: '#888', marginTop: 3, fontFamily: 'monospace' }}>{label}</div>}
     </div>
   );
 }
@@ -81,9 +93,11 @@ export function ReactorSandbox({ onClose }) {
 }
 
 function Lab({ onAgain, onClose }) {
+  const vw = useVW();
+  const phone = vw < 640;
   const [cfg, setCfg] = useState({ count: 3, hp: 150, atk: 16, turnBudget: 14 });
-  const [chosen, setChosen] = useState([]);          // up to 2 creature keys
-  const [phase, setPhase] = useState('select');      // select | player | won | lost
+  const [chosen, setChosen] = useState([]);
+  const [phase, setPhase] = useState('select');
   const [squad, setSquad] = useState([]);
   const [enemies, setEnemies] = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -115,7 +129,6 @@ function Lab({ onAgain, onClose }) {
 
   function enemyPhase(sq, es, events) {
     let squadN = sq.map((u) => ({ ...u })), enN = es.map((e) => ({ ...e }));
-    // burns tick + feed Reactors charge
     let burnCharge = 0;
     enN = enN.map((e) => {
       if (e.hp > 0 && e.burn > 0) { e.hp = Math.max(0, e.hp - BURN_DMG); e.burn -= 1; burnCharge += BURN_CHARGE; events.push(`🔥 ${e.name} burns for ${BURN_DMG}${e.hp <= 0 ? ' — burned out!' : ''}`); }
@@ -123,14 +136,12 @@ function Lab({ onAgain, onClose }) {
     });
     if (burnCharge) squadN = squadN.map((u) => u.useCharge && u.hp > 0 ? { ...u, charge: clamp(u.charge + burnCharge, 0, CHARGE_MAX) } : u);
     if (aliveEnemies(enN).length === 0) { setSquad(squadN); setEnemies(enN); setLog(events.slice(-8)); return setPhase('won'); }
-    // enemies focus the lowest-HP living player
     for (const e of aliveEnemies(enN)) {
       const victim = alivePlayers(squadN).sort((a, b) => a.hp - b.hp)[0];
       if (!victim) break;
       victim.hp = Math.max(0, victim.hp - cfg.atk);
       events.push(`✸ ${e.name} hits ${victim.name} for ${cfg.atk}`);
     }
-    // tick cooldowns
     squadN = squadN.map((u) => ({ ...u, cd: Object.fromEntries(Object.entries(u.cd).map(([k, v]) => [k, Math.max(0, v - 1)])) }));
     setSquad(squadN); setEnemies(enN); setLog(events.slice(-8));
     if (alivePlayers(squadN).length === 0) return setPhase('lost');
@@ -142,7 +153,6 @@ function Lab({ onAgain, onClose }) {
 
   function act(skillId) {
     if (phase !== 'player' || !active) return;
-    const s = SKILL[skillId];
     const events = [...log];
     let sq = squad.map((u) => ({ ...u }));
     let es = enemies.map((e) => ({ ...e }));
@@ -204,7 +214,6 @@ function Lab({ onAgain, onClose }) {
 
     flash(me.uid);
     if (aliveEnemies(es).length === 0) { setSquad(sq); setEnemies(es); setLog(events.slice(-8)); return setPhase('won'); }
-    // advance to next living player unit; if none left, enemies act
     const next = sq.findIndex((u, i) => i > activeIdx && u.hp > 0);
     if (next !== -1) { setSquad(sq); setEnemies(es); setActiveIdx(next); setLog(events.slice(-8)); }
     else { setSquad(sq); setEnemies(es); setLog(events.slice(-8)); setTimeout(() => enemyPhase(sq, es, events), 360); }
@@ -215,28 +224,32 @@ function Lab({ onAgain, onClose }) {
   if (phase === 'select') {
     return (
       <Shell onClose={onClose}>
-        <div style={{ fontSize: 13, color: '#ccc', marginBottom: 4 }}>Pick <b style={{ color: ACCENT }}>2</b> creatures to field.</div>
-        <div style={{ fontSize: 10, color: '#666', marginBottom: 14 }}>They fight differently and combo differently — try a pair, then RUN AGAIN with another.</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+        <div style={{ fontSize: T.head, color: '#eee', marginBottom: 4, fontWeight: 700 }}>Pick <b style={{ color: ACCENT }}>2</b> creatures to field.</div>
+        <div style={{ fontSize: T.body, color: '#888', marginBottom: 16, lineHeight: 1.5 }}>They fight differently and combo differently — try a pair, then RUN AGAIN with another.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: phone ? '1fr' : '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}>
           {Object.values(ROSTER).map((c) => {
             const on = chosen.includes(c.key);
             return (
-              <div key={c.key} onClick={() => toggle(c.key)} style={{ cursor: 'pointer', borderRadius: 10, padding: 10,
-                background: on ? '#15100a' : '#0c0c16', border: `1px solid ${on ? ACCENT : '#222'}` }}>
-                <div style={{ display: 'flex', justifyContent: 'center' }}><AnimationPlayer creature={sprite(c.spriteId)} size="small" scale={1} animate="idle" /></div>
-                <div style={{ fontSize: 12, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>{c.name}</div>
-                <div style={{ fontSize: 9, color: '#8a8a9a', textAlign: 'center', marginBottom: 6 }}>{c.tag}</div>
-                {c.skills.map((s) => <div key={s.id} style={{ fontSize: 9, color: '#777', lineHeight: 1.5 }}><span style={{ color: '#aaa' }}>{s.glyph} {s.name}</span> — {s.desc}</div>)}
-                {on && <div style={{ fontSize: 9, color: ACCENT, letterSpacing: 1, textAlign: 'center', marginTop: 6 }}>◀ FIELDED</div>}
+              <div key={c.key} onClick={() => toggle(c.key)} style={{ cursor: 'pointer', borderRadius: 12, padding: 14,
+                background: on ? '#15100a' : '#0c0c16', border: `2px solid ${on ? ACCENT : '#222'}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                  <AnimationPlayer creature={sprite(c.spriteId)} size="small" scale={1.1} animate="idle" />
+                  <div>
+                    <div style={{ fontSize: T.sub, fontWeight: 800 }}>{c.name}</div>
+                    <div style={{ fontSize: T.small, color: '#9a9aaa' }}>{c.tag}</div>
+                  </div>
+                </div>
+                {c.skills.map((s) => <div key={s.id} style={{ fontSize: T.small, color: '#888', lineHeight: 1.6, marginBottom: 3 }}><span style={{ color: '#ddd', fontWeight: 700 }}>{s.glyph} {s.name}</span> — {s.desc}</div>)}
+                {on && <div style={{ fontSize: T.small, color: ACCENT, letterSpacing: 1, textAlign: 'center', marginTop: 8, fontWeight: 700 }}>◀ FIELDED</div>}
               </div>
             );
           })}
         </div>
-        <button onClick={begin} disabled={chosen.length !== 2} style={{ width: '100%', padding: '13px 0', borderRadius: 8, border: 'none',
-          background: chosen.length === 2 ? ACCENT : '#222', color: chosen.length === 2 ? '#0a0a14' : '#555', fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: chosen.length === 2 ? 'pointer' : 'default' }}>
+        <button onClick={begin} disabled={chosen.length !== 2} style={{ width: '100%', padding: '16px 0', borderRadius: 9, border: 'none',
+          background: chosen.length === 2 ? ACCENT : '#222', color: chosen.length === 2 ? '#0a0a14' : '#555', fontSize: T.sub, fontWeight: 800, letterSpacing: 1, cursor: chosen.length === 2 ? 'pointer' : 'default' }}>
           {chosen.length === 2 ? 'ENTER THE LAB →' : `PICK ${2 - chosen.length} MORE`}
         </button>
-        <Knobs cfg={cfg} setCfg={setCfg} />
+        <Knobs cfg={cfg} setCfg={setCfg} phone={phone} />
       </Shell>
     );
   }
@@ -244,35 +257,35 @@ function Lab({ onAgain, onClose }) {
   const done = phase === 'won' || phase === 'lost';
   return (
     <Shell onClose={onClose}>
-      <div style={{ fontSize: 10, color: '#666', marginBottom: 10 }}>Round {round} / {cfg.turnBudget}{!done && active ? <> · <span style={{ color: ACCENT }}>{active.name}’s turn</span> — pick a skill</> : ''}</div>
+      <div style={{ fontSize: T.body, color: '#999', marginBottom: 12 }}>Round {round} / {cfg.turnBudget}{!done && active ? <> · <span style={{ color: ACCENT, fontWeight: 700 }}>{active.name}’s turn</span> — pick a skill</> : ''}</div>
 
       {/* enemies */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         {enemies.map((e) => {
           const dead = e.hp <= 0, isT = tgt?.id === e.id;
           return (
-            <div key={e.id} onClick={() => !dead && setTarget(e.id)} style={{ width: 110, padding: 7, borderRadius: 8, cursor: dead ? 'default' : 'pointer', opacity: dead ? 0.3 : 1,
-              background: isT && !dead ? '#1a0f0a' : '#0d0d16', border: `1px solid ${isT && !dead ? ACCENT : '#222'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 4 }}>
-                <span style={{ color: dead ? '#555' : '#ccc' }}>{e.name}{dead ? ' ✕' : ''}</span>
+            <div key={e.id} onClick={() => !dead && setTarget(e.id)} style={{ flex: phone ? '1 1 45%' : '0 0 140px', padding: 10, borderRadius: 9, cursor: dead ? 'default' : 'pointer', opacity: dead ? 0.3 : 1,
+              background: isT && !dead ? '#1a0f0a' : '#0d0d16', border: `2px solid ${isT && !dead ? ACCENT : '#222'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: T.body, marginBottom: 6 }}>
+                <span style={{ color: dead ? '#555' : '#ddd', fontWeight: 700 }}>{e.name}{dead ? ' ✕' : ''}</span>
                 {e.burn > 0 && <span style={{ color: BURN_COL }}>🔥{e.burn}</span>}
               </div>
               <Bar value={e.hp} max={e.maxHp} color={dead ? '#444' : '#c0392b'} label={`${e.hp}/${e.maxHp}`} />
-              {isT && !dead && <div style={{ fontSize: 8, color: ACCENT, marginTop: 3 }}>◀ TARGET</div>}
+              {isT && !dead && <div style={{ fontSize: T.small, color: ACCENT, marginTop: 4, fontWeight: 700 }}>◀ TARGET</div>}
             </div>
           );
         })}
       </div>
 
       {/* your squad */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexDirection: phone ? 'column' : 'row', gap: 12, marginBottom: 14 }}>
         {squad.map((u, i) => {
           const isActive = !done && i === activeIdx;
           return (
-            <div key={u.uid} style={{ flex: 1, display: 'flex', gap: 10, alignItems: 'center', background: isActive ? '#13110a' : '#0b0b16', border: `1px solid ${isActive ? ACCENT : '#222'}`, borderRadius: 10, padding: 10, opacity: u.hp <= 0 ? 0.35 : 1 }}>
-              <AnimationPlayer creature={sprite(u.spriteId)} size="small" scale={0.9} animate={u.hp <= 0 ? 'defeated' : (anim[u.uid] || 'idle')} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ fontSize: 11, fontWeight: 800 }}>{u.name}{u.amplified && <span style={{ color: AMP_COL, marginLeft: 6 }}>✦×2</span>}{isActive && <span style={{ color: ACCENT, fontSize: 8, marginLeft: 6 }}>▶ TURN</span>}</div>
+            <div key={u.uid} style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'center', background: isActive ? '#13110a' : '#0b0b16', border: `2px solid ${isActive ? ACCENT : '#222'}`, borderRadius: 12, padding: 12, opacity: u.hp <= 0 ? 0.35 : 1 }}>
+              <AnimationPlayer creature={sprite(u.spriteId)} size="small" scale={1.05} animate={u.hp <= 0 ? 'defeated' : (anim[u.uid] || 'idle')} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <div style={{ fontSize: T.label, fontWeight: 800 }}>{u.name}{u.amplified && <span style={{ color: AMP_COL, marginLeft: 7 }}>✦×2</span>}{isActive && <span style={{ color: ACCENT, fontSize: T.small, marginLeft: 7 }}>▶ TURN</span>}</div>
                 <Bar value={u.hp} max={u.maxHp} color={WIN} label={`HP ${u.hp}/${u.maxHp}`} />
                 {u.useCharge && <Bar value={u.charge} max={CHARGE_MAX} color={CHARGE_COL} label={`CHARGE ${u.charge}/${CHARGE_MAX}${u.charge >= CRIT_MASS ? ' · CRIT MASS' : ''}`} />}
               </div>
@@ -283,18 +296,18 @@ function Lab({ onAgain, onClose }) {
 
       {/* active unit's skills */}
       {!done && active && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: phone ? '1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
           {ROSTER[active.key].skills.map((s) => {
             const cd = active.cd[s.id] || 0;
             let enabled = true, sub = '';
             if (s.id === 'overload') { enabled = active.charge >= 40; sub = enabled ? `spend ${active.charge}⚡` : `need 40⚡`; }
             else if (s.cd) { enabled = cd === 0 && (!s.partner || !!partner); sub = cd > 0 ? `cooldown ${cd}` : (s.partner && !partner ? 'no partner' : 'ready'); }
             return (
-              <button key={s.id} onClick={() => act(s.id)} disabled={!enabled} title={s.desc} style={{ textAlign: 'left', padding: '9px 10px', borderRadius: 8, cursor: enabled ? 'pointer' : 'default',
-                background: enabled ? '#13131f' : '#0c0c14', border: `1px solid ${enabled ? '#33334a' : '#1a1a26'}`, opacity: enabled ? 1 : 0.5 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: enabled ? '#eee' : '#555' }}>{s.glyph} {s.name}</div>
-                {sub && <div style={{ fontSize: 9, color: s.id === 'overload' && enabled ? CHARGE_COL : s.partner ? AMP_COL : '#777', marginTop: 2 }}>{sub}</div>}
-                <div style={{ fontSize: 8, color: '#666', lineHeight: 1.4, marginTop: 3 }}>{s.desc}</div>
+              <button key={s.id} onClick={() => act(s.id)} disabled={!enabled} title={s.desc} style={{ textAlign: 'left', padding: '13px 14px', borderRadius: 10, cursor: enabled ? 'pointer' : 'default',
+                background: enabled ? '#13131f' : '#0c0c14', border: `2px solid ${enabled ? '#33334a' : '#1a1a26'}`, opacity: enabled ? 1 : 0.5 }}>
+                <div style={{ fontSize: T.sub, fontWeight: 800, color: enabled ? '#eee' : '#555' }}>{s.glyph} {s.name}</div>
+                {sub && <div style={{ fontSize: T.small, color: s.id === 'overload' && enabled ? CHARGE_COL : s.partner ? AMP_COL : '#888', marginTop: 3, fontWeight: 700 }}>{sub}</div>}
+                <div style={{ fontSize: T.small, color: '#888', lineHeight: 1.5, marginTop: 5 }}>{s.desc}</div>
               </button>
             );
           })}
@@ -303,31 +316,31 @@ function Lab({ onAgain, onClose }) {
 
       {/* end */}
       {done && (
-        <div style={{ background: phase === 'won' ? '#0d1a0d' : '#1a0d0d', border: `1px solid ${phase === 'won' ? WIN : LOSS}55`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: phase === 'won' ? WIN : LOSS, letterSpacing: 1 }}>{phase === 'won' ? 'CLEARED' : (alivePlayers(squad).length === 0 ? 'SQUAD DOWN' : 'OUT OF TIME')}</div>
-          <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>Round {round} · {decisions.length} decisions · squad: {squad.map((u) => u.name).join(' + ')}</div>
-          <button onClick={onAgain} style={{ marginTop: 12, width: '100%', padding: '11px 0', background: ACCENT, border: 'none', borderRadius: 7, color: '#0a0a14', fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: 'pointer' }}>NEW SQUAD / RUN AGAIN →</button>
+        <div style={{ background: phase === 'won' ? '#0d1a0d' : '#1a0d0d', border: `2px solid ${phase === 'won' ? WIN : LOSS}55`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+          <div style={{ fontSize: T.huge, fontWeight: 900, color: phase === 'won' ? WIN : LOSS, letterSpacing: 1 }}>{phase === 'won' ? 'CLEARED' : (alivePlayers(squad).length === 0 ? 'SQUAD DOWN' : 'OUT OF TIME')}</div>
+          <div style={{ fontSize: T.body, color: '#999', marginTop: 6 }}>Round {round} · {decisions.length} decisions · squad: {squad.map((u) => u.name).join(' + ')}</div>
+          <button onClick={onAgain} style={{ marginTop: 14, width: '100%', padding: '14px 0', background: ACCENT, border: 'none', borderRadius: 9, color: '#0a0a14', fontSize: T.sub, fontWeight: 800, letterSpacing: 1, cursor: 'pointer' }}>NEW SQUAD / RUN AGAIN →</button>
         </div>
       )}
 
       {/* logs */}
-      <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 8, padding: 10, marginBottom: 12, minHeight: 70 }}>
-        <div style={{ fontSize: 8, color: '#444', letterSpacing: 2, marginBottom: 5 }}>COMBAT LOG</div>
-        {log.length === 0 ? <div style={{ fontSize: 10, color: '#444' }}>Click an enemy to target, then pick {active?.name}’s skill…</div>
-          : log.map((l, i) => <div key={i} style={{ fontSize: 10, color: i === log.length - 1 ? '#ccc' : '#666', lineHeight: 1.7 }}>{l}</div>)}
+      <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 10, padding: 12, marginBottom: 14, minHeight: 80 }}>
+        <div style={{ fontSize: T.small, color: '#555', letterSpacing: 2, marginBottom: 7, fontWeight: 700 }}>COMBAT LOG</div>
+        {log.length === 0 ? <div style={{ fontSize: T.body, color: '#555' }}>Click an enemy to target, then pick {active?.name}’s skill…</div>
+          : log.map((l, i) => <div key={i} style={{ fontSize: T.body, color: i === log.length - 1 ? '#ddd' : '#777', lineHeight: 1.8 }}>{l}</div>)}
       </div>
       {decisions.length > 0 && (
-        <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 8, padding: 10, marginBottom: 12 }}>
-          <div style={{ fontSize: 8, color: '#444', letterSpacing: 2, marginBottom: 5 }}>YOUR SEQUENCE (does a story show here?)</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 10, padding: 12, marginBottom: 14 }}>
+          <div style={{ fontSize: T.small, color: '#555', letterSpacing: 2, marginBottom: 7, fontWeight: 700 }}>YOUR SEQUENCE (does a story show here?)</div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
             {decisions.map((d, i) => (
-              <span key={i} title={`R${d.round} · ${d.who} · ${d.note || ''}`} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, background: '#15151f', border: '1px solid #2a2a3a',
-                color: /Overload|Execute/.test(d.skill) ? CHARGE_COL : /Amplify|Cascade/.test(d.skill) ? AMP_COL : '#aaa' }}>{d.who}:{d.skill}</span>
+              <span key={i} title={`R${d.round} · ${d.who} · ${d.note || ''}`} style={{ fontSize: T.small, padding: '4px 9px', borderRadius: 5, background: '#15151f', border: '1px solid #2a2a3a',
+                color: /Overload|Execute/.test(d.skill) ? CHARGE_COL : /Amplify|Cascade/.test(d.skill) ? AMP_COL : '#bbb' }}>{d.who}:{d.skill}</span>
             ))}
           </div>
         </div>
       )}
-      <Knobs cfg={cfg} setCfg={setCfg} />
+      <Knobs cfg={cfg} setCfg={setCfg} phone={phone} />
     </Shell>
   );
 }
@@ -335,10 +348,10 @@ function Lab({ onAgain, onClose }) {
 function Shell({ children, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 290, background: '#070710', overflowY: 'auto', color: '#eee', fontFamily: "'SF Mono','Fira Code',monospace" }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '14px 16px 40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT, letterSpacing: 2 }}>⚗ COMBAT LAB <span style={{ color: '#444', fontWeight: 400, letterSpacing: 1 }}>· manual prototype</span></div>
-          <button onClick={onClose} style={{ background: 'none', border: '1px solid #2a2a3a', color: '#888', fontSize: 10, letterSpacing: 1, borderRadius: 4, padding: '4px 9px', cursor: 'pointer' }}>EXIT LAB</button>
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '16px 16px 48px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: T.sub, fontWeight: 800, color: ACCENT, letterSpacing: 2 }}>⚗ COMBAT LAB</div>
+          <button onClick={onClose} style={{ background: 'none', border: '1px solid #2a2a3a', color: '#999', fontSize: T.small, letterSpacing: 1, borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontWeight: 700 }}>EXIT</button>
         </div>
         {children}
       </div>
@@ -346,13 +359,13 @@ function Shell({ children, onClose }) {
   );
 }
 
-function Knobs({ cfg, setCfg }) {
+function Knobs({ cfg, setCfg, phone }) {
   return (
-    <div style={{ background: '#0a0a12', border: '1px dashed #2a2a3a', borderRadius: 8, padding: 10, marginTop: 12 }}>
-      <div style={{ fontSize: 8, color: '#555', letterSpacing: 2, marginBottom: 8 }}>⚙ KNOBS — change, then start / RUN AGAIN</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+    <div style={{ background: '#0a0a12', border: '1px dashed #2a2a3a', borderRadius: 10, padding: 12, marginTop: 14 }}>
+      <div style={{ fontSize: T.small, color: '#666', letterSpacing: 2, marginBottom: 10, fontWeight: 700 }}>⚙ KNOBS — change, then start / RUN AGAIN</div>
+      <div style={{ display: 'grid', gridTemplateColumns: phone ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 12 }}>
         {[{ k: 'count', label: 'Husks', min: 1, max: 5 }, { k: 'hp', label: 'Husk HP', min: 60, max: 360, step: 20 }, { k: 'atk', label: 'Husk ATK', min: 6, max: 40, step: 2 }, { k: 'turnBudget', label: 'Turn budget', min: 4, max: 24 }].map(({ k, label, min, max, step = 1 }) => (
-          <label key={k} style={{ fontSize: 9, color: '#888' }}>{label}: <span style={{ color: CHARGE_COL }}>{cfg[k]}</span>
+          <label key={k} style={{ fontSize: T.body, color: '#999' }}>{label}: <span style={{ color: CHARGE_COL, fontWeight: 700 }}>{cfg[k]}</span>
             <input type="range" min={min} max={max} step={step} value={cfg[k]} onChange={(e) => setCfg((c) => ({ ...c, [k]: Number(e.target.value) }))} style={{ width: '100%', accentColor: ACCENT }} /></label>
         ))}
       </div>
