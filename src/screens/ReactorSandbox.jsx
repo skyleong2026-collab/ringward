@@ -1,19 +1,18 @@
-// ReactorSandbox.jsx — manual-combat PROTOTYPE (the Reactor slice).
+// ReactorSandbox.jsx — manual-combat PROTOTYPE / "the Lab" (2026-06-01 pivot).
 //
-// Purpose (2026-06-01 pivot, see memory 8gents-combat-control-pivot): test whether
-// per-turn AGENCY produces STORIES, not just whether picking a skill is "fun."
-// Thesis under test: "the build IS the rotation" — a charge→spend loop where timing
-// and target choice create real, narratable mistakes and triumphs.
+// Tests whether picking skills each turn — for a 2-creature squad you choose from 3 —
+// creates real fights with stories (combos, mistimes, "I should've Amplified first"),
+// not just "click S2 then S3." Three creatures that play NOTHING alike:
+//   • Fizzpop (Reactor) — charge up, then nuke.
+//   • Buzzline (Echo)   — barely hurts anything; doubles your OTHER creature's hits.
+//   • Zipsnap (Assassin)— leaps on the lowest-HP enemy; Execute kills anything <50%
+//                         and refunds its cooldowns so it can chain kills.
+// You field 2 of the 3, so the squad you pick changes the fight (Amplify→Overload,
+// Cascade→Execute chains, burn-then-execute, …).
 //
 // DELIBERATELY ISOLATED: its own tiny deterministic turn loop. It does NOT import or
-// touch battleStepEngine.js or the goldens — the frozen engine stays frozen while we
-// learn whether Ringward wants to become more manual. Throwaway-grade by design;
-// if the loop sings, we generalize it into a real engine (a later, owned phase).
-//
-// No RNG — fixed damage, deterministic ("RNG at the door"). One Reactor vs N dummies.
-// Knobs (enemy count / HP / attack / turn budget) + a post-fight DECISION LOG let us
-// judge the real question: after ~10 fights, do varied sequences and stories emerge,
-// or is it "S2 then S3 every time"?
+// touch battleStepEngine.js or the goldens — the frozen engine stays frozen. No RNG.
+// Throwaway-grade; if the loop sings we generalize it into a real engine later.
 
 import { useState } from 'react';
 import { AnimationPlayer } from '../components/AnimationPlayer.jsx';
@@ -22,26 +21,47 @@ import { CREATURES } from '../data/creatures.js';
 const ACCENT = '#e86040';
 const CHARGE_COL = '#f5a623';
 const BURN_COL = '#ff5a2a';
+const AMP_COL = '#b06bff';
 const WIN = '#7ed321';
 const LOSS = '#d0021b';
+const BURN_DMG = 18, BURN_TURNS = 3, BURN_CHARGE = 6, CRIT_MASS = 80, CHARGE_MAX = 100;
 
-const REACTOR = CREATURES.find((c) => c.id === 'spark'); // Fizzpop — the charge engine
-const REACTOR_MAX_HP = 320;
+const sprite = (id) => CREATURES.find((c) => c.id === id);
 
-// ── Tunable kit (the rotation thesis) ──────────────────────────────────────────
-const CHARGE_MAX = 100;
-const KIT = {
-  spark:   { id: 'spark',   name: 'Spark Bolt', glyph: '⚡', cd: 0,  dmg: 26, charge: 15,
-             desc: 'Free every turn. +15 charge. At 80+ charge, detonates the target’s Burn early for bonus damage.' },
-  ignite:  { id: 'ignite',  name: 'Ignite',     glyph: '🔥', cd: 2,  dmg: 8,  charge: 10,
-             desc: 'Burn the target (18/turn, 3 turns). +10 charge now; each Burn tick feeds you charge.' },
-  overload:{ id: 'overload',name: 'Overload',   glyph: '☢', minCharge: 40,
-             desc: 'Spend ALL charge: damage = charge × 2 to the target — DOUBLED if it’s Burning. The payoff.' },
+// ── The 3 creatures (kit + the one-line read) ──────────────────────────────────
+const ROSTER = {
+  reactor: {
+    key: 'reactor', spriteId: 'spark', name: 'Fizzpop', tag: 'Reactor — charge up, then nuke', maxHp: 300, useCharge: true,
+    skills: [
+      { id: 'spark',    name: 'Spark Bolt', glyph: '⚡', desc: 'Free. 26 dmg, +15 charge. At 80+ charge, blows up the target’s Burn early.' },
+      { id: 'ignite',   name: 'Ignite',     glyph: '🔥', cd: 2, desc: 'Burn the target (18/turn × 3). +10 charge; each Burn tick feeds you more.' },
+      { id: 'overload', name: 'Overload',   glyph: '☢', need: 40, desc: 'Spend ALL charge: dmg = charge × 2 — DOUBLED if the target’s Burning.' },
+    ],
+  },
+  echo: {
+    key: 'echo', spriteId: 'conduit', name: 'Buzzline', tag: 'Echo — makes your partner hit huge', maxHp: 240, useCharge: false,
+    skills: [
+      { id: 'echobolt', name: 'Echo Bolt', glyph: '◇', desc: 'Free. 18 dmg. Weak on its own — that’s the point.' },
+      { id: 'amplify',  name: 'Amplify',   glyph: '✦', cd: 2, partner: true, desc: 'Your OTHER creature’s next hit does DOUBLE damage.' },
+      { id: 'cascade',  name: 'Cascade',   glyph: '⟳', cd: 4, partner: true, desc: 'Refresh your partner: clear their cooldowns + refill their charge. Big-move-again button.' },
+    ],
+  },
+  assassin: {
+    key: 'assassin', spriteId: 'fang', name: 'Zipsnap', tag: 'Assassin — hunt the weak', maxHp: 200, useCharge: false,
+    skills: [
+      { id: 'slash',   name: 'Slash',   glyph: '⟡', desc: 'Free. 24 dmg to the target you pick.' },
+      { id: 'flank',   name: 'Flank',   glyph: '↯', cd: 1, lowEnemy: true, desc: 'Leap on the LOWEST-HP enemy: 30 dmg, +50% if it’s under 40% HP.' },
+      { id: 'execute', name: 'Execute', glyph: '☠', cd: 3, desc: 'Target under 50% HP: kill it AND refund your cooldowns (chain kills). Else 40 dmg.' },
+    ],
+  },
 };
-const BURN_DMG = 18, BURN_TURNS = 3, BURN_CHARGE_PER_TICK = 6, CRIT_MASS = 80;
+const SKILL = {};
+for (const c of Object.values(ROSTER)) for (const s of c.skills) SKILL[s.id] = { ...s, owner: c.key };
 
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-const livingEnemies = (es) => es.filter((e) => e.hp > 0);
+const alivePlayers = (sq) => sq.filter((u) => u.hp > 0);
+const aliveEnemies = (es) => es.filter((e) => e.hp > 0);
+const lowestEnemy = (es) => aliveEnemies(es).sort((a, b) => a.hp - b.hp)[0];
 
 function Bar({ value, max, color, height = 7, label }) {
   const pct = clamp((value / max) * 100, 0, 100);
@@ -56,238 +76,285 @@ function Bar({ value, max, color, height = 7, label }) {
 }
 
 export function ReactorSandbox({ onClose }) {
-  const [cfg, setCfg] = useState({ count: 3, hp: 130, atk: 18, turnBudget: 12 });
-  const [run, setRun] = useState(0); // bump to reset
-  return <SandboxRun key={run} cfg={cfg} setCfg={setCfg} onAgain={() => setRun((r) => r + 1)} onClose={onClose} />;
+  const [run, setRun] = useState(0);
+  return <Lab key={run} onAgain={() => setRun((r) => r + 1)} onClose={onClose} />;
 }
 
-function SandboxRun({ cfg, setCfg, onAgain, onClose }) {
-  const [reactor, setReactor] = useState({ hp: REACTOR_MAX_HP, charge: 0 });
-  const [cooldowns, setCooldowns] = useState({ ignite: 0 });
-  const [enemies, setEnemies] = useState(() =>
-    Array.from({ length: cfg.count }, (_, i) => ({ id: `e${i}`, name: `Husk ${i + 1}`, hp: cfg.hp, maxHp: cfg.hp, burn: 0 }))
-  );
+function Lab({ onAgain, onClose }) {
+  const [cfg, setCfg] = useState({ count: 3, hp: 150, atk: 16, turnBudget: 14 });
+  const [chosen, setChosen] = useState([]);          // up to 2 creature keys
+  const [phase, setPhase] = useState('select');      // select | player | won | lost
+  const [squad, setSquad] = useState([]);
+  const [enemies, setEnemies] = useState([]);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [target, setTarget] = useState('e0');
   const [round, setRound] = useState(1);
-  const [log, setLog] = useState([]);          // combat events (recent)
-  const [decisions, setDecisions] = useState([]); // the rotation record — for the "stories" test
-  const [phase, setPhase] = useState('player'); // 'player' | 'won' | 'lost'
-  const [anim, setAnim] = useState('idle');
+  const [log, setLog] = useState([]);
+  const [decisions, setDecisions] = useState([]);
+  const [anim, setAnim] = useState({});
 
-  const alive = livingEnemies(enemies);
-  const tgt = enemies.find((e) => e.id === target && e.hp > 0) || alive[0];
-  const igniteCd = cooldowns.ignite;
-
-  const pushLog = (l, msg) => [...l, msg].slice(-7);
-
-  function endIf(es, rx) {
-    if (rx.hp <= 0) { setPhase('lost'); return true; }
-    if (livingEnemies(es).length === 0) { setPhase('won'); return true; }
-    return false;
+  function toggle(key) {
+    setChosen((c) => c.includes(key) ? c.filter((k) => k !== key) : c.length < 2 ? [...c, key] : c);
+  }
+  function begin() {
+    if (chosen.length !== 2) return;
+    setSquad(chosen.map((k, i) => {
+      const c = ROSTER[k];
+      return { key: k, uid: `p${i}`, name: c.name, spriteId: c.spriteId, hp: c.maxHp, maxHp: c.maxHp,
+        charge: 0, useCharge: c.useCharge, cd: {}, amplified: false };
+    }));
+    setEnemies(Array.from({ length: cfg.count }, (_, i) => ({ id: `e${i}`, name: `Husk ${i + 1}`, hp: cfg.hp, maxHp: cfg.hp, burn: 0 })));
+    setActiveIdx(0); setRound(1); setLog([]); setDecisions([]); setPhase('player'); setTarget('e0');
   }
 
-  // After the player's action: enemies strike, burns tick, cooldowns tick, round++.
-  function enemyPhase(es, rx, events) {
-    let r = { ...rx };
-    let next = es.map((e) => ({ ...e }));
-    // burn ticks (and feed the Reactor charge)
-    let chargeFromBurn = 0;
-    next = next.map((e) => {
-      if (e.hp > 0 && e.burn > 0) {
-        e.hp = Math.max(0, e.hp - BURN_DMG);
-        e.burn -= 1;
-        chargeFromBurn += BURN_CHARGE_PER_TICK;
-        events.push(`🔥 ${e.name} burns for ${BURN_DMG}${e.hp <= 0 ? ' — burned out!' : ''}`);
-      }
+  const active = phase === 'player' ? squad[activeIdx] : null;
+  const partner = active ? alivePlayers(squad).find((u) => u.uid !== active.uid) : null;
+  const tgt = enemies.find((e) => e.id === target && e.hp > 0) || aliveEnemies(enemies)[0];
+
+  function flash(uid, kind = 'attack') { setAnim({ [uid]: kind }); setTimeout(() => setAnim({}), 340); }
+
+  function enemyPhase(sq, es, events) {
+    let squadN = sq.map((u) => ({ ...u })), enN = es.map((e) => ({ ...e }));
+    // burns tick + feed Reactors charge
+    let burnCharge = 0;
+    enN = enN.map((e) => {
+      if (e.hp > 0 && e.burn > 0) { e.hp = Math.max(0, e.hp - BURN_DMG); e.burn -= 1; burnCharge += BURN_CHARGE; events.push(`🔥 ${e.name} burns for ${BURN_DMG}${e.hp <= 0 ? ' — burned out!' : ''}`); }
       return e;
     });
-    if (chargeFromBurn) r.charge = clamp(r.charge + chargeFromBurn, 0, CHARGE_MAX);
-    if (livingEnemies(next).length === 0) { setEnemies(next); setReactor(r); setLog((l) => events.slice(-7)); return setPhase('won'); }
-    // enemy attacks
-    let incoming = 0;
-    for (const e of livingEnemies(next)) incoming += cfg.atk;
-    r.hp = Math.max(0, r.hp - incoming);
-    if (incoming) events.push(`✸ ${livingEnemies(next).length} husk(s) hit you for ${incoming}`);
-    setEnemies(next);
-    setReactor(r);
-    setCooldowns((c) => ({ ignite: Math.max(0, c.ignite - 1) }));
-    setLog(() => events.slice(-7));
-    if (r.hp <= 0) return setPhase('lost');
-    const nextRound = round + 1;
-    setRound(nextRound);
-    if (nextRound > cfg.turnBudget) setPhase('lost'); // ran out of time — pressure is real
-  }
-
-  function recordDecision(skill, note) {
-    setDecisions((d) => [...d, { round, skill, charge: reactor.charge, note }]);
+    if (burnCharge) squadN = squadN.map((u) => u.useCharge && u.hp > 0 ? { ...u, charge: clamp(u.charge + burnCharge, 0, CHARGE_MAX) } : u);
+    if (aliveEnemies(enN).length === 0) { setSquad(squadN); setEnemies(enN); setLog(events.slice(-8)); return setPhase('won'); }
+    // enemies focus the lowest-HP living player
+    for (const e of aliveEnemies(enN)) {
+      const victim = alivePlayers(squadN).sort((a, b) => a.hp - b.hp)[0];
+      if (!victim) break;
+      victim.hp = Math.max(0, victim.hp - cfg.atk);
+      events.push(`✸ ${e.name} hits ${victim.name} for ${cfg.atk}`);
+    }
+    // tick cooldowns
+    squadN = squadN.map((u) => ({ ...u, cd: Object.fromEntries(Object.entries(u.cd).map(([k, v]) => [k, Math.max(0, v - 1)])) }));
+    setSquad(squadN); setEnemies(enN); setLog(events.slice(-8));
+    if (alivePlayers(squadN).length === 0) return setPhase('lost');
+    const nr = round + 1; setRound(nr);
+    if (nr > cfg.turnBudget) return setPhase('lost');
+    const first = squadN.findIndex((u) => u.hp > 0);
+    setActiveIdx(first);
   }
 
   function act(skillId) {
-    if (phase !== 'player') return;
+    if (phase !== 'player' || !active) return;
+    const s = SKILL[skillId];
     const events = [...log];
-    let r = { ...reactor };
+    let sq = squad.map((u) => ({ ...u }));
     let es = enemies.map((e) => ({ ...e }));
-    const t = es.find((e) => e.id === (tgt?.id)) || livingEnemies(es)[0];
-    if (!t) return;
+    const me = sq[activeIdx];
+    const mate = sq.find((u) => u.uid !== me.uid && u.hp > 0);
+    const enemyTarget = es.find((e) => e.id === (tgt?.id)) || aliveEnemies(es)[0];
+
+    const hit = (foe, dmg) => { let d = dmg; if (me.amplified) { d *= 2; me.amplified = false; events.push(`✦ Amplified! ${me.name}’s hit is doubled`); } foe.hp = Math.max(0, foe.hp - d); return d; };
 
     if (skillId === 'spark') {
-      let dmg = KIT.spark.dmg;
-      // passive Critical Mass: at high charge, Spark detonates the target's burn early
-      if (r.charge >= CRIT_MASS && t.burn > 0) {
-        const blast = t.burn * BURN_DMG;
-        dmg += blast;
-        t.burn = 0;
-        events.push(`⚡ CRITICAL MASS — Spark detonates the Burn for +${blast}!`);
-      }
-      t.hp = Math.max(0, t.hp - dmg);
-      r.charge = clamp(r.charge + KIT.spark.charge, 0, CHARGE_MAX);
-      events.push(`⚡ Spark Bolt → ${t.name} for ${dmg} (+${KIT.spark.charge} charge)`);
-      recordDecision('Spark', t.burn ? 'maintain' : 'build');
+      let extra = 0;
+      if (me.charge >= CRIT_MASS && enemyTarget.burn > 0) { extra = enemyTarget.burn * BURN_DMG; enemyTarget.burn = 0; events.push(`⚡ CRITICAL MASS — Spark blows the Burn for +${extra}!`); }
+      const d = hit(enemyTarget, 26 + extra); me.charge = clamp(me.charge + 15, 0, CHARGE_MAX);
+      events.push(`⚡ Spark Bolt → ${enemyTarget.name} for ${d} (+15 charge)`);
+      pushDecision(me, 'Spark');
     } else if (skillId === 'ignite') {
-      if (igniteCd > 0) return;
-      t.hp = Math.max(0, t.hp - KIT.ignite.dmg);
-      t.burn = BURN_TURNS;
-      r.charge = clamp(r.charge + KIT.ignite.charge, 0, CHARGE_MAX);
-      events.push(`🔥 Ignite → ${t.name} (Burn ${BURN_TURNS}t, +${KIT.ignite.charge} charge)`);
-      setCooldowns({ ignite: KIT.ignite.cd + 1 }); // +1 because enemyPhase decrements this turn
-      recordDecision('Ignite', 'setup');
+      if ((me.cd.ignite || 0) > 0) return;
+      const d = hit(enemyTarget, 8); enemyTarget.burn = BURN_TURNS; me.charge = clamp(me.charge + 10, 0, CHARGE_MAX);
+      me.cd.ignite = SKILL.ignite.cd + 1;
+      events.push(`🔥 Ignite → ${enemyTarget.name} for ${d} (Burn ${BURN_TURNS}t, +10 charge)`);
+      pushDecision(me, 'Ignite');
     } else if (skillId === 'overload') {
-      if (r.charge < KIT.overload.minCharge) return;
-      const spent = r.charge;
-      const burning = t.burn > 0;
-      const dmg = spent * 2 * (burning ? 2 : 1);
-      t.hp = Math.max(0, t.hp - dmg);
-      r.charge = 0;
-      events.push(`☢ OVERLOAD → ${t.name} for ${dmg}${burning ? ' (BURNING ×2!)' : ''} — spent ${spent} charge`);
-      recordDecision('Overload', burning ? `cashed ${spent}⚡ on Burn ×2` : `dumped ${spent}⚡ (no Burn — wasted the x2)`);
+      if (me.charge < 40) return;
+      const spent = me.charge, burning = enemyTarget.burn > 0;
+      const d = hit(enemyTarget, spent * 2 * (burning ? 2 : 1)); me.charge = 0;
+      events.push(`☢ OVERLOAD → ${enemyTarget.name} for ${d}${burning ? ' (BURNING ×2!)' : ''} — spent ${spent}`);
+      pushDecision(me, 'Overload', burning ? 'on a Burn' : 'no Burn (missed ×2)');
+    } else if (skillId === 'echobolt') {
+      const d = hit(enemyTarget, 18); events.push(`◇ Echo Bolt → ${enemyTarget.name} for ${d}`);
+      pushDecision(me, 'EchoBolt');
+    } else if (skillId === 'amplify') {
+      if ((me.cd.amplify || 0) > 0 || !mate) return;
+      mate.amplified = true; me.cd.amplify = SKILL.amplify.cd + 1;
+      events.push(`✦ Amplify → ${mate.name}’s next hit will DOUBLE`);
+      pushDecision(me, 'Amplify', `→ ${mate.name}`);
+    } else if (skillId === 'cascade') {
+      if ((me.cd.cascade || 0) > 0 || !mate) return;
+      mate.cd = {}; if (mate.useCharge) mate.charge = CHARGE_MAX; me.cd.cascade = SKILL.cascade.cd + 1;
+      events.push(`⟳ Cascade → ${mate.name} refreshed (cooldowns clear${mate.useCharge ? ', charge full' : ''})`);
+      pushDecision(me, 'Cascade', `→ ${mate.name}`);
+    } else if (skillId === 'slash') {
+      const d = hit(enemyTarget, 24); events.push(`⟡ Slash → ${enemyTarget.name} for ${d}`);
+      pushDecision(me, 'Slash');
+    } else if (skillId === 'flank') {
+      if ((me.cd.flank || 0) > 0) return;
+      const low = lowestEnemy(es); if (!low) return;
+      const base = 30 * (low.hp / low.maxHp < 0.4 ? 1.5 : 1);
+      const d = hit(low, Math.round(base)); me.cd.flank = SKILL.flank.cd + 1;
+      events.push(`↯ Flank → ${low.name} for ${d}${low.hp <= 0 ? ' — down!' : ''}`);
+      pushDecision(me, 'Flank');
+    } else if (skillId === 'execute') {
+      if ((me.cd.execute || 0) > 0) return;
+      if (enemyTarget.hp / enemyTarget.maxHp <= 0.5) {
+        enemyTarget.hp = 0; me.cd = {};
+        events.push(`☠ EXECUTE → ${enemyTarget.name} finished! Cooldowns refunded — chain it`);
+        pushDecision(me, 'Execute', 'kill + reset');
+      } else { const d = hit(enemyTarget, 40); me.cd.execute = SKILL.execute.cd + 1; events.push(`☠ Execute → ${enemyTarget.name} for ${d} (not low enough to finish)`); pushDecision(me, 'Execute', 'too healthy'); }
     }
-    setAnim('attack');
-    setTimeout(() => setAnim('idle'), 350);
 
-    if (endIf(es, r)) { setEnemies(es); setReactor(r); setLog(events.slice(-7)); return; }
-    setEnemies(es);
-    setReactor(r);
-    // hand to enemy phase (slight delay so the hit reads)
-    setTimeout(() => enemyPhase(es, r, events), 380);
+    flash(me.uid);
+    if (aliveEnemies(es).length === 0) { setSquad(sq); setEnemies(es); setLog(events.slice(-8)); return setPhase('won'); }
+    // advance to next living player unit; if none left, enemies act
+    const next = sq.findIndex((u, i) => i > activeIdx && u.hp > 0);
+    if (next !== -1) { setSquad(sq); setEnemies(es); setActiveIdx(next); setLog(events.slice(-8)); }
+    else { setSquad(sq); setEnemies(es); setLog(events.slice(-8)); setTimeout(() => enemyPhase(sq, es, events), 360); }
   }
+  function pushDecision(unit, skill, note) { setDecisions((d) => [...d, { round, who: unit.name[0], skill, note }]); }
 
-  const done = phase !== 'player';
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 290, background: '#070710', overflowY: 'auto', color: '#eee', fontFamily: "'SF Mono','Fira Code',monospace" }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '14px 16px 40px' }}>
-
-        {/* header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT, letterSpacing: 2 }}>⚗ REACTOR LAB <span style={{ color: '#444', fontWeight: 400, letterSpacing: 1 }}>· manual prototype</span></div>
-          <button onClick={onClose} style={{ background: 'none', border: '1px solid #2a2a3a', color: '#888', fontSize: 10, letterSpacing: 1, borderRadius: 4, padding: '4px 9px', cursor: 'pointer' }}>EXIT LAB</button>
-        </div>
-        <div style={{ fontSize: 10, color: '#666', marginBottom: 12 }}>Round {round} / {cfg.turnBudget} · Pick a skill, pick a target. Find the rotation.</div>
-
-        {/* enemies */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-          {enemies.map((e) => {
-            const dead = e.hp <= 0;
-            const isT = tgt?.id === e.id;
+  // ── SELECT SCREEN ──
+  if (phase === 'select') {
+    return (
+      <Shell onClose={onClose}>
+        <div style={{ fontSize: 13, color: '#ccc', marginBottom: 4 }}>Pick <b style={{ color: ACCENT }}>2</b> creatures to field.</div>
+        <div style={{ fontSize: 10, color: '#666', marginBottom: 14 }}>They fight differently and combo differently — try a pair, then RUN AGAIN with another.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+          {Object.values(ROSTER).map((c) => {
+            const on = chosen.includes(c.key);
             return (
-              <div key={e.id} onClick={() => !dead && setTarget(e.id)}
-                style={{ width: 128, padding: 8, borderRadius: 8, cursor: dead ? 'default' : 'pointer', opacity: dead ? 0.3 : 1,
-                  background: isT && !dead ? '#1a0f0a' : '#0d0d16', border: `1px solid ${isT && !dead ? ACCENT : '#222'}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 4 }}>
-                  <span style={{ color: dead ? '#555' : '#ccc' }}>{e.name}{dead ? ' ✕' : ''}</span>
-                  {e.burn > 0 && <span style={{ color: BURN_COL }}>🔥{e.burn}</span>}
-                </div>
-                <Bar value={e.hp} max={e.maxHp} color={dead ? '#444' : '#c0392b'} label={`${e.hp}/${e.maxHp}`} />
-                {isT && !dead && <div style={{ fontSize: 8, color: ACCENT, letterSpacing: 1, marginTop: 3 }}>◀ TARGET</div>}
+              <div key={c.key} onClick={() => toggle(c.key)} style={{ cursor: 'pointer', borderRadius: 10, padding: 10,
+                background: on ? '#15100a' : '#0c0c16', border: `1px solid ${on ? ACCENT : '#222'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'center' }}><AnimationPlayer creature={sprite(c.spriteId)} size="small" scale={1} animate="idle" /></div>
+                <div style={{ fontSize: 12, fontWeight: 800, textAlign: 'center', marginTop: 4 }}>{c.name}</div>
+                <div style={{ fontSize: 9, color: '#8a8a9a', textAlign: 'center', marginBottom: 6 }}>{c.tag}</div>
+                {c.skills.map((s) => <div key={s.id} style={{ fontSize: 9, color: '#777', lineHeight: 1.5 }}><span style={{ color: '#aaa' }}>{s.glyph} {s.name}</span> — {s.desc}</div>)}
+                {on && <div style={{ fontSize: 9, color: ACCENT, letterSpacing: 1, textAlign: 'center', marginTop: 6 }}>◀ FIELDED</div>}
               </div>
             );
           })}
         </div>
+        <button onClick={begin} disabled={chosen.length !== 2} style={{ width: '100%', padding: '13px 0', borderRadius: 8, border: 'none',
+          background: chosen.length === 2 ? ACCENT : '#222', color: chosen.length === 2 ? '#0a0a14' : '#555', fontSize: 13, fontWeight: 800, letterSpacing: 1, cursor: chosen.length === 2 ? 'pointer' : 'default' }}>
+          {chosen.length === 2 ? 'ENTER THE LAB →' : `PICK ${2 - chosen.length} MORE`}
+        </button>
+        <Knobs cfg={cfg} setCfg={setCfg} />
+      </Shell>
+    );
+  }
 
-        {/* reactor */}
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', background: '#0b0b16', border: '1px solid #222', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-          <div style={{ flexShrink: 0 }}>
-            <AnimationPlayer creature={REACTOR} size="small" scale={1.1} animate={phase === 'lost' ? 'defeated' : anim} />
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 800 }}>{REACTOR.name} <span style={{ color: '#666', fontWeight: 400 }}>· Reactor</span></div>
-            <Bar value={reactor.hp} max={REACTOR_MAX_HP} color={WIN} label={`HP ${reactor.hp}/${REACTOR_MAX_HP}`} height={8} />
-            <Bar value={reactor.charge} max={CHARGE_MAX} color={CHARGE_COL} label={`CHARGE ${reactor.charge}/${CHARGE_MAX}${reactor.charge >= CRIT_MASS ? ' · CRITICAL MASS' : ''}`} height={8} />
-          </div>
-        </div>
+  const done = phase === 'won' || phase === 'lost';
+  return (
+    <Shell onClose={onClose}>
+      <div style={{ fontSize: 10, color: '#666', marginBottom: 10 }}>Round {round} / {cfg.turnBudget}{!done && active ? <> · <span style={{ color: ACCENT }}>{active.name}’s turn</span> — pick a skill</> : ''}</div>
 
-        {/* skills */}
-        {!done && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-            {[
-              { ...KIT.spark, enabled: true },
-              { ...KIT.ignite, enabled: igniteCd === 0, sub: igniteCd > 0 ? `cooldown ${igniteCd}` : 'ready' },
-              { ...KIT.overload, enabled: reactor.charge >= KIT.overload.minCharge, sub: reactor.charge >= KIT.overload.minCharge ? `spend ${reactor.charge}⚡` : `need ${KIT.overload.minCharge}⚡` },
-            ].map((s) => (
-              <button key={s.id} onClick={() => act(s.id)} disabled={!s.enabled} title={s.desc}
-                style={{ textAlign: 'left', padding: '10px 11px', borderRadius: 8, cursor: s.enabled ? 'pointer' : 'default',
-                  background: s.enabled ? '#13131f' : '#0c0c14', border: `1px solid ${s.enabled ? '#33334a' : '#1a1a26'}`, opacity: s.enabled ? 1 : 0.5 }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: s.enabled ? '#eee' : '#555' }}>{s.glyph} {s.name}</div>
-                {s.sub && <div style={{ fontSize: 9, color: s.id === 'overload' && s.enabled ? CHARGE_COL : '#777', marginTop: 2 }}>{s.sub}</div>}
-                <div style={{ fontSize: 9, color: '#666', lineHeight: 1.4, marginTop: 4 }}>{s.desc}</div>
+      {/* enemies */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {enemies.map((e) => {
+          const dead = e.hp <= 0, isT = tgt?.id === e.id;
+          return (
+            <div key={e.id} onClick={() => !dead && setTarget(e.id)} style={{ width: 110, padding: 7, borderRadius: 8, cursor: dead ? 'default' : 'pointer', opacity: dead ? 0.3 : 1,
+              background: isT && !dead ? '#1a0f0a' : '#0d0d16', border: `1px solid ${isT && !dead ? ACCENT : '#222'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 4 }}>
+                <span style={{ color: dead ? '#555' : '#ccc' }}>{e.name}{dead ? ' ✕' : ''}</span>
+                {e.burn > 0 && <span style={{ color: BURN_COL }}>🔥{e.burn}</span>}
+              </div>
+              <Bar value={e.hp} max={e.maxHp} color={dead ? '#444' : '#c0392b'} label={`${e.hp}/${e.maxHp}`} />
+              {isT && !dead && <div style={{ fontSize: 8, color: ACCENT, marginTop: 3 }}>◀ TARGET</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* your squad */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        {squad.map((u, i) => {
+          const isActive = !done && i === activeIdx;
+          return (
+            <div key={u.uid} style={{ flex: 1, display: 'flex', gap: 10, alignItems: 'center', background: isActive ? '#13110a' : '#0b0b16', border: `1px solid ${isActive ? ACCENT : '#222'}`, borderRadius: 10, padding: 10, opacity: u.hp <= 0 ? 0.35 : 1 }}>
+              <AnimationPlayer creature={sprite(u.spriteId)} size="small" scale={0.9} animate={u.hp <= 0 ? 'defeated' : (anim[u.uid] || 'idle')} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 800 }}>{u.name}{u.amplified && <span style={{ color: AMP_COL, marginLeft: 6 }}>✦×2</span>}{isActive && <span style={{ color: ACCENT, fontSize: 8, marginLeft: 6 }}>▶ TURN</span>}</div>
+                <Bar value={u.hp} max={u.maxHp} color={WIN} label={`HP ${u.hp}/${u.maxHp}`} />
+                {u.useCharge && <Bar value={u.charge} max={CHARGE_MAX} color={CHARGE_COL} label={`CHARGE ${u.charge}/${CHARGE_MAX}${u.charge >= CRIT_MASS ? ' · CRIT MASS' : ''}`} />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* active unit's skills */}
+      {!done && active && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+          {ROSTER[active.key].skills.map((s) => {
+            const cd = active.cd[s.id] || 0;
+            let enabled = true, sub = '';
+            if (s.id === 'overload') { enabled = active.charge >= 40; sub = enabled ? `spend ${active.charge}⚡` : `need 40⚡`; }
+            else if (s.cd) { enabled = cd === 0 && (!s.partner || !!partner); sub = cd > 0 ? `cooldown ${cd}` : (s.partner && !partner ? 'no partner' : 'ready'); }
+            return (
+              <button key={s.id} onClick={() => act(s.id)} disabled={!enabled} title={s.desc} style={{ textAlign: 'left', padding: '9px 10px', borderRadius: 8, cursor: enabled ? 'pointer' : 'default',
+                background: enabled ? '#13131f' : '#0c0c14', border: `1px solid ${enabled ? '#33334a' : '#1a1a26'}`, opacity: enabled ? 1 : 0.5 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: enabled ? '#eee' : '#555' }}>{s.glyph} {s.name}</div>
+                {sub && <div style={{ fontSize: 9, color: s.id === 'overload' && enabled ? CHARGE_COL : s.partner ? AMP_COL : '#777', marginTop: 2 }}>{sub}</div>}
+                <div style={{ fontSize: 8, color: '#666', lineHeight: 1.4, marginTop: 3 }}>{s.desc}</div>
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* end state */}
-        {done && (
-          <div style={{ background: phase === 'won' ? '#0d1a0d' : '#1a0d0d', border: `1px solid ${phase === 'won' ? WIN : LOSS}55`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: phase === 'won' ? WIN : LOSS, letterSpacing: 1 }}>{phase === 'won' ? 'CLEARED' : (reactor.hp <= 0 ? 'REACTOR DOWN' : 'OUT OF TIME')}</div>
-            <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>Round {round} · {decisions.length} decisions</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button onClick={onAgain} style={{ flex: 1, padding: '11px 0', background: ACCENT, border: 'none', borderRadius: 7, color: '#0a0a14', fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: 'pointer' }}>RUN AGAIN →</button>
-            </div>
-          </div>
-        )}
-
-        {/* combat log */}
-        <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 8, padding: 10, marginBottom: 12, minHeight: 70 }}>
-          <div style={{ fontSize: 8, color: '#444', letterSpacing: 2, marginBottom: 5 }}>COMBAT LOG</div>
-          {log.length === 0 ? <div style={{ fontSize: 10, color: '#444' }}>Open with Ignite to set up your Burn, or Spark to build charge…</div>
-            : log.map((l, i) => <div key={i} style={{ fontSize: 10, color: i === log.length - 1 ? '#ccc' : '#666', lineHeight: 1.7 }}>{l}</div>)}
+            );
+          })}
         </div>
+      )}
 
-        {/* decision log — the "stories" instrument */}
-        {decisions.length > 0 && (
-          <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 8, padding: 10, marginBottom: 12 }}>
-            <div style={{ fontSize: 8, color: '#444', letterSpacing: 2, marginBottom: 5 }}>YOUR ROTATION (does a story show here?)</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {decisions.map((d, i) => (
-                <span key={i} title={`R${d.round} · ${d.charge}⚡ · ${d.note}`}
-                  style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, background: '#15151f', border: '1px solid #2a2a3a',
-                    color: d.skill === 'Overload' ? CHARGE_COL : d.skill === 'Ignite' ? BURN_COL : '#aaa' }}>
-                  {d.skill}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+      {/* end */}
+      {done && (
+        <div style={{ background: phase === 'won' ? '#0d1a0d' : '#1a0d0d', border: `1px solid ${phase === 'won' ? WIN : LOSS}55`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: phase === 'won' ? WIN : LOSS, letterSpacing: 1 }}>{phase === 'won' ? 'CLEARED' : (alivePlayers(squad).length === 0 ? 'SQUAD DOWN' : 'OUT OF TIME')}</div>
+          <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>Round {round} · {decisions.length} decisions · squad: {squad.map((u) => u.name).join(' + ')}</div>
+          <button onClick={onAgain} style={{ marginTop: 12, width: '100%', padding: '11px 0', background: ACCENT, border: 'none', borderRadius: 7, color: '#0a0a14', fontSize: 12, fontWeight: 800, letterSpacing: 1, cursor: 'pointer' }}>NEW SQUAD / RUN AGAIN →</button>
+        </div>
+      )}
 
-        {/* dev knobs */}
-        <div style={{ background: '#0a0a12', border: '1px dashed #2a2a3a', borderRadius: 8, padding: 10 }}>
-          <div style={{ fontSize: 8, color: '#555', letterSpacing: 2, marginBottom: 8 }}>⚙ KNOBS — change, then RUN AGAIN</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-            {[
-              { k: 'count', label: 'Husks', min: 1, max: 5 },
-              { k: 'hp', label: 'Husk HP', min: 60, max: 300, step: 20 },
-              { k: 'atk', label: 'Husk ATK', min: 6, max: 40, step: 2 },
-              { k: 'turnBudget', label: 'Turn budget', min: 4, max: 20 },
-            ].map(({ k, label, min, max, step = 1 }) => (
-              <label key={k} style={{ fontSize: 9, color: '#888' }}>
-                {label}: <span style={{ color: CHARGE_COL }}>{cfg[k]}</span>
-                <input type="range" min={min} max={max} step={step} value={cfg[k]} onChange={(e) => setCfg((c) => ({ ...c, [k]: Number(e.target.value) }))}
-                  style={{ width: '100%', accentColor: ACCENT }} />
-              </label>
+      {/* logs */}
+      <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 8, padding: 10, marginBottom: 12, minHeight: 70 }}>
+        <div style={{ fontSize: 8, color: '#444', letterSpacing: 2, marginBottom: 5 }}>COMBAT LOG</div>
+        {log.length === 0 ? <div style={{ fontSize: 10, color: '#444' }}>Click an enemy to target, then pick {active?.name}’s skill…</div>
+          : log.map((l, i) => <div key={i} style={{ fontSize: 10, color: i === log.length - 1 ? '#ccc' : '#666', lineHeight: 1.7 }}>{l}</div>)}
+      </div>
+      {decisions.length > 0 && (
+        <div style={{ background: '#0a0a12', border: '1px solid #1c1c28', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+          <div style={{ fontSize: 8, color: '#444', letterSpacing: 2, marginBottom: 5 }}>YOUR SEQUENCE (does a story show here?)</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {decisions.map((d, i) => (
+              <span key={i} title={`R${d.round} · ${d.who} · ${d.note || ''}`} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, background: '#15151f', border: '1px solid #2a2a3a',
+                color: /Overload|Execute/.test(d.skill) ? CHARGE_COL : /Amplify|Cascade/.test(d.skill) ? AMP_COL : '#aaa' }}>{d.who}:{d.skill}</span>
             ))}
           </div>
         </div>
+      )}
+      <Knobs cfg={cfg} setCfg={setCfg} />
+    </Shell>
+  );
+}
 
+function Shell({ children, onClose }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 290, background: '#070710', overflowY: 'auto', color: '#eee', fontFamily: "'SF Mono','Fira Code',monospace" }}>
+      <div style={{ maxWidth: 760, margin: '0 auto', padding: '14px 16px 40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT, letterSpacing: 2 }}>⚗ COMBAT LAB <span style={{ color: '#444', fontWeight: 400, letterSpacing: 1 }}>· manual prototype</span></div>
+          <button onClick={onClose} style={{ background: 'none', border: '1px solid #2a2a3a', color: '#888', fontSize: 10, letterSpacing: 1, borderRadius: 4, padding: '4px 9px', cursor: 'pointer' }}>EXIT LAB</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Knobs({ cfg, setCfg }) {
+  return (
+    <div style={{ background: '#0a0a12', border: '1px dashed #2a2a3a', borderRadius: 8, padding: 10, marginTop: 12 }}>
+      <div style={{ fontSize: 8, color: '#555', letterSpacing: 2, marginBottom: 8 }}>⚙ KNOBS — change, then start / RUN AGAIN</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+        {[{ k: 'count', label: 'Husks', min: 1, max: 5 }, { k: 'hp', label: 'Husk HP', min: 60, max: 360, step: 20 }, { k: 'atk', label: 'Husk ATK', min: 6, max: 40, step: 2 }, { k: 'turnBudget', label: 'Turn budget', min: 4, max: 24 }].map(({ k, label, min, max, step = 1 }) => (
+          <label key={k} style={{ fontSize: 9, color: '#888' }}>{label}: <span style={{ color: CHARGE_COL }}>{cfg[k]}</span>
+            <input type="range" min={min} max={max} step={step} value={cfg[k]} onChange={(e) => setCfg((c) => ({ ...c, [k]: Number(e.target.value) }))} style={{ width: '100%', accentColor: ACCENT }} /></label>
+        ))}
       </div>
     </div>
   );
