@@ -65,6 +65,17 @@ const ROSTER = {
 const SKILL = {};
 for (const c of Object.values(ROSTER)) for (const s of c.skills) SKILL[s.id] = { ...s, owner: c.key };
 
+// Enemies = your own creature types (SW model), each with a behavior that makes you
+// change your plan. Burn (a tick) ignores armor on purpose, so the Bulwark answer is
+// "Ignite it or Overload it," not "spam Spark."
+const ENEMY_TYPES = {
+  striker: { name: 'Striker', spriteId: 'fang',   hpMul: 0.65, armor: 0,  note: 'Fast — hits your weakest hard. Kill it quick.' },
+  mender:  { name: 'Mender',  spriteId: 'link',   hpMul: 1.0,  armor: 0,  note: 'Heals its allies every turn. Focus it down first.' },
+  bulwark: { name: 'Bulwark', spriteId: 'vault',  hpMul: 1.7,  armor: 14, note: 'Armored — small hits barely scratch. Use Overload or Burn.' },
+};
+const LINEUP = ['striker', 'mender', 'bulwark', 'striker', 'bulwark'];
+const HEAL = 45, STRIKER_MUL = 1.7;
+
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 const alivePlayers = (sq) => sq.filter((u) => u.hp > 0);
 const aliveEnemies = (es) => es.filter((e) => e.hp > 0);
@@ -115,7 +126,15 @@ function Lab({ onAgain, onClose }) {
       return { key: k, uid: `p${i}`, name: c.name, spriteId: c.spriteId, hp: c.maxHp, maxHp: c.maxHp,
         charge: 0, useCharge: c.useCharge, cd: {}, amplified: false };
     }));
-    setEnemies(Array.from({ length: cfg.count }, (_, i) => ({ id: `e${i}`, name: `Husk ${i + 1}`, hp: cfg.hp, maxHp: cfg.hp, burn: 0 })));
+    const picks = Array.from({ length: cfg.count }, (_, i) => LINEUP[i % LINEUP.length]);
+    const tally = {};
+    setEnemies(picks.map((tk, i) => {
+      const t = ENEMY_TYPES[tk];
+      tally[tk] = (tally[tk] || 0) + 1;
+      const dup = picks.filter((x) => x === tk).length > 1;
+      const hp = Math.round(cfg.hp * t.hpMul);
+      return { id: `e${i}`, type: tk, name: dup ? `${t.name} ${tally[tk]}` : t.name, spriteId: t.spriteId, hp, maxHp: hp, burn: 0, armor: t.armor };
+    }));
     setActiveIdx(0); setRound(1); setLog([]); setDecisions([]); setPhase('player'); setTarget('e0');
   }
 
@@ -135,10 +154,16 @@ function Lab({ onAgain, onClose }) {
     if (burnCharge) squadN = squadN.map((u) => u.useCharge && u.hp > 0 ? { ...u, charge: clamp(u.charge + burnCharge, 0, CHARGE_MAX) } : u);
     if (aliveEnemies(enN).length === 0) { setSquad(squadN); setEnemies(enN); setLog(events.slice(-8)); return setPhase('won'); }
     for (const e of aliveEnemies(enN)) {
+      if (e.type === 'mender') {
+        const hurt = aliveEnemies(enN).filter((x) => x.hp < x.maxHp).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+        if (hurt) { const before = hurt.hp; hurt.hp = Math.min(hurt.maxHp, hurt.hp + HEAL); events.push(`✚ ${e.name} mends ${hurt.name} for ${hurt.hp - before}`); continue; }
+        // nobody hurt — it pokes instead
+      }
+      const dmg = e.type === 'striker' ? Math.round(cfg.atk * STRIKER_MUL) : cfg.atk;
       const victim = alivePlayers(squadN).sort((a, b) => a.hp - b.hp)[0];
       if (!victim) break;
-      victim.hp = Math.max(0, victim.hp - cfg.atk);
-      events.push(`✸ ${e.name} hits ${victim.name} for ${cfg.atk}`);
+      victim.hp = Math.max(0, victim.hp - dmg);
+      events.push(`✸ ${e.name} hits ${victim.name} for ${dmg}`);
     }
     squadN = squadN.map((u) => ({ ...u, cd: Object.fromEntries(Object.entries(u.cd).map(([k, v]) => [k, Math.max(0, v - 1)])) }));
     setSquad(squadN); setEnemies(enN); setLog(events.slice(-8));
@@ -158,7 +183,7 @@ function Lab({ onAgain, onClose }) {
     const mate = sq.find((u) => u.uid !== me.uid && u.hp > 0);
     const enemyTarget = es.find((e) => e.id === (tgt?.id)) || aliveEnemies(es)[0];
 
-    const hit = (foe, dmg) => { let d = dmg; if (me.amplified) { d *= 2; me.amplified = false; events.push(`✦ Amplified! ${me.name}’s hit is doubled`); } foe.hp = Math.max(0, foe.hp - d); return d; };
+    const hit = (foe, dmg) => { let d = dmg; if (me.amplified) { d *= 2; me.amplified = false; events.push(`✦ Amplified! ${me.name}’s hit is doubled`); } if (foe.armor) d = Math.max(1, d - foe.armor); foe.hp = Math.max(0, foe.hp - d); return d; };
 
     if (skillId === 'spark') {
       let extra = 0;
@@ -264,10 +289,11 @@ function Lab({ onAgain, onClose }) {
           return (
             <div key={e.id} onClick={() => !dead && setTarget(e.id)} style={{ flex: '1 1 44%', minWidth: 120, padding: 9, borderRadius: 9, cursor: dead ? 'default' : 'pointer', opacity: dead ? 0.3 : 1,
               background: isT && !dead ? '#1a0f0a' : '#0d0d16', border: `2px solid ${isT && !dead ? ACCENT : '#222'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: T.body, marginBottom: 5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: T.body, marginBottom: 3 }}>
                 <span style={{ color: dead ? '#555' : '#ddd', fontWeight: 700 }}>{e.name}{dead ? ' ✕' : ''}</span>
-                {e.burn > 0 && <span style={{ color: BURN_COL }}>🔥{e.burn}</span>}
+                <span>{e.armor > 0 && <span title="armored — small hits reduced" style={{ color: '#5b8fd9', marginRight: 5 }}>🛡{e.armor}</span>}{e.burn > 0 && <span style={{ color: BURN_COL }}>🔥{e.burn}</span>}</span>
               </div>
+              {!dead && <div style={{ fontSize: T.micro, color: '#7a7a8a', lineHeight: 1.4, marginBottom: 5 }}>{ENEMY_TYPES[e.type]?.note}</div>}
               <Bar value={e.hp} max={e.maxHp} color={dead ? '#444' : '#c0392b'} label={`${e.hp}/${e.maxHp}`} />
               {isT && !dead && <div style={{ fontSize: T.small, color: ACCENT, marginTop: 4, fontWeight: 700 }}>◀ TARGET</div>}
             </div>
