@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import CollectionScreen from './screens/CollectionScreen.jsx';
 import { IntroFrame } from './screens/IntroFrame.jsx';
 import { GuidedCoach } from './screens/GuidedCoach.jsx';
+import { ReactorSandbox } from './screens/ReactorSandbox.jsx';
 import EncounterScreen from './screens/EncounterScreen.jsx';
 import PreBattle from './screens/PreBattle.jsx';
 import WorldScreen from './screens/WorldScreen.jsx';
@@ -270,6 +271,9 @@ function App() {
     try { localStorage.setItem('8gents_seen_guide', '1'); } catch { /* best-effort */ }
     setShowGuide(false);
   }
+  // ⚗ Reactor Lab — manual-combat prototype (2026-06-01 pivot). Isolated overlay,
+  // does not touch the frozen engine; entry is a header button.
+  const [showLab, setShowLab] = useState(false);
 
   function persist(newCollection, newSquadIds, newEncounterHistory = encounterHistory) {
     localStorage.setItem('8gents_collection', JSON.stringify(newCollection));
@@ -891,6 +895,14 @@ function App() {
           }}>
             ◼ BRIEFING
           </button>
+          <button onClick={() => setShowLab(true)} title="Reactor Lab — manual combat prototype" style={{
+            fontSize: 9, color: '#e8a040', background: '#1a1408',
+            padding: '4px 9px', borderRadius: 4, letterSpacing: 1,
+            fontFamily: 'monospace', border: '1px solid #e8a04044', fontWeight: 600,
+            cursor: 'pointer',
+          }}>
+            ⚗ LAB
+          </button>
           <span style={{
             fontSize: 10,
             color: '#ddd',
@@ -1146,6 +1158,7 @@ function App() {
 
       {showIntro && <IntroFrame onBegin={dismissIntro} />}
       {!showIntro && showGuide && <GuidedCoach onClose={dismissGuide} />}
+      {showLab && <ReactorSandbox onClose={() => setShowLab(false)} />}
     </div>
   );
 }
