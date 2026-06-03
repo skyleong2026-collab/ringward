@@ -11,7 +11,14 @@
     "test:smoke": "node scripts/phaseg-smoke.mjs",
     "test:golden": "node scripts/phaseg-golden.mjs",
     "test:balance": "node scripts/phase17-balance.mjs",
-    "test": "npm run test:smoke && npm run test:golden"
+    "test:manual-golden": "node scripts/manual-golden.mjs",
+    "test:manual-golden-bulwark": "node scripts/manual-golden-bulwark.mjs",
+    "test:manual-golden-mender": "node scripts/manual-golden-mender.mjs",
+    "test:manual-golden-booster": "node scripts/manual-golden-booster.mjs",
+    "test:manual-golden-striker": "node scripts/manual-golden-striker.mjs",
+    "test:manual-golden-assassin": "node scripts/manual-golden-assassin.mjs",
+    "test:themes": "node scripts/theme-modewall.mjs",
+    "test": "npm run test:smoke && npm run test:golden && npm run test:manual-golden && npm run test:manual-golden-bulwark && npm run test:manual-golden-mender && npm run test:manual-golden-booster && npm run test:manual-golden-striker && npm run test:manual-golden-assassin && npm run test:themes"
   },
   "dependencies": {
     "react": "^19.2.6",

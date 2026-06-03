@@ -25,7 +25,7 @@ export function generateSpotterRead(playerSquad, enemySquad) {
     lines.push('High execute potential. No stabilizer — first casualty opens a gap.');
   } else if (myEcho > 0 && playerSquad.length - myEcho >= 4) {
     lines.push(
-      `Your Echo has ${playerSquad.length - myEcho} units to amplify. Echo chains should fire consistently.`
+      `Your Booster has ${playerSquad.length - myEcho} units to amplify. Booster chains should fire consistently.`
     );
   } else if (myGuardian >= 2) {
     lines.push('Double Guardian. Hard to break. You need sustained damage output or this stalls.');
@@ -49,7 +49,7 @@ export function generateSpotterRead(playerSquad, enemySquad) {
   } else if (theirSpark >= 3) {
     line2 = 'Multiple scaling threats on their side. Individually fragile. Collectively unpredictable.';
   } else if (myEcho > 0 && theirSwift >= 2) {
-    line2 = 'Their Swifts will find your Echo once the frontline thins.';
+    line2 = 'Their Swifts will find your Booster once the frontline thins.';
   }
 
   if (line2) lines.push(line2);

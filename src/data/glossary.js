@@ -28,10 +28,10 @@ export const GLOSSARY = {
     long: "Your wall. Guardians don't kill things — they buy time. Park one up front and the hits that would've deleted your carry land on armor instead. Drop it to half health and its shield kicks in and it soaks even more. No Guardian, no back line.",
   },
   echo: {
-    term: 'Echo',
+    term: 'Booster',
     cat: 'archetype',
     short: "Support — copies your strongest ally's action each round (at 50% power).",
-    long: "Echo doesn't fight on its own terms; it doubles whatever your best unit just did. Field a heavy hitter beside one and you're effectively swinging twice. Worthless alone, brutal next to a carry — think force-multiplier, not damage dealer. (Each Echo you field also grants +1 FOCUS.)",
+    long: "A grunling whose whole job is making another one's turn bigger — feeding it charge, or doubling the hit it was already going to land.",
   },
   swift: {
     term: 'Swift',
@@ -79,6 +79,12 @@ export const GLOSSARY = {
   },
 
   // ── Combat statuses (in-battle reads) ────────────────────────────────────
+  charge: {
+    term: 'Charge',
+    cat: 'combat',
+    short: "Power a grunling banks by acting; spend it for its big move.",
+    long: "Power a grunling banks by doing its job. Spend it for the big move — or hold it and risk someone spending theirs first.",
+  },
   stoke: {
     term: 'Stoke',
     cat: 'combat',
@@ -270,6 +276,12 @@ export const GLOSSARY = {
     cat: 'meta',
     short: 'The voice in your ear — reads the field, and (here) explains the terms.',
     long: "The voice in your ear — near enough your mentor's. It calls what matters in a fight, and when you ask, it tells you what a word means. A guide, not a manual. That's me.",
+  },
+  marrow: {
+    term: 'Marrow',
+    cat: 'meta',
+    short: 'The voice in your ear.',
+    long: "A voice that knows what your mentor knew. Leave it there for now.",
   },
 };
 

@@ -72,13 +72,15 @@ export function IntroFrame({ onBegin }) {
           background: '#0c1420', borderLeft: `2px solid ${SPOT}`, borderRadius: 5,
           padding: '14px 16px', marginBottom: 28,
         }}>
-          <div style={{ fontSize: 8, color: SPOT, letterSpacing: 2, fontFamily: 'monospace', marginBottom: 9 }}>◼ SPOTTER</div>
+          <div style={{ fontSize: 8, color: SPOT, letterSpacing: 2, fontFamily: 'monospace', marginBottom: 9 }}>◼ MARROW</div>
           <div style={{ fontSize: 13, lineHeight: 1.7, color: SPOT_TEXT }}>
-            Your mentor's voice, near enough. I read the field — you make the calls.
+            I'll be in your ear. I'll tell you what I see. What you do with it is the whole job.
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.7, color: SPOT_TEXT, fontStyle: 'italic', marginTop: 5 }}>
-            Tap any <span style={{ fontStyle: 'normal' }}>ⓘ</span> and I'll tell you what a word means —
-            no need to carry it all in your head. Now. Let's go earn you that name.
+            Take the road. We'll learn the rest moving.
+          </div>
+          <div style={{ fontSize: 11, lineHeight: 1.6, color: '#4a5a66', marginTop: 8 }}>
+            Tap any <span>ⓘ</span> for what a word means — no need to carry it all in your head.
           </div>
         </div>
 

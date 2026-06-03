@@ -9,7 +9,7 @@ import { GlossaryTerm } from '../components/GlossaryPopover.jsx';
 import { useState, useEffect } from 'react';
 import { MAX_SQUAD } from '../config.js';
 
-const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'RCT' };
+const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'BST', Swift: 'SWT', Spark: 'RCT' };
 
 // Each creature's signature — its defining behavioral identity (vC-F). Looked up
 // from CREATURES by creature id so it shows even on collections saved earlier.

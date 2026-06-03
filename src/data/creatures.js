@@ -3,7 +3,7 @@
 
 export const ARCHETYPES = {
   Guardian: { color: '#4a90d9', label: 'Guardian' },
-  Echo:     { color: '#7ed321', label: 'Echo' },
+  Echo:     { color: '#7ed321', label: 'Booster' }, // key stays 'Echo' (engine/goldens); display = Booster (vC-W rename)
   Swift:    { color: '#d0021b', label: 'Swift' },
   Spark:    { color: '#f5a623', label: 'Reactor' }, // key stays 'Spark' (engine/goldens); display = Reactor (vC-Q rename)
 };
@@ -11,7 +11,7 @@ export const ARCHETYPES = {
 // Display helpers — the internal archetype KEY ('Spark') is engine/golden-bound
 // and never shown; everything player-facing routes through these so a rename is
 // a one-line label change (vC-Q).
-const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'ECH', Swift: 'SWT', Spark: 'RCT' };
+const ARCHETYPE_ABBR = { Guardian: 'GRD', Echo: 'BST', Swift: 'SWT', Spark: 'RCT' };
 export function archetypeLabel(key) { return ARCHETYPES[key]?.label ?? key; }
 export function archetypeAbbr(key) { return ARCHETYPE_ABBR[key] ?? (key ?? '').slice(0, 3).toUpperCase(); }
 
@@ -89,7 +89,7 @@ export const CREATURES = [
     speed: 5,
     flavor: 'The network holds.',
     signature: { id: 'tether', name: 'Tether', kind: 'passive', live: true,
-      text: 'A defensive Echo — each round it extends a protective shield to your most-wounded ally.' },
+      text: 'A defensive Booster — each round it extends a protective shield to your most-wounded ally.' },
   },
 
   // ── Swifts: High Attack, Low HP, Low Armor ──
@@ -182,7 +182,7 @@ export const ROLES = {
   vault:   { tag: 'Squad Shield',     line: 'Banks shielding, then barriers the whole squad.' },
   bastion: { tag: 'Bodyguard',        line: 'Throws itself in front of the biggest hit each round.' },
   bulwark: { tag: 'Blast Damper',     line: 'Soaks spread & detonation for the squad — the anti-Reactor.' },
-  conduit: { tag: 'Carry Amplifier',  line: 'Echoes your carry at full force — doubles its damage.' },
+  conduit: { tag: 'Carry Amplifier',  line: 'Mirrors your carry at full force — doubles its damage.' },
   nexus:   { tag: 'Burst Enabler',    line: 'On command, the whole squad repeats its last turn.' },
   link:    { tag: 'Field Medic',      line: 'Each round, shields whoever is hurt worst.' },
   fang:    { tag: 'Assassin',         line: 'Ignores taunt — strikes the protected backline.' },

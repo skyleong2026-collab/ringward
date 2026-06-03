@@ -23,7 +23,7 @@ const ARCHETYPE_MECHANIC = {
   Guardian: 'Shield triggers at 50% HP',
   Swift:    '2× execute vs targets < 30% HP',
   Spark:    '+12% attack per round survived · detonates when overcharged',
-  Echo:     'Echoes every allied action at 50%',
+  Echo:     'Mirrors every allied action at 50%',
 };
 
 function SquadChip({ unit }) {
@@ -292,8 +292,8 @@ export default function ContractScreen({ contract, playerSquad, intel, reconFeed
             </div>
             <div style={{ fontSize: 9, color: '#33333f', lineHeight: 1.6, marginTop: 8 }}>
               {fb.echoes === 0 && fb.gearBonus === 0
-                ? 'A bare squad reads one move. Field an Echo or equip a Resonator to buy more interventions.'
-                : 'Echoes and focus gear are your conduit for operator focus — they buy intervention authority.'}
+                ? 'A bare squad reads one move. Field a Booster or equip a Resonator to buy more interventions.'
+                : 'Boosters and focus gear are your conduit for operator focus — they buy intervention authority.'}
             </div>
           </div>
         );

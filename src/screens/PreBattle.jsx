@@ -34,7 +34,7 @@ const ARCHETYPE_MECHANIC = {
   Guardian: 'Shield triggers at 50% HP',
   Swift:    '2× execute vs targets < 30% HP',
   Spark:    '+12% attack per round survived',
-  Echo:     'Echoes every allied attack at 50%',
+  Echo:     'Mirrors every allied attack at 50%',
 };
 
 function SquadChip({ unit, resonance = 0 }) {
