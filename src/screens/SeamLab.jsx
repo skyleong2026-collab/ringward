@@ -37,7 +37,12 @@ const LINE = '#2a2a3a';
 const SEL = '#9cd1ff';
 const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
 const PATCHUP = 0.3; // between-wave heal (fraction of max HP)
-const ACTION_HOLD_MS = 750; // input-locking beat after each action: the hit animates, THEN the next actor is asked
+// Input-locking beat after each action — the hit animates, THEN the next actor is
+// asked. Weighted by move size for a Summoners-War-style feel (~1.2–1.9s/turn): a
+// big payoff lands heavier than a chip builder, so the spend FEELS mighty without
+// making every routine turn drag (per turn-RPG animation-timing guidance).
+const HOLD_MS = { builder: 1200, payoff: 1900, wildcard: 1600 };
+const TICK_HOLD_MS = 800; // end-of-round burn/regen ticks — shorter; they're not a turn
 
 // Per-Type identity — color + shape + a plain-language nickname so a creature is
 // recognizable by FEEL, not by name. `focal` crops the concept-art strip to one
@@ -252,6 +257,15 @@ const EFFECT = {
 };
 const effectOf = (sid) => EFFECT[SKILL_EFFECT[sid]] || EFFECT.attack;
 
+// Who a move reaches — derived from the engine's targetMode — so you can read at a
+// glance whether it's single-target or hits everyone (AOE).
+const TARGET_TAG = {
+  enemy: { label: 'Single', icon: '🎯', aoe: false },
+  ally: { label: 'One ally', icon: '🎯', aoe: false },
+  allEnemies: { label: 'All enemies', icon: '💥', aoe: true },
+  allAllies: { label: 'Whole team', icon: '💥', aoe: true },
+};
+
 // Charge as fill-up dots under a unit — no number to read.
 function ChargeDots({ value, max }) {
   return (
@@ -376,7 +390,7 @@ function useFight(opts = {}) {
 
   // Open a fresh action hold: the next actor-request (either side) awaits this, so
   // the hit animates and input stays locked until the beat passes.
-  function startHold() { holdRef.current = new Promise((r) => setTimeout(r, ACTION_HOLD_MS)); }
+  function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, ms)); }
 
   function emit(event) {
     feedRef.current = [...feedRef.current, feedLine(event)];
@@ -390,13 +404,13 @@ function useFight(opts = {}) {
       (event.heals || []).forEach((h) => { if (h.healed > 0) bursts[h.uid] = 'heal'; });
       (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
       setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, n: ++FX_NONCE });
-      startHold();
+      startHold(HOLD_MS[event.skill.kind] ?? 1300); // big payoffs land heavier than chip builders
     } else if (event.type === 'burn') {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, n: ++FX_NONCE });
-      startHold();
+      startHold(TICK_HOLD_MS);
     } else if (event.type === 'regen') {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'heal' }, n: ++FX_NONCE });
-      startHold();
+      startHold(TICK_HOLD_MS);
     }
     const adds = popupsForEvent(event).map((a) => ({ ...a, id: ++POP_ID }));
     if (adds.length) {
@@ -496,12 +510,17 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill }) {
         const usable = legalIds.includes(sid);
         const chosen = pendingSkill === sid;
         const ef = effectOf(sid);
+        const tt = TARGET_TAG[sk.targetMode];
         return (
           <button key={sid} onClick={usable ? () => onSkill(sid) : undefined} disabled={!usable}
             style={{ display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%', textAlign: 'left', marginBottom: 6, background: usable ? ef.bg : '#14141c', border: `2px solid ${chosen ? '#fff' : usable ? ef.color : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed', opacity: usable ? 1 : 0.55 }}>
             <span style={{ fontSize: T.label, lineHeight: 1, marginTop: 1, filter: usable ? 'none' : 'grayscale(1)' }}>{ef.icon}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: T.small, fontWeight: 800 }}>{sk.name} <span style={{ fontSize: T.micro, color: usable ? ef.color : '#555', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>· {ef.label}</span></div>
+              <div style={{ fontSize: T.small, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span>{sk.name}</span>
+                <span style={{ fontSize: T.micro, color: usable ? ef.color : '#555', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>· {ef.label}</span>
+                {tt && <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.3, padding: '0 6px', borderRadius: 10, whiteSpace: 'nowrap', border: `1px solid ${tt.aoe ? '#ff7a4a' : '#55556a'}`, background: tt.aoe ? '#3a1d10' : 'transparent', color: !usable ? '#555' : tt.aoe ? '#ffb38a' : '#9a9aaa' }}>{tt.icon} {tt.aoe ? 'AOE' : 'SINGLE'}</span>}
+              </div>
               <div style={{ fontSize: T.micro, color: usable ? '#bdbdcb' : '#444', lineHeight: 1.35, marginTop: 2 }}>{sk.blurb}</div>
             </span>
           </button>
