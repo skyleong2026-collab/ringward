@@ -587,10 +587,73 @@ function Sandbox({ narrow }) {
   );
 }
 
+// Marrow's coaching line — the gradual-teaching voice.
+function CoachBar({ text }) {
+  return (
+    <div style={{ background: '#15100a', border: `2px solid ${ACCENT}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <span style={{ fontSize: T.sub }}>🗣️</span>
+      <div>
+        <div style={{ fontSize: T.micro, color: ACCENT, fontWeight: 800, letterSpacing: 1 }}>MARROW</div>
+        <div style={{ fontSize: T.body, color: '#f0e2cc', lineHeight: 1.45, marginTop: 2 }}>{text}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── LEARN — a guided first fight: one creature, one harmless target, Marrow
+// walking you through the charge loop and tying the creature's LOOK to its moves. ──
+function LearnMode({ narrow, onGraduate }) {
+  const fight = useFight();
+  const [stage, setStage] = useState('intro'); // intro | fight | won
+  const ti = TYPE_INFO.Reactor;
+
+  function start() {
+    const cre = COMBAT_CREATURES.cinderpaw;
+    const you = [{ ...cre, temperament: 'Balanced', maxHp: cre.hp, hp: cre.hp }];
+    const dummy = { ...COMBAT_CREATURES.glowtail, name: 'Straw Target', spriteId: 'flicker', hp: 90, maxHp: 90, atk: 6, speed: 1 };
+    fight.begin(you, [dummy], 11, 'play', () => setStage('won'));
+    setStage('fight');
+  }
+
+  if (stage === 'intro') {
+    return (
+      <div style={{ textAlign: 'center', maxWidth: 520, margin: '0 auto', paddingTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+          <Sprite spriteId="cinder" color={ti.accent} glyph={ti.glyph} size={130} />
+        </div>
+        <div style={{ fontSize: T.head, fontWeight: 900, color: ti.accent }}>{ti.glyph} The Hothead</div>
+        <div style={{ fontSize: T.body, color: '#cfcfda', lineHeight: 1.6, margin: '12px 0 18px' }}>
+          Meet <b style={{ color: '#eee' }}>Cinderpaw</b>. It's wrapped in flame — so everything it does is fire: it <b style={{ color: BURN }}>Burns</b> enemies, then <b style={{ color: AMP }}>Overloads</b> for a huge hit. <i>A creature's look tells you what it does.</i>
+          <br /><br />
+          One rule runs the whole game: small moves <b>build ⚡charge</b>, then you <b>spend it</b> on a big one. Let's try it on a straw target — no danger.
+        </div>
+        <button onClick={start} style={{ width: '100%', padding: '15px 0', border: 'none', borderRadius: 12, background: ACCENT, color: '#1a1408', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>TEACH ME →</button>
+      </div>
+    );
+  }
+
+  const charge = fight.snap?.A?.[0]?.charge ?? 0;
+  let tip;
+  if (stage === 'won') tip = "That's the whole game in one move: build ⚡charge, then spend it big. Each of the six creatures plays this way — and its LOOK tells you its flavor. Ready for a real run?";
+  else if (fight.phase === 'choose-target') tip = 'Now tap the enemy to land it.';
+  else if (fight.phase === 'choose-skill') tip = charge >= 2
+    ? "You've banked ⚡charge — pick OVERLOAD to dump it all into one big fire hit. (Hits even harder on a Burning 🔥 target.)"
+    : 'Pick CHARGE UP — it fills your ⚡charge a little and sets the enemy on fire 🔥. Do it a couple times to bank charge.';
+  else tip = 'Watch the meter under Cinderpaw — that orange bar is ⚡charge.';
+
+  const banner = (
+    <div>
+      <CoachBar text={tip} />
+      {stage === 'won' && <button onClick={onGraduate} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: WIN, color: '#06120a', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer', marginBottom: 12 }}>START A REAL RUN →</button>}
+    </div>
+  );
+  return <FightView fight={fight} narrow={narrow} banner={banner} />;
+}
+
 export function SeamLab({ onClose }) {
   const vw = useViewport();
   const narrow = vw < 760;
-  const [tab, setTab] = useState('run'); // 'run' | 'sandbox'
+  const [tab, setTab] = useState('learn'); // 'learn' | 'run' | 'sandbox'
 
   const tabBtn = (key, label) => (
     <button onClick={() => setTab(key)} style={{ background: tab === key ? '#16202e' : PANEL, color: tab === key ? '#eaf2ff' : '#999', border: `2px solid ${tab === key ? SEL : LINE}`, borderRadius: 9, padding: '8px 16px', cursor: 'pointer', fontSize: T.body, fontWeight: 800 }}>{label}</button>
@@ -608,10 +671,11 @@ export function SeamLab({ onClose }) {
           <button onClick={onClose} style={{ background: PANEL, border: `1px solid ${LINE}`, color: '#ccc', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', fontSize: T.body, fontWeight: 700 }}>✕ Close</button>
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+          {tabBtn('learn', '🎓 LEARN')}
           {tabBtn('run', '⚔ RUN')}
           {tabBtn('sandbox', '🔬 Sandbox')}
         </div>
-        {tab === 'run' ? <RunMode narrow={narrow} /> : <Sandbox narrow={narrow} />}
+        {tab === 'learn' ? <LearnMode narrow={narrow} onGraduate={() => setTab('run')} /> : tab === 'run' ? <RunMode narrow={narrow} /> : <Sandbox narrow={narrow} />}
       </div>
     </div>
   );
