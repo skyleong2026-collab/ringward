@@ -37,6 +37,7 @@ const LINE = '#2a2a3a';
 const SEL = '#9cd1ff';
 const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
 const PATCHUP = 0.3; // between-wave heal (fraction of max HP)
+const ACTION_HOLD_MS = 750; // input-locking beat after each action: the hit animates, THEN the next actor is asked
 
 // Per-Type identity — color + shape + a plain-language nickname so a creature is
 // recognizable by FEEL, not by name. `focal` crops the concept-art strip to one
@@ -172,6 +173,8 @@ const FX_STYLE = `
 @keyframes seam-hitring { 0%{transform:translate(-50%,-50%) scale(.5);opacity:.9} 100%{transform:translate(-50%,-50%) scale(1.7);opacity:0} }
 @keyframes seam-ready { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,0)} 50%{box-shadow:0 0 14px 3px rgba(232,160,64,.7)} }
 @keyframes seam-targetpulse { 0%,100%{box-shadow:0 0 0 0 rgba(126,211,33,0)} 50%{box-shadow:0 0 14px 3px rgba(126,211,33,.75)} }
+@keyframes seam-iconpop { 0%{transform:translate(-50%,-50%) scale(.3);opacity:0} 28%{opacity:1} 100%{transform:translate(-50%,-115%) scale(1.7);opacity:0} }
+@keyframes seam-castglow { 0%{opacity:0} 35%{opacity:.85} 100%{opacity:0} }
 `;
 
 // Horizontal focal point (0–1) to crop ONE clear pose out of each wide turnaround
@@ -245,13 +248,17 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN }) {
   const dead = !u.alive;
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
   const size = big ? 92 : 78;
+  const burstEf = burst ? EFFECT[burst] : null; // colored impact on whoever was affected
+  const castEf = cast ? EFFECT[cast] : null; // the actor briefly glows the move's color
   const clickable = isTarget || selectable;
-  const ring = isTarget ? WIN : (selectable || isActor) ? ACCENT : 'transparent';
-  const pulse = selectable ? 'seam-ready 1.2s ease-in-out infinite' : isTarget ? 'seam-targetpulse 1.2s ease-in-out infinite' : 'none';
+  // The unit you're DRIVING (isActor) flashes; other ready units get a calm static
+  // outline. The eye should land on who's acting, not on everyone who could act.
+  const ring = isTarget ? WIN : isActor ? ACCENT : selectable ? '#6e5526' : 'transparent';
+  const pulse = isActor ? 'seam-ready 1.2s ease-in-out infinite' : isTarget ? 'seam-targetpulse 1.2s ease-in-out infinite' : 'none';
   const label = isActor ? '▶ ACTING' : selectable ? '▷ TAP TO ACT' : isTarget ? '◀ TAP TO HIT' : null;
   return (
     <div
@@ -260,7 +267,7 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         position: 'relative', cursor: clickable ? 'pointer' : 'default', textAlign: 'center',
         padding: '6px 6px 8px', borderRadius: 12, width: size + 26,
         border: `2px solid ${ring}`,
-        background: isTarget ? '#10261a66' : (selectable || isActor) ? '#1a140866' : 'transparent',
+        background: isTarget ? '#10261a66' : isActor ? '#1a140866' : selectable ? '#15120a55' : 'transparent',
         animation: pulse, opacity: dead ? 0.55 : 1, transition: 'opacity .3s',
       }}
     >
@@ -272,7 +279,9 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         ))}
       </div>
       <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-        {(anim === 'damaged') && <div style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.8, height: size * 0.8, borderRadius: '50%', border: `3px solid ${BURN}`, animation: 'seam-hitring .45s ease-out forwards', pointerEvents: 'none', zIndex: 4 }} />}
+        {castEf && <div key={`c${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.15, height: size * 1.15, borderRadius: '50%', background: `radial-gradient(circle, ${castEf.color}cc 0%, transparent 70%)`, animation: 'seam-castglow .55s ease-out forwards', pointerEvents: 'none', zIndex: 3 }} />}
+        {burstEf && <div key={`r${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.85, height: size * 0.85, borderRadius: '50%', border: `3px solid ${burstEf.color}`, boxShadow: `0 0 12px ${burstEf.color}`, animation: 'seam-hitring .5s ease-out forwards', pointerEvents: 'none', zIndex: 4 }} />}
+        {burstEf && <div key={`i${fxN}`} style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{burstEf.icon}</div>}
         <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
       </div>
       <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -291,7 +300,21 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
   );
 }
 
+// A PLAY-mode wrapper around the AI brain that waits out the shared "action hold"
+// before each enemy moves — so the previous hit finishes animating and you can see
+// what the enemy does and who it targets. Pure presentation: it only awaits the
+// hold, then defers to the real createAIDriver(). WATCH and the goldens use the raw,
+// instant driver, so determinism + byte-identical transcripts are untouched.
+function pacedAIDriver(holdRef) {
+  const ai = createAIDriver();
+  return {
+    async chooseNextActor(pool, state) { await holdRef.current; return ai.chooseNextActor(pool, state); },
+    decide: (actor, state) => ai.decide(actor, state),
+  };
+}
+
 let POP_ID = 0; // unique id for floating-number popups
+let FX_NONCE = 0; // bumped per action so the burst/cast animations remount + replay
 
 // Floating numbers to spawn for one event (damage red, heal green, etc.).
 function popupsForEvent(event) {
@@ -310,14 +333,15 @@ function popupsForEvent(event) {
 // "select" phase: tap any ready unit to PREVIEW its moves (switch as often as you
 // like, read every kit) — nothing commits until you pick a move (and target). Only
 // then do we resolve the actor and stash the decision for the engine's decide().
-function useFight() {
+function useFight(opts = {}) {
+  const autoSkip = opts.autoSkip !== false; // default ON; LEARN turns it off to teach the pick
   const [snap, setSnap] = useState(null);
   const [feed, setFeed] = useState([]);
   const [phase, setPhase] = useState('idle'); // idle | select | select-target | done
   const [pool, setPool] = useState([]); // uids that can still act this block
   const [previewUid, setPreviewUid] = useState(null); // unit whose moves are shown
   const [pendingSkill, setPendingSkill] = useState(null); // skill awaiting an enemy target
-  const [fx, setFx] = useState({ actor: null, hits: [] });
+  const [fx, setFx] = useState({ actor: null, cast: null, bursts: {}, n: 0 });
   const [popups, setPopups] = useState([]);
 
   const stateRef = useRef(null);
@@ -329,22 +353,43 @@ function useFight() {
   const feedRef = useRef([]);
   const feedBoxRef = useRef(null);
   const onDoneRef = useRef(null);
+  const holdRef = useRef(Promise.resolve()); // the current "action hold"; transitions await it
 
   useEffect(() => { if (feedBoxRef.current) feedBoxRef.current.scrollTop = feedBoxRef.current.scrollHeight; }, [feed]);
+
+  // Open a fresh action hold: the next actor-request (either side) awaits this, so
+  // the hit animates and input stays locked until the beat passes.
+  function startHold() { holdRef.current = new Promise((r) => setTimeout(r, ACTION_HOLD_MS)); }
 
   function emit(event) {
     feedRef.current = [...feedRef.current, feedLine(event)];
     setFeed(feedRef.current);
-    if (event.type === 'turn') setFx({ actor: event.actor.uid, hits: (event.hits || []).filter((h) => h.dmg > 0 || h.killed).map((h) => h.uid) });
-    else if (event.type === 'burn') setFx({ actor: null, hits: [event.target.uid] });
+    // Theme a colored impact burst onto each affected unit by WHAT happened to it,
+    // and glow the actor in the move's own color. Then hold so it all plays out.
+    if (event.type === 'turn') {
+      const bursts = {};
+      (event.hits || []).forEach((h) => { if (h.dmg > 0 || h.killed) bursts[h.uid] = 'attack'; });
+      (event.shields || []).forEach((s) => { if (s.block > 0 && s.uid) bursts[s.uid] = 'shield'; });
+      (event.heals || []).forEach((h) => { if (h.healed > 0) bursts[h.uid] = 'heal'; });
+      (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
+      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, n: ++FX_NONCE });
+      startHold();
+    } else if (event.type === 'burn') {
+      setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, n: ++FX_NONCE });
+      startHold();
+    } else if (event.type === 'regen') {
+      setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'heal' }, n: ++FX_NONCE });
+      startHold();
+    }
     const adds = popupsForEvent(event).map((a) => ({ ...a, id: ++POP_ID }));
     if (adds.length) {
       setPopups((p) => [...p, ...adds].slice(-50));
-      adds.forEach((a) => setTimeout(() => setPopups((p) => p.filter((x) => x.id !== a.id)), 950));
+      adds.forEach((a) => setTimeout(() => setPopups((p) => p.filter((x) => x.id !== a.id)), 1100));
     }
     if (stateRef.current) setSnap(snapshot(stateRef.current));
   }
-  function requestActor(livingPool, state) {
+  async function requestActor(livingPool, state) {
+    await holdRef.current; // let the prior action finish animating before opening input
     return new Promise((resolve) => {
       poolRef.current = livingPool; battleRef.current = state;
       const first = livingPool[0].uid;
@@ -357,11 +402,29 @@ function useFight() {
         setPhase('idle'); setPool([]); setPreviewUid(null); previewRef.current = null; setPendingSkill(null);
         resolve(unit);
       };
+      if (autoSkip) maybeAutoSkill(first); // one usable move → skip straight to targeting
     });
   }
   function requestDecision() { return Promise.resolve(decisionRef.current); }
 
-  function previewUnit(uid) { previewRef.current = uid; setPreviewUid(uid); setPendingSkill(null); setPhase('select'); }
+  // If the previewed unit has exactly ONE usable move, skip the redundant "pick a
+  // move" step: jump to target-pick (enemy moves) or just commit (auto-targeting
+  // moves). Switching is preserved — you can still tap another ready unit to read it.
+  function maybeAutoSkill(uid) {
+    const unit = poolRef.current.find((u) => u.uid === uid);
+    if (!unit || !battleRef.current || !commitRef.current) return;
+    const legal = legalSkills(unit, battleRef.current);
+    if (legal.length !== 1) return;
+    const only = legal[0];
+    if (only.targetMode === 'enemy') { setPendingSkill(only.id); setPhase('select-target'); return; }
+    const targetIds = only.targetMode === 'allEnemies' ? enemiesOf(battleRef.current, unit).map((u) => u.uid) : [];
+    commitRef.current(unit, { skillId: only.id, targetIds });
+  }
+
+  function previewUnit(uid) {
+    previewRef.current = uid; setPreviewUid(uid); setPendingSkill(null); setPhase('select');
+    if (autoSkip) maybeAutoSkill(uid);
+  }
   function chooseSkill(skillId) {
     const unit = poolRef.current.find((u) => u.uid === previewRef.current);
     if (getSkill(skillId).targetMode === 'enemy') { setPendingSkill(skillId); setPhase('select-target'); return; }
@@ -385,7 +448,8 @@ function useFight() {
   }
 
   function begin(aDefs, bDefs, seed, mode, onComplete) {
-    feedRef.current = []; setFeed([]); setPool([]); setPreviewUid(null); previewRef.current = null; setPendingSkill(null); setPopups([]); setFx({ actor: null, hits: [] });
+    feedRef.current = []; setFeed([]); setPool([]); setPreviewUid(null); previewRef.current = null; setPendingSkill(null); setPopups([]); setFx({ actor: null, cast: null, bursts: {}, n: 0 });
+    holdRef.current = Promise.resolve();
     onDoneRef.current = onComplete || null;
     const state = createBattleState(aDefs, bDefs, seed);
     stateRef.current = state;
@@ -393,10 +457,10 @@ function useFight() {
     setPhase('idle');
     const drivers = mode === 'watch'
       ? { A: createAIDriver(), B: createAIDriver() }
-      : { A: createHumanDriver({ requestActor, requestDecision }), B: createAIDriver() };
+      : { A: createHumanDriver({ requestActor, requestDecision }), B: pacedAIDriver(holdRef) };
     runBattle(state, drivers, emit).then((res) => { setPhase('done'); if (onDoneRef.current) onDoneRef.current(res, state); });
   }
-  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setPool([]); setPreviewUid(null); setPendingSkill(null); setFx({ actor: null, hits: [] }); setPopups([]); }
+  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setPool([]); setPreviewUid(null); setPendingSkill(null); setFx({ actor: null, cast: null, bursts: {}, n: 0 }); setPopups([]); holdRef.current = Promise.resolve(); }
 
   return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, previewMoves, begin, reset };
 }
@@ -438,7 +502,7 @@ function FightView({ fight, narrow, banner }) {
   const selecting = phase === 'select' || phase === 'select-target';
   const moves = selecting ? fight.previewMoves() : null;
   const enemyUids = moves?.enemyUids ?? [];
-  const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : (fx.hits || []).includes(u.uid) ? 'damaged' : 'idle';
+  const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : fx.bursts?.[u.uid] === 'attack' ? 'damaged' : 'idle';
   const popsFor = (uid) => popups.filter((p) => p.uid === uid);
   const side = (units, isEnemy) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
@@ -448,6 +512,7 @@ function FightView({ fight, narrow, banner }) {
           isActor={!isEnemy && selecting && previewUid === u.uid}
           selectable={!isEnemy && selecting && pool.includes(u.uid) && previewUid !== u.uid}
           isTarget={isEnemy && phase === 'select-target' && u.alive && enemyUids.includes(u.uid)}
+          burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n}
           onSelect={previewUnit}
           onPick={chooseTarget} popups={popsFor(u.uid)} />
       ))}
@@ -733,7 +798,7 @@ function CoachBar({ text }) {
 // ── LEARN — a guided first fight: one creature, one harmless target, Marrow
 // walking you through the charge loop and tying the creature's LOOK to its moves. ──
 function LearnMode({ narrow, onGraduate }) {
-  const fight = useFight();
+  const fight = useFight({ autoSkip: false }); // teach the move-pick explicitly here
   const [stage, setStage] = useState('intro'); // intro | fight | won
   const ti = TYPE_INFO.Reactor;
 
