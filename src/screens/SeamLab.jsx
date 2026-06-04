@@ -192,7 +192,22 @@ function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, siz
   );
 }
 
-const KIND_COL = { payoff: AMP, wildcard: BURN, builder: DIM };
+// What a move DOES, for instant color-reading (independent of which creature owns it).
+const SKILL_EFFECT = {
+  chargeUp: 'attack', overload: 'attack', backdraft: 'attack',
+  jab: 'attack', flurry: 'attack', blitz: 'attack',
+  mark: 'attack', execute: 'attack', ambush: 'attack',
+  brace: 'shield', aegis: 'shield', bodyguard: 'shield',
+  mend: 'heal', bloom: 'heal', ward: 'heal',
+  prime: 'boost', overdrive: 'boost', resonate: 'boost',
+};
+const EFFECT = {
+  attack: { color: '#ff8a4a', bg: '#2a160d', icon: '⚔️', label: 'Attack' },
+  shield: { color: '#7fd6ff', bg: '#0d1f2a', icon: '🛡️', label: 'Shield' },
+  heal: { color: '#7ed321', bg: '#0f2010', icon: '💚', label: 'Heal' },
+  boost: { color: '#b06bff', bg: '#1c1230', icon: '⬆️', label: 'Boost' },
+};
+const effectOf = (sid) => EFFECT[SKILL_EFFECT[sid]] || EFFECT.attack;
 
 // Charge as fill-up dots under a unit — no number to read.
 function ChargeDots({ value, max }) {
@@ -376,11 +391,15 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill }) {
         const sk = getSkill(sid);
         const usable = legalIds.includes(sid);
         const chosen = pendingSkill === sid;
+        const ef = effectOf(sid);
         return (
           <button key={sid} onClick={usable ? () => onSkill(sid) : undefined} disabled={!usable}
-            style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6, background: chosen ? '#1a1408' : PANEL, border: `2px solid ${chosen ? ACCENT : usable ? LINE : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed' }}>
-            <div style={{ fontSize: T.small, fontWeight: 800 }}>{sk.name} <span style={{ fontSize: T.micro, color: usable ? KIND_COL[sk.kind] : '#444', fontWeight: 700 }}>· {sk.kind}</span></div>
-            <div style={{ fontSize: T.micro, color: usable ? DIM : '#444', lineHeight: 1.35, marginTop: 2 }}>{sk.blurb}</div>
+            style={{ display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%', textAlign: 'left', marginBottom: 6, background: usable ? ef.bg : '#14141c', border: `2px solid ${chosen ? '#fff' : usable ? ef.color : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed', opacity: usable ? 1 : 0.55 }}>
+            <span style={{ fontSize: T.label, lineHeight: 1, marginTop: 1, filter: usable ? 'none' : 'grayscale(1)' }}>{ef.icon}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: T.small, fontWeight: 800 }}>{sk.name} <span style={{ fontSize: T.micro, color: usable ? ef.color : '#555', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>· {ef.label}</span></div>
+              <div style={{ fontSize: T.micro, color: usable ? '#bdbdcb' : '#444', lineHeight: 1.35, marginTop: 2 }}>{sk.blurb}</div>
+            </span>
           </button>
         );
       })}
