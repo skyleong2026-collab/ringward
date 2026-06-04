@@ -16,7 +16,10 @@ function initUnit(creature, side, slot) {
     spriteId: creature.spriteId ?? creature.id, // UI only — never read by combat math
     side,
     slot,
-    maxHp: creature.hp,
+    // maxHp defaults to hp (a fresh creature). A run can pass a separate maxHp so a
+    // unit starts the next wave wounded (hp < maxHp) — carrying damage between fights.
+    // Existing callers pass no maxHp, so maxHp === hp and goldens stay byte-identical.
+    maxHp: creature.maxHp ?? creature.hp,
     hp: creature.hp,
     atk: creature.atk,
     speed: creature.speed,

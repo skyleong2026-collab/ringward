@@ -1,17 +1,15 @@
-// SeamLab.jsx — the §26 ENGINE SEAM proving ground (Task 1).
+// SeamLab.jsx — the §26 ENGINE SEAM proving ground.
 //
-// This is the ONE surface wired to the NEW manual-combat engine (src/engine/combat).
-// It is deliberately separate from ReactorSandbox.jsx (the earlier hand-rolled
-// prototype) and shares nothing with battleStepEngine.js / resolveBattle. Two modes:
-//   • PLAY  — you drive side A turn-by-turn against the AI driver on side B.
-//   • WATCH — both sides are the SAME AI brain at a blessed golden seed; the
-//             transcript here matches the matching scripts/manual-golden-*.mjs.
+// The ONE surface wired to the NEW manual-combat engine (src/engine/combat). It is
+// deliberately separate from ReactorSandbox.jsx and shares nothing with
+// battleStepEngine.js / resolveBattle. Two top-level modes:
+//   • ⚔ RUN     — pick your own squad, fight 3 escalating waves; HP carries between
+//                 fights, you patch up between them, win the run or get wiped.
+//   • 🔬 SANDBOX — the original fixed matchups: PLAY one, or WATCH AI-vs-AI replay a
+//                 blessed golden. Kept as the per-Type showcase + verification surface.
 //
-// The point it proves: ONE engine, ONE set of skill math, the seam only routes
-// WHO chooses (humanChoice awaits these clicks; aiChoice answers instantly).
-//
-// Layout mirrors ⚗ the Lab (ReactorSandbox): a bigger type scale, fat tappable
-// cards, and a responsive grid that stacks on a narrow screen.
+// One engine, two drivers: the human driver awaits these clicks; the AI driver answers
+// instantly. The same <FightView> + useFight() power both modes.
 
 import { useState, useRef, useEffect } from 'react';
 import {
@@ -23,6 +21,8 @@ import {
   legalSkills,
   enemiesOf,
   makeUnitDef,
+  COMBAT_CREATURES,
+  COMBAT_ROSTER,
 } from '../engine/combat/index.js';
 
 const ACCENT = '#e8a040';
@@ -30,13 +30,23 @@ const CHG = '#f5a623';
 const BURN = '#ff5a2a';
 const AMP = '#b06bff';
 const WIN = '#7ed321';
+const LOSS = '#d0021b';
 const DIM = '#8a8a9a';
 const PANEL = '#12121c';
 const LINE = '#2a2a3a';
 const SEL = '#9cd1ff';
 const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
+const PATCHUP = 0.3; // between-wave heal (fraction of max HP)
 
-const GOLDEN_SEED = 1337;
+// Per-Type identity used across the picker + waves.
+const TYPE_INFO = {
+  Reactor: { glyph: '⚡', accent: BURN, role: 'Charge up, then Overload — ×2 on a Burning target.' },
+  Bulwark: { glyph: '🛡', accent: '#7fd6ff', role: 'Banks charge into block — shields the whole line.' },
+  Mender: { glyph: '🌿', accent: WIN, role: 'Heals and lays regen — wins by outlasting.' },
+  Booster: { glyph: '✦', accent: AMP, role: "Stacks Amp on an ally — doubles someone else's hits." },
+  Striker: { glyph: '⟡', accent: '#ffd166', role: 'Many fast hits + a first-strike Blitz bonus.' },
+  Assassin: { glyph: '☠', accent: '#ff7a9c', role: 'Hunts the weakest — Execute spikes ×2.5 on the wounded.' },
+};
 
 function useViewport() {
   const [w, setW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1024));
@@ -49,68 +59,57 @@ function useViewport() {
   return w;
 }
 
-// Matchups, each pinned to a blessed golden seed so WATCH reproduces a known fight.
-// `desc` is the one-line "what this teaches" shown on the fat selector card.
+// ── Three escalating enemy waves (fresh each fight). ──
+const WAVES = [
+  { name: 'Scouts', blurb: 'A pair of jumpy Reactors. Warm up.', seed: 101,
+    enemies: () => [makeUnitDef('glowtail', 'Balanced'), makeUnitDef('fizzpop', 'Balanced')] },
+  { name: 'The Pack', blurb: 'A Striker backed by a Mender — kill the healer first.', seed: 202,
+    enemies: () => [makeUnitDef('swiftpaw', 'Balanced'), makeUnitDef('mossback', 'Balanced')] },
+  { name: 'The Warden', blurb: 'A Bulwark wall guarding an Assassin. Break through.', seed: 303,
+    enemies: () => [makeUnitDef('stoneward', 'Greedy'), makeUnitDef('veilclaw', 'Greedy')] },
+];
+
+// Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
 const MATCHUPS = {
-  mirror: {
-    label: 'Reactor mirror', glyph: '⚡', accent: BURN,
+  mirror: { label: 'Reactor mirror', glyph: '⚡', accent: BURN, seed: 1337,
     desc: 'Two charge-and-nuke squads trade Overloads — the baseline fight.',
-    seed: GOLDEN_SEED,
     a: () => [makeUnitDef('fizzpop', 'Balanced'), makeUnitDef('glowtail', 'Balanced')],
-    b: () => [makeUnitDef('cinderpaw', 'Greedy'), makeUnitDef('glowtail', 'Greedy')],
-  },
-  bulwark: {
-    label: 'Bulwark wall', glyph: '🛡', accent: '#7fd6ff',
+    b: () => [makeUnitDef('cinderpaw', 'Greedy'), makeUnitDef('glowtail', 'Greedy')] },
+  bulwark: { label: 'Bulwark wall', glyph: '🛡', accent: '#7fd6ff', seed: 4242,
     desc: 'Reactors batter a shielded wall — block soaks damage before HP.',
-    seed: 4242,
     a: () => [makeUnitDef('fizzpop', 'Balanced'), makeUnitDef('glowtail', 'Balanced')],
-    b: () => [makeUnitDef('stoneward', 'Balanced'), makeUnitDef('ironwall', 'Balanced')],
-  },
-  mender: {
-    label: 'Mender sustain', glyph: '🌿', accent: WIN,
+    b: () => [makeUnitDef('stoneward', 'Balanced'), makeUnitDef('ironwall', 'Balanced')] },
+  mender: { label: 'Mender sustain', glyph: '🌿', accent: WIN, seed: 7777,
     desc: 'A Mender out-heals the burst — win by outlasting, not out-damaging.',
-    seed: 7777,
     a: () => [makeUnitDef('fizzpop', 'Balanced'), makeUnitDef('glowtail', 'Balanced'), makeUnitDef('mossback', 'Balanced')],
-    b: () => [makeUnitDef('cinderpaw', 'Greedy'), makeUnitDef('glowtail', 'Greedy')],
-  },
-  booster: {
-    label: 'Booster combo', glyph: '⚡', accent: AMP,
+    b: () => [makeUnitDef('cinderpaw', 'Greedy'), makeUnitDef('glowtail', 'Greedy')] },
+  booster: { label: 'Booster combo', glyph: '✦', accent: AMP, seed: 9001,
     desc: 'A Booster stacks Amp (⚡) on its carry, then the buffed hit lands huge.',
-    seed: 9001,
     a: () => [makeUnitDef('buzzline', 'Greedy'), makeUnitDef('fizzpop', 'Balanced'), makeUnitDef('cinderpaw', 'Balanced')],
-    b: () => [makeUnitDef('glowtail', 'Greedy'), makeUnitDef('cinderpaw', 'Greedy')],
-  },
-  striker: {
-    label: 'Striker tempo', glyph: '⟡', accent: '#ffd166',
+    b: () => [makeUnitDef('glowtail', 'Greedy'), makeUnitDef('cinderpaw', 'Greedy')] },
+  striker: { label: 'Striker tempo', glyph: '⟡', accent: '#ffd166', seed: 7,
     desc: 'Fast Strikers — one Flurry is a barrage of hits in a single turn.',
-    seed: 7,
     a: () => [makeUnitDef('swiftpaw', 'Greedy'), makeUnitDef('dartwing', 'Greedy')],
-    b: () => [makeUnitDef('shadefang', 'Greedy'), makeUnitDef('veilclaw', 'Greedy')],
-  },
-  assassin: {
-    label: 'Assassin hunt', glyph: '☠', accent: '#ff7a9c',
+    b: () => [makeUnitDef('shadefang', 'Greedy'), makeUnitDef('veilclaw', 'Greedy')] },
+  assassin: { label: 'Assassin hunt', glyph: '☠', accent: '#ff7a9c', seed: 7,
     desc: 'Glass cannons hunt the weakest — Execute spikes ×2.5 on the wounded.',
-    seed: 7,
     a: () => [makeUnitDef('shadefang', 'Balanced'), makeUnitDef('veilclaw', 'Balanced')],
-    b: () => [makeUnitDef('fizzpop', 'Balanced'), makeUnitDef('glowtail', 'Balanced')],
-  },
+    b: () => [makeUnitDef('fizzpop', 'Balanced'), makeUnitDef('glowtail', 'Balanced')] },
 };
 
-// Friendly feed line from a raw engine event (the engine emits pure data).
+// A player creature carried through a run, with separate maxHp so wounds persist.
+function playerDef(member) {
+  const base = COMBAT_CREATURES[member.id];
+  return { ...base, temperament: 'Balanced', maxHp: base.hp, hp: member.hp };
+}
+
+// ── Friendly feed line from a raw engine event (the engine emits pure data). ──
 function feedLine(e) {
   if (e.type === 'round-start') return { kind: 'round', text: `Round ${e.round} — ${e.firstSide} side moves first` };
   if (e.type === 'battle-end') return { kind: 'end', text: `${e.winner === 'draw' ? 'Draw' : e.winner + ' wins'} — ${e.rounds} rounds` };
-  if (e.type === 'burn') {
-    return { kind: 'burn', text: `${e.target.name} burns for ${e.dmg}${e.killed ? ' — KO' : ''} (${e.stacksLeft} stack${e.stacksLeft === 1 ? '' : 's'} left)` };
-  }
-  if (e.type === 'regen') {
-    return { kind: 'regen', text: `${e.target.name} regenerates +${e.healed} (${e.stacksLeft} stack${e.stacksLeft === 1 ? '' : 's'} left)` };
-  }
-  // turn
-  const hits = (e.hits || [])
-    .filter((h) => h.dmg > 0 || h.killed)
-    .map((h) => `${h.dmg} → ${h.name}${h.killed ? ' (KO)' : ''}`)
-    .join(', ');
+  if (e.type === 'burn') return { kind: 'burn', text: `${e.target.name} burns for ${e.dmg}${e.killed ? ' — KO' : ''} (${e.stacksLeft} stack${e.stacksLeft === 1 ? '' : 's'} left)` };
+  if (e.type === 'regen') return { kind: 'regen', text: `${e.target.name} regenerates +${e.healed} (${e.stacksLeft} stack${e.stacksLeft === 1 ? '' : 's'} left)` };
+  const hits = (e.hits || []).filter((h) => h.dmg > 0 || h.killed).map((h) => `${h.dmg} → ${h.name}${h.killed ? ' (KO)' : ''}`).join(', ');
   const chg = e.chargeBefore !== e.chargeAfter ? ` · charge ${e.chargeBefore}→${e.chargeAfter}` : '';
   const amp = e.amplifiedByBurn ? ' · 🔥×2' : '';
   const shields = (e.shields || []).filter((s) => s.block > 0).map((s) => `🛡${s.block}`).join(' ');
@@ -123,7 +122,7 @@ function feedLine(e) {
 
 function snapshot(state) {
   const map = (u) => ({
-    uid: u.uid, name: u.name, side: u.side, spriteId: u.spriteId,
+    uid: u.uid, name: u.name, side: u.side,
     hp: u.hp, maxHp: u.maxHp, charge: u.charge, maxCharge: u.maxCharge,
     burn: u.statuses.burn || 0, block: u.statuses.block || 0, regen: u.statuses.regen || 0, amp: u.statuses.amp || 0, alive: u.alive,
   });
@@ -160,9 +159,9 @@ function UnitCard({ u, isTarget, isActor, onPick }) {
           {isActor && <span style={{ color: ACCENT, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>▶ TURN</span>}
           {isTarget && <span style={{ color: WIN, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>◀ TAP</span>}
         </span>
-        <span style={{ fontSize: T.body, fontWeight: 700, color: dead ? '#d0021b' : '#cfcfda' }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</span>
+        <span style={{ fontSize: T.body, fontWeight: 700, color: dead ? LOSS : '#cfcfda' }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</span>
       </div>
-      <Bar value={u.hp} max={u.maxHp} color={dead ? '#d0021b' : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} />
+      <Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
         <span style={{ fontSize: T.small, color: CHG, fontWeight: 700, minWidth: 64 }}>chg {u.charge}/{u.maxCharge}</span>
         <div style={{ flex: 1 }}><Bar value={u.charge} max={u.maxCharge} color={CHG} h={6} /></div>
@@ -179,37 +178,29 @@ function UnitCard({ u, isTarget, isActor, onPick }) {
   );
 }
 
-export function SeamLab({ onClose }) {
-  const vw = useViewport();
-  const narrow = vw < 760;
-
-  const [mode, setMode] = useState(null); // 'play' | 'watch'
-  const [matchup, setMatchup] = useState('mirror');
+// ── useFight — one battle's UI state + the human-driver promise machinery. ──
+function useFight() {
   const [snap, setSnap] = useState(null);
   const [feed, setFeed] = useState([]);
   const [phase, setPhase] = useState('idle'); // idle | choose-actor | choose-skill | choose-target | done
-  const [pool, setPool] = useState([]); // uids the human may act with now
-  const [active, setActive] = useState(null); // {uid, name, skillIds}
-  const [pendingSkill, setPendingSkill] = useState(null); // skillId awaiting a target
-  const [result, setResult] = useState(null);
+  const [pool, setPool] = useState([]);
+  const [active, setActive] = useState(null);
+  const [pendingSkill, setPendingSkill] = useState(null);
 
   const stateRef = useRef(null);
   const actorObjRef = useRef(null);
   const resolveRef = useRef(null);
   const feedRef = useRef([]);
   const feedBoxRef = useRef(null);
+  const onDoneRef = useRef(null);
 
-  useEffect(() => {
-    if (feedBoxRef.current) feedBoxRef.current.scrollTop = feedBoxRef.current.scrollHeight;
-  }, [feed]);
+  useEffect(() => { if (feedBoxRef.current) feedBoxRef.current.scrollTop = feedBoxRef.current.scrollHeight; }, [feed]);
 
   function emit(event) {
     feedRef.current = [...feedRef.current, feedLine(event)];
     setFeed(feedRef.current);
     if (stateRef.current) setSnap(snapshot(stateRef.current));
   }
-
-  // Human driver callbacks — return Promises the engine awaits; a click resolves them.
   function requestActor(livingPool) {
     return new Promise((resolve) => {
       if (livingPool.length === 1) { resolve(livingPool[0]); return; }
@@ -218,212 +209,304 @@ export function SeamLab({ onClose }) {
       resolveRef.current = (uid) => { setPhase('idle'); resolve(livingPool.find((u) => u.uid === uid)); };
     });
   }
-
   function requestDecision(actor, state) {
     return new Promise((resolve) => {
       actorObjRef.current = actor;
-      // Snapshot what the UI needs NOW (in the handler) so render never reads refs.
-      setActive({
-        uid: actor.uid,
-        name: actor.name,
-        skillIds: actor.skillIds.slice(),
-        legal: legalSkills(actor, state).map((s) => s.id),
-        enemyUids: enemiesOf(state, actor).map((u) => u.uid),
-      });
+      setActive({ uid: actor.uid, name: actor.name, skillIds: actor.skillIds.slice(), legal: legalSkills(actor, state).map((s) => s.id), enemyUids: enemiesOf(state, actor).map((u) => u.uid) });
       setPhase('choose-skill');
       resolveRef.current = (decision) => { setPhase('idle'); setActive(null); setPendingSkill(null); resolve(decision); };
     });
   }
-
   function pickSkill(skillId) {
     const skill = getSkill(skillId);
-    const actor = actorObjRef.current;
-    if (skill.targetMode === 'allEnemies') {
-      resolveRef.current({ skillId, targetIds: enemiesOf(stateRef.current, actor).map((u) => u.uid) });
+    if (skill.targetMode === 'allEnemies' || skill.targetMode === 'allAllies' || skill.targetMode === 'ally') {
+      // No enemy target to tap — resolve immediately (engine selectors pick allies).
+      const actor = actorObjRef.current;
+      const targetIds = skill.targetMode === 'allEnemies' ? enemiesOf(stateRef.current, actor).map((u) => u.uid) : [];
+      resolveRef.current({ skillId, targetIds });
       return;
     }
-    // single-enemy: ask for a target
     setPendingSkill(skillId);
     setPhase('choose-target');
   }
+  function pickTarget(uid) { resolveRef.current({ skillId: pendingSkill, targetIds: [uid] }); }
 
-  function pickTarget(uid) {
-    resolveRef.current({ skillId: pendingSkill, targetIds: [uid] });
-  }
-
-  function start(which) {
-    feedRef.current = [];
-    setFeed([]); setResult(null); setActive(null); setPendingSkill(null); setPool([]);
-    setMode(which);
-
-    const { a, b, seed } = MATCHUPS[matchup];
-    const state = createBattleState(a(), b(), seed);
+  function begin(aDefs, bDefs, seed, mode, onComplete) {
+    feedRef.current = []; setFeed([]); setActive(null); setPendingSkill(null); setPool([]);
+    onDoneRef.current = onComplete || null;
+    const state = createBattleState(aDefs, bDefs, seed);
     stateRef.current = state;
     setSnap(snapshot(state));
-
-    const drivers = which === 'watch'
+    setPhase('idle');
+    const drivers = mode === 'watch'
       ? { A: createAIDriver(), B: createAIDriver() }
       : { A: createHumanDriver({ requestActor, requestDecision }), B: createAIDriver() };
+    runBattle(state, drivers, emit).then((res) => { setPhase('done'); if (onDoneRef.current) onDoneRef.current(res, state); });
+  }
+  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setActive(null); setPendingSkill(null); }
 
-    runBattle(state, drivers, emit).then((res) => {
-      setResult(res);
-      setPhase('done');
-    });
+  return { snap, feed, phase, pool, active, pendingSkill, feedBoxRef, resolveRef, pickSkill, pickTarget, begin, reset };
+}
+
+// ── FightView — the shared battlefield + controls + feed for a live battle. ──
+function FightView({ fight, narrow, banner }) {
+  const { snap, feed, phase, pool, active, feedBoxRef, resolveRef, pickSkill, pickTarget } = fight;
+  if (!snap) return null;
+  const legal = active?.legal ?? [];
+  const enemyUids = active?.enemyUids ?? [];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
+      <div>
+        <div style={{ fontSize: T.small, color: '#3ec9a0', fontWeight: 800, letterSpacing: 1, marginBottom: 8 }}>YOUR SIDE (A)</div>
+        {snap.A.map((u) => <UnitCard key={u.uid} u={u} isActor={active?.uid === u.uid} isTarget={false} onPick={() => {}} />)}
+        <div style={{ fontSize: T.small, color: '#e07a7a', fontWeight: 800, letterSpacing: 1, margin: '14px 0 8px' }}>ENEMY (B)</div>
+        {snap.B.map((u) => (
+          <UnitCard key={u.uid} u={u} isActor={active?.uid === u.uid}
+            isTarget={phase === 'choose-target' && u.alive && enemyUids.includes(u.uid)} onPick={pickTarget} />
+        ))}
+      </div>
+      <div>
+        {banner}
+        {phase === 'choose-actor' && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 800, marginBottom: 8 }}>Whose turn first? <span style={{ color: DIM, fontWeight: 600 }}>(you set the order)</span></div>
+            {snap.A.filter((u) => pool.includes(u.uid)).map((u) => (
+              <button key={u.uid} onClick={() => resolveRef.current(u.uid)} style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 8, background: PANEL, border: `2px solid ${ACCENT}`, color: '#eee', borderRadius: 10, padding: '13px 14px', cursor: 'pointer', fontSize: T.body, fontWeight: 700 }}>
+                Act with <b>{u.name}</b> <span style={{ color: CHG, fontWeight: 700 }}>· charge {u.charge}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {(phase === 'choose-skill' || phase === 'choose-target') && active && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 800, marginBottom: 8 }}>
+              {active.name}: pick a skill{phase === 'choose-target' ? ' → now tap a target enemy' : ''}
+            </div>
+            {active.skillIds.map((sid) => {
+              const sk = getSkill(sid);
+              const usable = legal.includes(sid);
+              const chosen = fight.pendingSkill === sid;
+              return (
+                <button key={sid} onClick={usable ? () => pickSkill(sid) : undefined} disabled={!usable}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 8, background: chosen ? '#1a1408' : PANEL, border: `2px solid ${chosen ? ACCENT : usable ? LINE : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 10, padding: '12px 14px', cursor: usable ? 'pointer' : 'not-allowed' }}>
+                  <div style={{ fontSize: T.label, fontWeight: 800 }}>{sk.name} <span style={{ fontSize: T.small, color: usable ? KIND_COL[sk.kind] : '#444', fontWeight: 700 }}>· {sk.kind}</span></div>
+                  <div style={{ fontSize: T.small, color: usable ? DIM : '#444', lineHeight: 1.45, marginTop: 3 }}>{sk.blurb}</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>BATTLE LOG</div>
+        <div ref={feedBoxRef} style={{ background: '#0a0a12', border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, maxHeight: narrow ? 300 : 440, overflowY: 'auto' }}>
+          {feed.length === 0 && <div style={{ fontSize: T.body, color: '#555' }}>Battle log…</div>}
+          {feed.map((f, i) => (
+            <div key={i} style={{ fontSize: T.body, padding: '3px 0', lineHeight: 1.5,
+              color: f.kind === 'round' ? ACCENT : f.kind === 'end' ? WIN : f.kind === 'burn' ? BURN : f.kind === 'regen' ? WIN : f.side === 'A' ? '#9cd' : '#e0a0b8',
+              fontWeight: f.kind === 'round' || f.kind === 'end' ? 800 : 500,
+              borderTop: f.kind === 'round' ? `1px solid ${LINE}` : 'none', marginTop: f.kind === 'round' ? 6 : 0, paddingTop: f.kind === 'round' ? 6 : 3 }}>{f.text}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── RUN MODE — squad pick → 3 waves, HP carries, win or wipe. ──
+function RunMode({ narrow }) {
+  const fight = useFight();
+  const [runPhase, setRunPhase] = useState('pick'); // pick | fighting | cleared | won | lost
+  const [picked, setPicked] = useState([]); // creature ids (2–3)
+  const [squad, setSquad] = useState([]); // [{id, hp, maxHp}] persistent across waves
+  const [waveIdx, setWaveIdx] = useState(0);
+
+  function toggle(id) {
+    setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
   }
 
-  const legal = active?.legal ?? [];
-  const livingEnemyUids = active?.enemyUids ?? [];
+  function startWave(idx, sq) {
+    const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
+    const aDefs = fielded.map((i) => playerDef(sq[i]));
+    fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, 'play', (res, finalState) => {
+      const next = sq.map((m) => ({ ...m }));
+      fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
+      setSquad(next);
+      const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
+      if (!youLive || res.winner === 'B') setRunPhase('lost');
+      else if (idx === WAVES.length - 1) setRunPhase('won');
+      else setRunPhase('cleared');
+    });
+    setWaveIdx(idx);
+    setRunPhase('fighting');
+  }
+
+  function startRun() {
+    const sq = picked.map((id) => ({ id, hp: COMBAT_CREATURES[id].hp, maxHp: COMBAT_CREATURES[id].hp }));
+    setSquad(sq);
+    startWave(0, sq);
+  }
+  function continueRun() {
+    const patched = squad.map((m) => m.hp > 0 ? { ...m, hp: Math.min(m.maxHp, m.hp + Math.round(m.maxHp * PATCHUP)) } : m);
+    setSquad(patched);
+    startWave(waveIdx + 1, patched);
+  }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); }
+
+  // ── Squad picker ──
+  if (runPhase === 'pick') {
+    return (
+      <div>
+        <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 2 }}>Pick <b style={{ color: ACCENT }}>2–3</b> creatures for your run.</div>
+        <div style={{ fontSize: T.small, color: DIM, marginBottom: 14 }}>You'll fight 3 waves in a row. Wounds carry over — you patch up a little between fights.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 18 }}>
+          {COMBAT_ROSTER.map((c) => {
+            const ti = TYPE_INFO[c.type];
+            const on = picked.includes(c.id);
+            const full = !on && picked.length >= 3;
+            return (
+              <button key={c.id} onClick={() => toggle(c.id)} disabled={full}
+                style={{ textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '12px 13px',
+                  background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.45 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                  <span style={{ fontSize: T.sub, color: ti.accent }}>{ti.glyph}</span>
+                  <span style={{ fontSize: T.label, fontWeight: 800, color: on ? '#eaf2ff' : '#ddd' }}>{c.name}</span>
+                  {on && <span style={{ marginLeft: 'auto', fontSize: T.micro, color: SEL, fontWeight: 800 }}>✓</span>}
+                </div>
+                <div style={{ fontSize: T.micro, color: ti.accent, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{c.type.toUpperCase()}</div>
+                <div style={{ fontSize: T.small, color: on ? '#b9c6d6' : '#8f8f9f', lineHeight: 1.4 }}>{ti.role}</div>
+                <div style={{ fontSize: T.micro, color: DIM, marginTop: 5 }}>HP {c.hp} · ATK {c.atk} · SPD {c.speed}</div>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={startRun} disabled={picked.length < 2}
+          style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
+          {picked.length < 2 ? 'PICK AT LEAST 2' : `START RUN — ${picked.length} creatures →`}
+        </button>
+      </div>
+    );
+  }
+
+  // ── In a run: progress bar + the fight (+ result banner). ──
+  const wave = WAVES[waveIdx];
+  const banner = (() => {
+    if (runPhase === 'cleared') return (
+      <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 16, marginBottom: 12, textAlign: 'center' }}>
+        <div style={{ fontSize: T.sub, fontWeight: 900, color: WIN }}>Wave {waveIdx + 1} cleared!</div>
+        <div style={{ fontSize: T.small, color: DIM, margin: '4px 0 12px' }}>Your squad patches up (+{Math.round(PATCHUP * 100)}% HP). Next: <b style={{ color: '#ddd' }}>{WAVES[waveIdx + 1].name}</b></div>
+        <button onClick={continueRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEXT WAVE →</button>
+      </div>
+    );
+    if (runPhase === 'won') return (
+      <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
+        <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RUN CLEARED</div>
+        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>You survived all 3 waves.</div>
+        <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
+      </div>
+    );
+    if (runPhase === 'lost') return (
+      <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
+        <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
+        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Wiped on {wave.name} (wave {waveIdx + 1}).</div>
+        <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
+      </div>
+    );
+    return null;
+  })();
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+        {WAVES.map((w, i) => (
+          <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < waveIdx || runPhase === 'won' ? WIN : i === waveIdx ? ACCENT : '#26263a' }} />
+        ))}
+      </div>
+      <div style={{ fontSize: T.small, color: DIM, marginBottom: 12 }}>
+        <b style={{ color: '#ddd' }}>Wave {waveIdx + 1}/3 · {wave.name}</b> — {wave.blurb}
+      </div>
+      <FightView fight={fight} narrow={narrow} banner={banner} />
+    </div>
+  );
+}
+
+// ── SANDBOX — fixed matchups; PLAY one or WATCH the golden replay. ──
+function Sandbox({ narrow }) {
+  const fight = useFight();
+  const [matchup, setMatchup] = useState('mirror');
   const cfg = MATCHUPS[matchup];
+  const [mode, setMode] = useState(null);
+
+  function start(which) { setMode(which); const { a, b, seed } = MATCHUPS[matchup]; fight.begin(a(), b(), seed, which); }
 
   const modeBtn = (which, glyph, title, sub) => (
-    <button onClick={() => start(which)} style={{
-      flex: 1, background: mode === which ? ACCENT : PANEL, color: mode === which ? '#1a1408' : '#eee',
-      border: `2px solid ${ACCENT}`, borderRadius: 12, padding: narrow ? '14px 10px' : '16px 14px',
-      cursor: 'pointer', textAlign: 'center',
-    }}>
-      <div style={{ fontSize: T.sub, fontWeight: 800, letterSpacing: 0.5 }}>{glyph} {title}</div>
+    <button onClick={() => start(which)} style={{ flex: 1, background: mode === which ? ACCENT : PANEL, color: mode === which ? '#1a1408' : '#eee', border: `2px solid ${ACCENT}`, borderRadius: 12, padding: narrow ? '14px 10px' : '16px 14px', cursor: 'pointer', textAlign: 'center' }}>
+      <div style={{ fontSize: T.sub, fontWeight: 800 }}>{glyph} {title}</div>
       <div style={{ fontSize: T.small, marginTop: 3, opacity: 0.85, fontWeight: 600 }}>{sub}</div>
     </button>
+  );
+
+  const banner = fight.phase === 'done' && (
+    <div style={{ background: PANEL, border: `2px solid ${WIN}`, borderRadius: 12, padding: 14, marginBottom: 12, textAlign: 'center' }}>
+      <div style={{ fontSize: T.sub, fontWeight: 800, color: WIN }}>Fight over</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>PICK A FIGHT</div>
+      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+        {Object.entries(MATCHUPS).map(([m, c]) => {
+          const on = matchup === m;
+          return (
+            <button key={m} onClick={() => setMatchup(m)} style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 12, padding: '13px 14px', background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
+                <span style={{ fontSize: T.sub, color: c.accent }}>{c.glyph}</span>
+                <span style={{ fontSize: T.label, fontWeight: 800, color: on ? '#eaf2ff' : '#ddd' }}>{c.label}</span>
+                {on && <span style={{ marginLeft: 'auto', fontSize: T.micro, color: SEL, fontWeight: 800, letterSpacing: 1 }}>● SET</span>}
+              </div>
+              <div style={{ fontSize: T.small, color: on ? '#b9c6d6' : '#8f8f9f', lineHeight: 1.45 }}>{c.desc}</div>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+        {modeBtn('play', '▶', 'PLAY', 'you drive side A vs the AI')}
+        {modeBtn('watch', '⏵', 'WATCH', 'AI vs AI — replays the golden')}
+      </div>
+      {!fight.snap
+        ? <div style={{ color: DIM, fontSize: T.body, textAlign: 'center', padding: '32px 16px', background: PANEL, border: `1px dashed ${LINE}`, borderRadius: 12 }}>
+            <div style={{ fontSize: T.sub, color: '#bbb', fontWeight: 700, marginBottom: 6 }}>{cfg.glyph} {cfg.label}</div>
+            <div style={{ lineHeight: 1.5, maxWidth: 460, margin: '0 auto' }}>{cfg.desc}</div>
+            <div style={{ marginTop: 14, color: ACCENT, fontWeight: 700 }}>Press PLAY or WATCH to start.</div>
+          </div>
+        : <FightView fight={fight} narrow={narrow} banner={banner} />}
+    </div>
+  );
+}
+
+export function SeamLab({ onClose }) {
+  const vw = useViewport();
+  const narrow = vw < 760;
+  const [tab, setTab] = useState('run'); // 'run' | 'sandbox'
+
+  const tabBtn = (key, label) => (
+    <button onClick={() => setTab(key)} style={{ background: tab === key ? '#16202e' : PANEL, color: tab === key ? '#eaf2ff' : '#999', border: `2px solid ${tab === key ? SEL : LINE}`, borderRadius: 9, padding: '8px 16px', cursor: 'pointer', fontSize: T.body, fontWeight: 800 }}>{label}</button>
   );
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(6,6,12,0.98)', zIndex: 9999, overflowY: 'auto', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 920, margin: '0 auto', padding: narrow ? '14px 12px 48px' : '18px 18px 56px' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: T.head, fontWeight: 800, color: ACCENT, letterSpacing: 0.5 }}>⚙ ENGINE SEAM · §26</div>
             <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>Manual turn-by-turn — one engine, two drivers. Additive; resolveBattle untouched.</div>
           </div>
           <button onClick={onClose} style={{ background: PANEL, border: `1px solid ${LINE}`, color: '#ccc', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', fontSize: T.body, fontWeight: 700 }}>✕ Close</button>
         </div>
-
-        {/* Fight picker — fat descriptive cards (like the Lab's creature picker) */}
-        <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>PICK A FIGHT</div>
-        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
-          {Object.entries(MATCHUPS).map(([m, c]) => {
-            const on = matchup === m;
-            return (
-              <button key={m} onClick={() => setMatchup(m)} style={{
-                textAlign: 'left', cursor: 'pointer', borderRadius: 12, padding: '13px 14px',
-                background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`,
-                boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
-                  <span style={{ fontSize: T.sub, color: c.accent }}>{c.glyph}</span>
-                  <span style={{ fontSize: T.label, fontWeight: 800, color: on ? '#eaf2ff' : '#ddd' }}>{c.label}</span>
-                  {on && <span style={{ marginLeft: 'auto', fontSize: T.micro, color: SEL, fontWeight: 800, letterSpacing: 1 }}>● SET</span>}
-                </div>
-                <div style={{ fontSize: T.small, color: on ? '#b9c6d6' : '#8f8f9f', lineHeight: 1.45 }}>{c.desc}</div>
-              </button>
-            );
-          })}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+          {tabBtn('run', '⚔ RUN')}
+          {tabBtn('sandbox', '🔬 Sandbox')}
         </div>
-
-        {/* Mode buttons */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-          {modeBtn('play', '▶', 'PLAY', 'you drive side A vs the AI')}
-          {modeBtn('watch', '⏵', 'WATCH', 'AI vs AI — replays the golden')}
-        </div>
-
-        {!snap && (
-          <div style={{ color: DIM, fontSize: T.body, textAlign: 'center', padding: '36px 16px', background: PANEL, border: `1px dashed ${LINE}`, borderRadius: 12 }}>
-            <div style={{ fontSize: T.sub, color: '#bbb', fontWeight: 700, marginBottom: 6 }}>{cfg.glyph} {cfg.label}</div>
-            <div style={{ lineHeight: 1.5, maxWidth: 460, margin: '0 auto' }}>{cfg.desc}</div>
-            <div style={{ marginTop: 14, color: ACCENT, fontWeight: 700 }}>Press PLAY or WATCH to start.</div>
-          </div>
-        )}
-
-        {snap && (
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
-            {/* Battlefield */}
-            <div>
-              <div style={{ fontSize: T.small, color: '#3ec9a0', fontWeight: 800, letterSpacing: 1, marginBottom: 8 }}>YOUR SIDE (A)</div>
-              {snap.A.map((u) => (
-                <UnitCard key={u.uid} u={u} isActor={active?.uid === u.uid} isTarget={false} onPick={() => {}} />
-              ))}
-              <div style={{ fontSize: T.small, color: '#e07a7a', fontWeight: 800, letterSpacing: 1, margin: '14px 0 8px' }}>ENEMY (B)</div>
-              {snap.B.map((u) => (
-                <UnitCard
-                  key={u.uid}
-                  u={u}
-                  isActor={active?.uid === u.uid}
-                  isTarget={phase === 'choose-target' && u.alive && livingEnemyUids.includes(u.uid)}
-                  onPick={pickTarget}
-                />
-              ))}
-            </div>
-
-            {/* Controls + feed */}
-            <div>
-              {/* Choose-actor prompt */}
-              {phase === 'choose-actor' && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 800, marginBottom: 8 }}>Whose turn first? <span style={{ color: DIM, fontWeight: 600 }}>(you set the order)</span></div>
-                  {snap.A.filter((u) => pool.includes(u.uid)).map((u) => (
-                    <button key={u.uid} onClick={() => resolveRef.current(u.uid)} style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 8, background: PANEL, border: `2px solid ${ACCENT}`, color: '#eee', borderRadius: 10, padding: '13px 14px', cursor: 'pointer', fontSize: T.body, fontWeight: 700 }}>
-                      Act with <b>{u.name}</b> <span style={{ color: CHG, fontWeight: 700 }}>· charge {u.charge}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Choose-skill */}
-              {(phase === 'choose-skill' || phase === 'choose-target') && active && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 800, marginBottom: 8 }}>
-                    {active.name}: pick a skill{phase === 'choose-target' ? ' → now tap a target enemy' : ''}
-                  </div>
-                  {active.skillIds.map((sid) => {
-                    const sk = getSkill(sid);
-                    const usable = legal.includes(sid);
-                    const chosen = pendingSkill === sid;
-                    return (
-                      <button
-                        key={sid}
-                        onClick={usable ? () => pickSkill(sid) : undefined}
-                        disabled={!usable}
-                        style={{
-                          display: 'block', width: '100%', textAlign: 'left', marginBottom: 8,
-                          background: chosen ? '#1a1408' : PANEL,
-                          border: `2px solid ${chosen ? ACCENT : usable ? LINE : '#1d1d28'}`,
-                          color: usable ? '#eee' : '#555', borderRadius: 10, padding: '12px 14px',
-                          cursor: usable ? 'pointer' : 'not-allowed',
-                        }}
-                      >
-                        <div style={{ fontSize: T.label, fontWeight: 800 }}>
-                          {sk.name} <span style={{ fontSize: T.small, color: usable ? KIND_COL[sk.kind] : '#444', fontWeight: 700 }}>· {sk.kind}</span>
-                        </div>
-                        <div style={{ fontSize: T.small, color: usable ? DIM : '#444', lineHeight: 1.45, marginTop: 3 }}>{sk.blurb}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {result && (
-                <div style={{ background: PANEL, border: `2px solid ${result.winner === 'A' ? WIN : result.winner === 'B' ? '#d0021b' : DIM}`, borderRadius: 12, padding: 16, marginBottom: 12, textAlign: 'center' }}>
-                  <div style={{ fontSize: T.huge, fontWeight: 900, color: result.winner === 'A' ? WIN : result.winner === 'B' ? '#d0021b' : DIM }}>{result.winner === 'A' ? 'You win!' : result.winner === 'B' ? 'AI wins' : 'Draw'}</div>
-                  <div style={{ fontSize: T.body, color: DIM, marginTop: 4 }}>{result.rounds} rounds{result.cappedOut ? ' (round cap — most HP)' : ''}</div>
-                </div>
-              )}
-
-              {/* Feed */}
-              <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>BATTLE LOG</div>
-              <div ref={feedBoxRef} style={{ background: '#0a0a12', border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, maxHeight: narrow ? 320 : 460, overflowY: 'auto' }}>
-                {feed.length === 0 && <div style={{ fontSize: T.body, color: '#555' }}>Battle log…</div>}
-                {feed.map((f, i) => (
-                  <div key={i} style={{
-                    fontSize: T.body, padding: '3px 0', lineHeight: 1.5,
-                    color: f.kind === 'round' ? ACCENT : f.kind === 'end' ? WIN : f.kind === 'burn' ? BURN : f.kind === 'regen' ? WIN : f.side === 'A' ? '#9cd' : '#e0a0b8',
-                    fontWeight: f.kind === 'round' || f.kind === 'end' ? 800 : 500,
-                    borderTop: f.kind === 'round' ? `1px solid ${LINE}` : 'none', marginTop: f.kind === 'round' ? 6 : 0, paddingTop: f.kind === 'round' ? 6 : 3,
-                  }}>{f.text}</div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {tab === 'run' ? <RunMode narrow={narrow} /> : <Sandbox narrow={narrow} />}
       </div>
     </div>
   );
