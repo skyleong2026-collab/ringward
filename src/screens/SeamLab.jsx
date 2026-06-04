@@ -143,6 +143,8 @@ const FX_STYLE = `
 @keyframes seam-attack { 0%{transform:translateX(0) scale(1)} 45%{transform:translateX(11px) scale(1.09)} 100%{transform:translateX(0) scale(1)} }
 @keyframes seam-damaged { 0%,100%{filter:none;opacity:1} 30%{filter:drop-shadow(0 0 9px rgba(255,70,45,.95));opacity:.65} }
 @keyframes seam-defeated { 0%{transform:scaleY(1) rotate(0);opacity:1} 100%{transform:scaleY(.22) rotate(7deg);opacity:.3} }
+@keyframes seam-float { 0%{transform:translate(-50%,4px);opacity:0} 18%{opacity:1} 100%{transform:translate(-50%,-38px);opacity:0} }
+@keyframes seam-hitring { 0%{transform:translate(-50%,-50%) scale(.5);opacity:.9} 100%{transform:translate(-50%,-50%) scale(1.7);opacity:0} }
 `;
 
 // A creature sprite (public/sprites/{spriteId}.png) with a battle animation. Falls
@@ -168,48 +170,61 @@ function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, siz
 
 const KIND_COL = { payoff: AMP, wildcard: BURN, builder: DIM };
 
-function UnitCard({ u, isTarget, isActor, anim, onPick }) {
+// A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
+// floating damage/heal numbers (popups) that pop on each hit.
+function StageUnit({ u, anim, isActor, isTarget, onPick, popups, big }) {
   const dead = !u.alive;
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
+  const size = big ? 92 : 78;
   return (
-    <button
+    <div
       onClick={isTarget ? () => onPick(u.uid) : undefined}
-      disabled={!isTarget}
       style={{
-        textAlign: 'left', width: '100%', cursor: isTarget ? 'pointer' : 'default',
-        background: isTarget ? '#10261a' : isActor ? '#1a1408' : PANEL,
-        border: `2px solid ${isTarget ? WIN : isActor ? ACCENT : LINE}`,
-        borderRadius: 11, padding: '10px 12px', opacity: dead ? 0.45 : 1, marginBottom: 9,
-        boxShadow: isTarget ? `0 0 0 1px ${WIN}55` : 'none',
-        display: 'flex', gap: 11, alignItems: 'stretch',
+        position: 'relative', cursor: isTarget ? 'pointer' : 'default', textAlign: 'center',
+        padding: '6px 6px 8px', borderRadius: 12, width: size + 26,
+        border: `2px solid ${isTarget ? WIN : isActor ? ACCENT : 'transparent'}`,
+        background: isTarget ? '#10261a66' : isActor ? '#1a140866' : 'transparent',
+        boxShadow: isTarget ? `0 0 10px ${WIN}55` : 'none', opacity: dead ? 0.55 : 1, transition: 'opacity .3s',
       }}
     >
-      <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={66} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
-          <span style={{ fontSize: T.label, fontWeight: 800, color: '#eee' }}>
-            {u.name}
-            {isActor && <span style={{ color: ACCENT, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>▶ TURN</span>}
-            {isTarget && <span style={{ color: WIN, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>◀ TAP</span>}
-          </span>
-          <span style={{ fontSize: T.body, fontWeight: 700, color: dead ? LOSS : '#cfcfda' }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</span>
-        </div>
-        <Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} />
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 7 }}>
-          <span style={{ fontSize: T.small, color: CHG, fontWeight: 700, minWidth: 60 }}>chg {u.charge}/{u.maxCharge}</span>
-          <div style={{ flex: 1 }}><Bar value={u.charge} max={u.maxCharge} color={CHG} h={6} /></div>
-        </div>
-        {(u.burn > 0 || u.block > 0 || u.regen > 0 || u.amp > 0) && (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
-            {u.burn > 0 && <span style={{ fontSize: T.small, color: BURN, fontWeight: 700 }}>🔥 {u.burn}</span>}
-            {u.block > 0 && <span style={{ fontSize: T.small, color: '#7fd6ff', fontWeight: 700 }}>🛡 {u.block}</span>}
-            {u.regen > 0 && <span style={{ fontSize: T.small, color: WIN, fontWeight: 700 }}>🌿 {u.regen}</span>}
-            {u.amp > 0 && <span style={{ fontSize: T.small, color: AMP, fontWeight: 700 }}>⚡ {u.amp}</span>}
-          </div>
-        )}
+      {/* floating damage/heal numbers */}
+      <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 0, pointerEvents: 'none', zIndex: 6 }}>
+        {popups.map((p) => (
+          <div key={p.id} style={{ position: 'absolute', left: '50%', fontSize: T.label, fontWeight: 900, color: p.color, textShadow: '0 1px 4px #000, 0 0 2px #000', animation: 'seam-float .95s ease-out forwards', whiteSpace: 'nowrap' }}>{p.text}</div>
+        ))}
       </div>
-    </button>
+      <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+        {(anim === 'damaged') && <div style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.8, height: size * 0.8, borderRadius: '50%', border: `3px solid ${BURN}`, animation: 'seam-hitring .45s ease-out forwards', pointerEvents: 'none', zIndex: 4 }} />}
+        <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
+      </div>
+      <div style={{ fontSize: T.small, fontWeight: 800, color: '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {u.name}{isActor && <span style={{ color: ACCENT }}> ▶</span>}{isTarget && <span style={{ color: WIN }}> ◀</span>}
+      </div>
+      <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} /></div>
+      <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aab', marginTop: 2, fontWeight: 700 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
+      <div style={{ display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center', marginTop: 3, flexWrap: 'wrap', minHeight: 15 }}>
+        <span style={{ fontSize: T.micro, color: CHG, fontWeight: 700 }}>chg {u.charge}</span>
+        {u.burn > 0 && <span style={{ fontSize: T.micro, color: BURN, fontWeight: 700 }}>🔥{u.burn}</span>}
+        {u.block > 0 && <span style={{ fontSize: T.micro, color: '#7fd6ff', fontWeight: 700 }}>🛡{u.block}</span>}
+        {u.regen > 0 && <span style={{ fontSize: T.micro, color: WIN, fontWeight: 700 }}>🌿{u.regen}</span>}
+        {u.amp > 0 && <span style={{ fontSize: T.micro, color: AMP, fontWeight: 700 }}>✦{u.amp}</span>}
+      </div>
+    </div>
   );
+}
+
+let POP_ID = 0; // unique id for floating-number popups
+
+// Floating numbers to spawn for one event (damage red, heal green, etc.).
+function popupsForEvent(event) {
+  const out = [];
+  if (event.type === 'turn') {
+    (event.hits || []).forEach((h) => { if (h.dmg > 0 || h.killed) out.push({ uid: h.uid, text: h.killed ? `−${h.dmg} KO` : `−${h.dmg}`, color: h.killed ? '#ff3b30' : '#ff8a6a' }); });
+    (event.heals || []).forEach((h) => { if (h.healed > 0) out.push({ uid: h.uid, text: `+${h.healed}`, color: WIN }); });
+    (event.amps || []).forEach((a) => out.push({ uid: a.uid, text: `✦${a.amp}`, color: AMP }));
+  } else if (event.type === 'burn') out.push({ uid: event.target.uid, text: `−${event.dmg}🔥`, color: BURN });
+  else if (event.type === 'regen') out.push({ uid: event.target.uid, text: `+${event.healed}🌿`, color: WIN });
+  return out;
 }
 
 // ── useFight — one battle's UI state + the human-driver promise machinery. ──
@@ -221,6 +236,7 @@ function useFight() {
   const [active, setActive] = useState(null);
   const [pendingSkill, setPendingSkill] = useState(null);
   const [fx, setFx] = useState({ actor: null, hits: [] }); // who's attacking / getting hit, for sprite anims
+  const [popups, setPopups] = useState([]); // floating damage/heal numbers
 
   const stateRef = useRef(null);
   const actorObjRef = useRef(null);
@@ -236,6 +252,11 @@ function useFight() {
     setFeed(feedRef.current);
     if (event.type === 'turn') setFx({ actor: event.actor.uid, hits: (event.hits || []).filter((h) => h.dmg > 0 || h.killed).map((h) => h.uid) });
     else if (event.type === 'burn') setFx({ actor: null, hits: [event.target.uid] });
+    const adds = popupsForEvent(event).map((a) => ({ ...a, id: ++POP_ID }));
+    if (adds.length) {
+      setPopups((p) => [...p, ...adds].slice(-50));
+      adds.forEach((a) => setTimeout(() => setPopups((p) => p.filter((x) => x.id !== a.id)), 950));
+    }
     if (stateRef.current) setSnap(snapshot(stateRef.current));
   }
   function requestActor(livingPool) {
@@ -269,7 +290,7 @@ function useFight() {
   function pickTarget(uid) { resolveRef.current({ skillId: pendingSkill, targetIds: [uid] }); }
 
   function begin(aDefs, bDefs, seed, mode, onComplete) {
-    feedRef.current = []; setFeed([]); setActive(null); setPendingSkill(null); setPool([]);
+    feedRef.current = []; setFeed([]); setActive(null); setPendingSkill(null); setPool([]); setPopups([]); setFx({ actor: null, hits: [] });
     onDoneRef.current = onComplete || null;
     const state = createBattleState(aDefs, bDefs, seed);
     stateRef.current = state;
@@ -280,30 +301,41 @@ function useFight() {
       : { A: createHumanDriver({ requestActor, requestDecision }), B: createAIDriver() };
     runBattle(state, drivers, emit).then((res) => { setPhase('done'); if (onDoneRef.current) onDoneRef.current(res, state); });
   }
-  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setActive(null); setPendingSkill(null); setFx({ actor: null, hits: [] }); }
+  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setActive(null); setPendingSkill(null); setFx({ actor: null, hits: [] }); setPopups([]); }
 
-  return { snap, feed, phase, pool, active, pendingSkill, fx, feedBoxRef, resolveRef, pickSkill, pickTarget, begin, reset };
+  return { snap, feed, phase, pool, active, pendingSkill, fx, popups, feedBoxRef, resolveRef, pickSkill, pickTarget, begin, reset };
 }
 
 // ── FightView — the shared battlefield + controls + feed for a live battle. ──
 function FightView({ fight, narrow, banner }) {
-  const { snap, feed, phase, pool, active, fx, feedBoxRef, resolveRef, pickSkill, pickTarget } = fight;
+  const { snap, feed, phase, pool, active, fx, popups, feedBoxRef, resolveRef, pickSkill, pickTarget } = fight;
   if (!snap) return null;
   const legal = active?.legal ?? [];
   const enemyUids = active?.enemyUids ?? [];
   const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : (fx.hits || []).includes(u.uid) ? 'damaged' : 'idle';
+  const popsFor = (uid) => popups.filter((p) => p.uid === uid);
+  const side = (units, isEnemy) => (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+      <div style={{ fontSize: T.small, color: isEnemy ? '#e07a7a' : '#3ec9a0', fontWeight: 800, letterSpacing: 1 }}>{isEnemy ? 'ENEMY' : 'YOUR SQUAD'}</div>
+      {units.map((u) => (
+        <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
+          isActor={active?.uid === u.uid}
+          isTarget={isEnemy && phase === 'choose-target' && u.alive && enemyUids.includes(u.uid)}
+          onPick={pickTarget} popups={popsFor(u.uid)} />
+      ))}
+    </div>
+  );
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
-      <div>
-        <div style={{ fontSize: T.small, color: '#3ec9a0', fontWeight: 800, letterSpacing: 1, marginBottom: 8 }}>YOUR SIDE (A)</div>
-        {snap.A.map((u) => <UnitCard key={u.uid} u={u} anim={animOf(u)} isActor={active?.uid === u.uid} isTarget={false} onPick={() => {}} />)}
-        <div style={{ fontSize: T.small, color: '#e07a7a', fontWeight: 800, letterSpacing: 1, margin: '14px 0 8px' }}>ENEMY (B)</div>
-        {snap.B.map((u) => (
-          <UnitCard key={u.uid} u={u} anim={animOf(u)} isActor={active?.uid === u.uid}
-            isTarget={phase === 'choose-target' && u.alive && enemyUids.includes(u.uid)} onPick={pickTarget} />
-        ))}
+    <div>
+      {/* The arena: your squad faces the enemy */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
+        {side(snap.A, false)}
+        <div style={{ alignSelf: 'center', color: DIM, fontWeight: 900, fontSize: T.head, opacity: 0.5 }}>VS</div>
+        {side(snap.B, true)}
       </div>
-      <div>
+      {/* Controls + log below the arena */}
+      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
+        <div>
         {banner}
         {phase === 'choose-actor' && (
           <div style={{ marginBottom: 12 }}>
@@ -334,6 +366,8 @@ function FightView({ fight, narrow, banner }) {
             })}
           </div>
         )}
+        </div>
+        <div>
         <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>BATTLE LOG</div>
         <div ref={feedBoxRef} style={{ background: '#0a0a12', border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, maxHeight: narrow ? 300 : 440, overflowY: 'auto' }}>
           {feed.length === 0 && <div style={{ fontSize: T.body, color: '#555' }}>Battle log…</div>}
@@ -343,6 +377,7 @@ function FightView({ fight, narrow, banner }) {
               fontWeight: f.kind === 'round' || f.kind === 'end' ? 800 : 500,
               borderTop: f.kind === 'round' ? `1px solid ${LINE}` : 'none', marginTop: f.kind === 'round' ? 6 : 0, paddingTop: f.kind === 'round' ? 6 : 3 }}>{f.text}</div>
           ))}
+        </div>
         </div>
       </div>
     </div>
