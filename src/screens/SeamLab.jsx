@@ -147,6 +147,8 @@ const FX_STYLE = `
 @keyframes seam-defeated { 0%{transform:scaleY(1) rotate(0);opacity:1} 100%{transform:scaleY(.22) rotate(7deg);opacity:.3} }
 @keyframes seam-float { 0%{transform:translate(-50%,4px);opacity:0} 18%{opacity:1} 100%{transform:translate(-50%,-38px);opacity:0} }
 @keyframes seam-hitring { 0%{transform:translate(-50%,-50%) scale(.5);opacity:.9} 100%{transform:translate(-50%,-50%) scale(1.7);opacity:0} }
+@keyframes seam-ready { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,0)} 50%{box-shadow:0 0 14px 3px rgba(232,160,64,.7)} }
+@keyframes seam-targetpulse { 0%,100%{box-shadow:0 0 0 0 rgba(126,211,33,0)} 50%{box-shadow:0 0 14px 3px rgba(126,211,33,.75)} }
 `;
 
 // Horizontal focal point (0–1) to crop ONE clear pose out of each wide turnaround
@@ -194,21 +196,26 @@ const KIND_COL = { payoff: AMP, wildcard: BURN, builder: DIM };
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, onPick, popups, big }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big }) {
   const dead = !u.alive;
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
   const size = big ? 92 : 78;
+  const clickable = isTarget || selectable;
+  const ring = isTarget ? WIN : (selectable || isActor) ? ACCENT : 'transparent';
+  const pulse = selectable ? 'seam-ready 1.2s ease-in-out infinite' : isTarget ? 'seam-targetpulse 1.2s ease-in-out infinite' : 'none';
+  const label = isActor ? '▶ ACTING' : selectable ? '▷ TAP TO ACT' : isTarget ? '◀ TAP TO HIT' : null;
   return (
     <div
-      onClick={isTarget ? () => onPick(u.uid) : undefined}
+      onClick={clickable ? () => (isTarget ? onPick(u.uid) : onSelect(u.uid)) : undefined}
       style={{
-        position: 'relative', cursor: isTarget ? 'pointer' : 'default', textAlign: 'center',
+        position: 'relative', cursor: clickable ? 'pointer' : 'default', textAlign: 'center',
         padding: '6px 6px 8px', borderRadius: 12, width: size + 26,
-        border: `2px solid ${isTarget ? WIN : isActor ? ACCENT : 'transparent'}`,
-        background: isTarget ? '#10261a66' : isActor ? '#1a140866' : 'transparent',
-        boxShadow: isTarget ? `0 0 10px ${WIN}55` : 'none', opacity: dead ? 0.55 : 1, transition: 'opacity .3s',
+        border: `2px solid ${ring}`,
+        background: isTarget ? '#10261a66' : (selectable || isActor) ? '#1a140866' : 'transparent',
+        animation: pulse, opacity: dead ? 0.55 : 1, transition: 'opacity .3s',
       }}
     >
+      {label && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: T.micro, fontWeight: 800, letterSpacing: 0.5, color: isTarget ? WIN : ACCENT, background: '#0b0b14', padding: '0 5px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 7 }}>{label}</div>}
       {/* floating damage/heal numbers */}
       <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 0, pointerEvents: 'none', zIndex: 6 }}>
         {popups.map((p) => (
@@ -219,8 +226,8 @@ function StageUnit({ u, anim, isActor, isTarget, onPick, popups, big }) {
         {(anim === 'damaged') && <div style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.8, height: size * 0.8, borderRadius: '50%', border: `3px solid ${BURN}`, animation: 'seam-hitring .45s ease-out forwards', pointerEvents: 'none', zIndex: 4 }} />}
         <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
       </div>
-      <div style={{ fontSize: T.small, fontWeight: 800, color: '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {u.name}{isActor && <span style={{ color: ACCENT }}> ▶</span>}{isTarget && <span style={{ color: WIN }}> ◀</span>}
+      <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {ti.glyph} {u.name}
       </div>
       <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} /></div>
       <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aab', marginTop: 2, fontWeight: 700 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
@@ -342,13 +349,20 @@ function FightView({ fight, narrow, banner }) {
       {units.map((u) => (
         <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
           isActor={active?.uid === u.uid}
+          selectable={!isEnemy && phase === 'choose-actor' && pool.includes(u.uid)}
           isTarget={isEnemy && phase === 'choose-target' && u.alive && enemyUids.includes(u.uid)}
+          onSelect={(uid) => resolveRef.current(uid)}
           onPick={pickTarget} popups={popsFor(u.uid)} />
       ))}
     </div>
   );
+  const prompt = phase === 'choose-actor' ? '👆 Tap a glowing unit to act'
+    : phase === 'choose-target' ? '🎯 Tap the enemy to hit'
+    : phase === 'choose-skill' && active ? `Pick ${active.name}'s move below`
+    : null;
   return (
     <div>
+      {prompt && <div style={{ textAlign: 'center', fontSize: T.body, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>{prompt}</div>}
       {/* The arena: your squad faces the enemy */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
         {side(snap.A, false)}
@@ -359,16 +373,6 @@ function FightView({ fight, narrow, banner }) {
       <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
         <div>
         {banner}
-        {phase === 'choose-actor' && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 800, marginBottom: 8 }}>Whose turn first? <span style={{ color: DIM, fontWeight: 600 }}>(you set the order)</span></div>
-            {snap.A.filter((u) => pool.includes(u.uid)).map((u) => (
-              <button key={u.uid} onClick={() => resolveRef.current(u.uid)} style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 8, background: PANEL, border: `2px solid ${ACCENT}`, color: '#eee', borderRadius: 10, padding: '13px 14px', cursor: 'pointer', fontSize: T.body, fontWeight: 700 }}>
-                Act with <b>{u.name}</b> <span style={{ color: CHG, fontWeight: 700 }}>· charge {u.charge}</span>
-              </button>
-            ))}
-          </div>
-        )}
         {(phase === 'choose-skill' || phase === 'choose-target') && active && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 800, marginBottom: 8 }}>
