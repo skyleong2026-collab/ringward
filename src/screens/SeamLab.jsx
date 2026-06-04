@@ -102,7 +102,11 @@ const MATCHUPS = {
 
 // The run's accumulated upgrade modifiers (no-op defaults). Combat reads these off
 // each unit; they bake in BETWEEN fights, so combat itself stays deterministic.
-const EMPTY_MODS = { dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0 };
+const EMPTY_MODS = {
+  dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0,
+  // move-bend mods (read directly by the matching skill; 0 = move behaves normally)
+  extraHits: 0, executeWindow: 0, overloadBurn: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
+};
 
 // The upgrade pool — pick 1 of 3 between fights; they compound into a build.
 const UPGRADES = [
@@ -113,6 +117,14 @@ const UPGRADES = [
   { id: 'thickhide', icon: '❤️', color: '#ff6b6b', name: 'Thick Hide', desc: '+20% max HP for the whole squad.', apply: (m) => { m.hpMult *= 1.2; } },
   { id: 'wildfire', icon: '🔥', color: BURN, name: 'Wildfire', desc: 'Your Burns land +1 extra stack.', apply: (m) => { m.burnBonus += 1; } },
   { id: 'overhype', icon: '✦', color: AMP, name: 'Overhype', desc: 'Your Amp lands +1 extra stack.', apply: (m) => { m.ampBonus += 1; } },
+  // ── Move-bend upgrades: these CHANGE how a move works, and only appear when you
+  // brought the matching Type (see rollOffer), so you never draft a dead card. ──
+  { id: 'embertrail', icon: '🔥', color: BURN, name: 'Ember Trail', needsType: 'Reactor', desc: 'Overload now ALSO sets the target ablaze (+2 Burn).', apply: (m) => { m.overloadBurn += 2; } },
+  { id: 'twinstrike', icon: '⚔', color: '#ffd166', name: 'Twin Strike', needsType: 'Striker', desc: 'Jab and Flurry each throw +1 extra hit.', apply: (m) => { m.extraHits += 1; } },
+  { id: 'huntersmark', icon: '🗡', color: '#ff7a9c', name: "Hunter's Mark", needsType: 'Assassin', desc: "Execute's kill-zone widens — it triggers below 60% HP, not 45%.", apply: (m) => { m.executeWindow += 0.15; } },
+  { id: 'aegisreflex', icon: '🛡', color: '#7fd6ff', name: 'Aegis Reflex', needsType: 'Bulwark', desc: 'Brace shields your WHOLE team, not just itself.', apply: (m) => { m.braceTeam = 1; } },
+  { id: 'lifebloom', icon: '🌿', color: WIN, name: 'Lifebloom', needsType: 'Mender', desc: 'Mend leaves a regen ward on whoever it heals.', apply: (m) => { m.mendRegen += 1; } },
+  { id: 'powerchord', icon: '✦', color: AMP, name: 'Power Chord', needsType: 'Booster', desc: 'Prime amps your WHOLE team, not just the strongest.', apply: (m) => { m.primeTeam = 1; } },
 ];
 const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
 const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1));
@@ -125,7 +137,12 @@ function playerDef(member, mods) {
   return {
     ...base, temperament: 'Balanced', maxHp, hp: Math.min(member.hp, maxHp),
     charge: Math.min(base.maxCharge ?? 6, mods?.chargeStart ?? 0),
-    mods: { dmgMult: mods?.dmgMult ?? 1, healMult: mods?.healMult ?? 1, blockMult: mods?.blockMult ?? 1, burnBonus: mods?.burnBonus ?? 0, ampBonus: mods?.ampBonus ?? 0 },
+    mods: {
+      dmgMult: mods?.dmgMult ?? 1, healMult: mods?.healMult ?? 1, blockMult: mods?.blockMult ?? 1,
+      burnBonus: mods?.burnBonus ?? 0, ampBonus: mods?.ampBonus ?? 0,
+      extraHits: mods?.extraHits ?? 0, executeWindow: mods?.executeWindow ?? 0, overloadBurn: mods?.overloadBurn ?? 0,
+      braceTeam: mods?.braceTeam ?? 0, mendRegen: mods?.mendRegen ?? 0, primeTeam: mods?.primeTeam ?? 0,
+    },
   };
 }
 
@@ -580,7 +597,9 @@ function RunMode({ narrow }) {
     setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
   }
   function rollOffer() {
-    const pool = [...UPGRADES];
+    // Only offer a move-bend if you actually brought that Type — no dead drafts.
+    const types = new Set(picked.map((id) => COMBAT_CREATURES[id].type));
+    const pool = UPGRADES.filter((u) => !u.needsType || types.has(u.needsType));
     const out = [];
     for (let k = 0; k < 3 && pool.length; k++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
     setOffer(out);

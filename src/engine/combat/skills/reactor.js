@@ -44,6 +44,10 @@ export const REACTOR_SKILLS = {
       if (isBurning(target)) mult *= REACTOR.overload.burningBonus;
       actor.charge = 0;
       const hit = dealDamage(target, actor.atk * mult, actor);
+      // Run-upgrade "Ember Trail": Overload also lights the target. Opt-in — a unit
+      // with no mod adds 0 → applyBurn is skipped → the golden stays byte-identical.
+      const emberBurn = actor.mods?.overloadBurn ?? 0;
+      if (emberBurn > 0) applyBurn(target, emberBurn, actor);
       return { hits: [hit], chargeSpent: spent, amplifiedByBurn: isBurning(target) };
     },
   },

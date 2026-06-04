@@ -16,12 +16,15 @@ export const BULWARK_SKILLS = {
     blurb: 'Dig in: +2 charge, raise a shield on yourself, and chip the target.',
     targetMode: 'enemy',
     canUse: () => true,
-    apply(actor, [target]) {
+    apply(actor, [target], state) {
       const gain = BULWARK.brace.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      const shield = addBlock(actor, BULWARK.brace.blockGain, actor);
+      // "Aegis Reflex" upgrade extends the self-shield to the whole line. Opt-in —
+      // with no mod the recipient list is just [actor], byte-identical to before.
+      const recipients = (actor.mods?.braceTeam && state) ? alliesOf(state, actor) : [actor];
+      const shields = recipients.map((a) => addBlock(a, BULWARK.brace.blockGain, actor));
       const hits = target ? [dealDamage(target, actor.atk * BULWARK.brace.chipMult, actor)] : [];
-      return { hits, chargeGained: gain, shields: [shield] };
+      return { hits, chargeGained: gain, shields };
     },
   },
 

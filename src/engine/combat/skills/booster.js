@@ -27,7 +27,10 @@ export const BOOSTER_SKILLS = {
     apply(actor, [target], state) {
       const gain = BOOSTER.prime.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      const amps = [applyAmp(bestCarry(actor, state), BOOSTER.prime.ampStacks, actor)];
+      // "Power Chord" upgrade spreads the prime across the whole line. Opt-in — with
+      // no mod the recipient list is just [bestCarry], byte-identical to before.
+      const recipients = (actor.mods?.primeTeam && state) ? alliesOf(state, actor) : [bestCarry(actor, state)];
+      const amps = recipients.map((a) => applyAmp(a, BOOSTER.prime.ampStacks, actor));
       const hits = target ? [dealDamage(target, actor.atk * BOOSTER.prime.chipMult, actor)] : [];
       return { hits, amps, chargeGained: gain };
     },

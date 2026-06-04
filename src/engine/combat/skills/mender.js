@@ -25,9 +25,14 @@ export const MENDER_SKILLS = {
     apply(actor, [target], state) {
       const gain = MENDER.mend.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      const heals = [heal(mostWounded(actor, state), MENDER.mend.healNow, actor)];
+      const wounded = mostWounded(actor, state);
+      const heals = [heal(wounded, MENDER.mend.healNow, actor)];
+      // "Lifebloom" upgrade also lays a regen ward on the healed ally. Opt-in — with
+      // no mod the regen list is empty (== absent), so the golden stays byte-identical.
+      const lifebloom = actor.mods?.mendRegen ?? 0;
+      const regens = lifebloom > 0 ? [applyRegen(wounded, lifebloom)] : [];
       const hits = target ? [dealDamage(target, actor.atk * MENDER.mend.chipMult, actor)] : [];
-      return { hits, heals, chargeGained: gain };
+      return { hits, heals, regens, chargeGained: gain };
     },
   },
 

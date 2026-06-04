@@ -20,8 +20,9 @@ export const STRIKER_SKILLS = {
       const gain = STRIKER.jab.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
       if (!target) return { hits: [], chargeGained: gain };
+      const extra = actor.mods?.extraHits ?? 0; // "Twin Strike" upgrade; 0 = unchanged
       const hits = [];
-      for (let i = 0; i < STRIKER.jab.hits; i++) {
+      for (let i = 0; i < STRIKER.jab.hits + extra; i++) {
         hits.push(dealDamage(target, actor.atk * STRIKER.jab.hitMult, actor));
       }
       return { hits, chargeGained: gain };
@@ -40,7 +41,8 @@ export const STRIKER_SKILLS = {
       const spent = actor.charge;
       actor.charge = 0;
       if (!target) return { hits: [], chargeSpent: spent };
-      const count = Math.min(STRIKER.flurry.maxHits, STRIKER.flurry.baseHits + STRIKER.flurry.hitsPerCharge * spent);
+      const extra = actor.mods?.extraHits ?? 0; // "Twin Strike" upgrade; 0 = unchanged
+      const count = Math.min(STRIKER.flurry.maxHits + extra, STRIKER.flurry.baseHits + extra + STRIKER.flurry.hitsPerCharge * spent);
       const hits = [];
       for (let i = 0; i < count; i++) {
         hits.push(dealDamage(target, actor.atk * STRIKER.flurry.hitMult, actor));

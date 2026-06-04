@@ -42,7 +42,9 @@ export const ASSASSIN_SKILLS = {
       actor.charge = 0;
       if (!target) return { hits: [], chargeSpent: spent };
       let mult = ASSASSIN.execute.base + ASSASSIN.execute.perCharge * spent;
-      const executed = isWounded(target, ASSASSIN.execute.executeThreshold);
+      // "Hunter's Mark" widens the kill-zone. Opt-in — adds 0 → threshold unchanged.
+      const thr = ASSASSIN.execute.executeThreshold + (actor.mods?.executeWindow ?? 0);
+      const executed = isWounded(target, thr);
       if (executed) mult *= ASSASSIN.execute.executeBonus;
       const hit = dealDamage(target, actor.atk * mult, actor);
       return { hits: [hit], chargeSpent: spent, executed };
