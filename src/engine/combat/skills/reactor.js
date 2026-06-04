@@ -16,7 +16,7 @@ export const REACTOR_SKILLS = {
     id: 'chargeUp',
     name: 'Charge Up',
     kind: 'builder',
-    blurb: '+2 charge, drip Burn + a chip on the target. Charging lights the fuse.',
+    blurb: 'Build 2 charge and singe the target — a little Burn, a little chip. Fuel for Overload.',
     targetMode: 'enemy', // one enemy
     canUse: () => true,
     apply(actor, [target]) {
@@ -34,7 +34,7 @@ export const REACTOR_SKILLS = {
     id: 'overload',
     name: 'Overload',
     kind: 'payoff',
-    blurb: 'Spend all charge for a big hit. ×2 if the target is Burning.',
+    blurb: 'Dump ALL your charge into one massive hit — doubled if the target is on fire.',
     targetMode: 'enemy',
     canUse: (actor) => actor.charge >= REACTOR.overload.minCharge,
     apply(actor, [target]) {
@@ -53,7 +53,7 @@ export const REACTOR_SKILLS = {
     id: 'backdraft',
     name: 'Backdraft',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to hit the whole enemy line and spread Burn.',
+    blurb: 'Blow off half your charge to hit every enemy at once and spread Burn.',
     targetMode: 'allEnemies',
     canUse: (actor) => actor.charge >= REACTOR.backdraft.minCharge,
     apply(actor, _targets, state) {

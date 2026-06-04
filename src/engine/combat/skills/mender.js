@@ -19,7 +19,7 @@ export const MENDER_SKILLS = {
     id: 'mend',
     name: 'Mend',
     kind: 'builder',
-    blurb: '+2 charge, trickle-heal your most-wounded ally, and chip the target.',
+    blurb: '+2 charge, trickle a heal to your most-hurt ally, and chip the target.',
     targetMode: 'enemy',
     canUse: () => true,
     apply(actor, [target], state) {
@@ -36,7 +36,7 @@ export const MENDER_SKILLS = {
     id: 'bloom',
     name: 'Bloom',
     kind: 'payoff',
-    blurb: 'Spend all charge to heal one ally hard. More charge, more healing.',
+    blurb: 'Spend ALL charge to pour a big heal into one ally. More charge, more healing.',
     targetMode: 'ally',
     canUse: (actor) => actor.charge >= MENDER.bloom.minCharge,
     apply(actor, [target], state) {
@@ -53,7 +53,7 @@ export const MENDER_SKILLS = {
     id: 'ward',
     name: 'Ward',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to put a healing ward (regen) on the whole line.',
+    blurb: 'Vent half your charge to lay a regen ward over the whole team.',
     targetMode: 'allAllies',
     canUse: (actor) => actor.charge >= MENDER.ward.minCharge,
     apply(actor, _targets, state) {

@@ -122,7 +122,7 @@ function feedLine(e) {
 
 function snapshot(state) {
   const map = (u) => ({
-    uid: u.uid, name: u.name, side: u.side,
+    uid: u.uid, name: u.name, side: u.side, spriteId: u.spriteId, type: u.type,
     hp: u.hp, maxHp: u.maxHp, charge: u.charge, maxCharge: u.maxCharge,
     burn: u.statuses.burn || 0, block: u.statuses.block || 0, regen: u.statuses.regen || 0, amp: u.statuses.amp || 0, alive: u.alive,
   });
@@ -137,10 +137,40 @@ function Bar({ value, max, color, h = 10 }) {
   );
 }
 
+// Battle animation keyframes (injected once at the SeamLab root).
+const FX_STYLE = `
+@keyframes seam-idle { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }
+@keyframes seam-attack { 0%{transform:translateX(0) scale(1)} 45%{transform:translateX(11px) scale(1.09)} 100%{transform:translateX(0) scale(1)} }
+@keyframes seam-damaged { 0%,100%{filter:none;opacity:1} 30%{filter:drop-shadow(0 0 9px rgba(255,70,45,.95));opacity:.65} }
+@keyframes seam-defeated { 0%{transform:scaleY(1) rotate(0);opacity:1} 100%{transform:scaleY(.22) rotate(7deg);opacity:.3} }
+`;
+
+// A creature sprite (public/sprites/{spriteId}.png) with a battle animation. Falls
+// back to a colored glyph disc if the PNG is missing.
+function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64 }) {
+  const animCss = {
+    idle: 'seam-idle 1.7s ease-in-out infinite',
+    attack: 'seam-attack .5s ease-out',
+    damaged: 'seam-damaged .45s ease-in-out',
+    defeated: 'seam-defeated .7s ease-out forwards',
+  }[anim] || 'seam-idle 1.7s ease-in-out infinite';
+  return (
+    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 10, overflow: 'hidden', position: 'relative', background: 'linear-gradient(135deg,#1a1a2a,#0c0c16)', border: `1px solid ${color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 42%, ${color}26, transparent 70%)` }} />
+      <span style={{ position: 'absolute', fontSize: size * 0.34, color: `${color}55` }}>{glyph}</span>
+      <div style={{ width: '100%', height: '100%', transform: `scaleX(${facing})`, position: 'relative' }}>
+        <img src={`/sprites/${spriteId}.png`} alt="" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 6, animation: animCss }} />
+      </div>
+    </div>
+  );
+}
+
 const KIND_COL = { payoff: AMP, wildcard: BURN, builder: DIM };
 
-function UnitCard({ u, isTarget, isActor, onPick }) {
+function UnitCard({ u, isTarget, isActor, anim, onPick }) {
   const dead = !u.alive;
+  const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
   return (
     <button
       onClick={isTarget ? () => onPick(u.uid) : undefined}
@@ -149,31 +179,35 @@ function UnitCard({ u, isTarget, isActor, onPick }) {
         textAlign: 'left', width: '100%', cursor: isTarget ? 'pointer' : 'default',
         background: isTarget ? '#10261a' : isActor ? '#1a1408' : PANEL,
         border: `2px solid ${isTarget ? WIN : isActor ? ACCENT : LINE}`,
-        borderRadius: 11, padding: '11px 13px', opacity: dead ? 0.4 : 1, marginBottom: 9,
+        borderRadius: 11, padding: '10px 12px', opacity: dead ? 0.45 : 1, marginBottom: 9,
         boxShadow: isTarget ? `0 0 0 1px ${WIN}55` : 'none',
+        display: 'flex', gap: 11, alignItems: 'stretch',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-        <span style={{ fontSize: T.label, fontWeight: 800, color: '#eee' }}>
-          {u.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 600 }}>{u.uid}</span>
-          {isActor && <span style={{ color: ACCENT, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>▶ TURN</span>}
-          {isTarget && <span style={{ color: WIN, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>◀ TAP</span>}
-        </span>
-        <span style={{ fontSize: T.body, fontWeight: 700, color: dead ? LOSS : '#cfcfda' }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</span>
-      </div>
-      <Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} />
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-        <span style={{ fontSize: T.small, color: CHG, fontWeight: 700, minWidth: 64 }}>chg {u.charge}/{u.maxCharge}</span>
-        <div style={{ flex: 1 }}><Bar value={u.charge} max={u.maxCharge} color={CHG} h={6} /></div>
-      </div>
-      {(u.burn > 0 || u.block > 0 || u.regen > 0 || u.amp > 0) && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 7, flexWrap: 'wrap' }}>
-          {u.burn > 0 && <span style={{ fontSize: T.small, color: BURN, fontWeight: 700 }}>🔥 {u.burn}</span>}
-          {u.block > 0 && <span style={{ fontSize: T.small, color: '#7fd6ff', fontWeight: 700 }}>🛡 {u.block}</span>}
-          {u.regen > 0 && <span style={{ fontSize: T.small, color: WIN, fontWeight: 700 }}>🌿 {u.regen}</span>}
-          {u.amp > 0 && <span style={{ fontSize: T.small, color: AMP, fontWeight: 700 }}>⚡ {u.amp}</span>}
+      <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={66} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+          <span style={{ fontSize: T.label, fontWeight: 800, color: '#eee' }}>
+            {u.name}
+            {isActor && <span style={{ color: ACCENT, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>▶ TURN</span>}
+            {isTarget && <span style={{ color: WIN, fontSize: T.small, marginLeft: 7, fontWeight: 700 }}>◀ TAP</span>}
+          </span>
+          <span style={{ fontSize: T.body, fontWeight: 700, color: dead ? LOSS : '#cfcfda' }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</span>
         </div>
-      )}
+        <Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 7 }}>
+          <span style={{ fontSize: T.small, color: CHG, fontWeight: 700, minWidth: 60 }}>chg {u.charge}/{u.maxCharge}</span>
+          <div style={{ flex: 1 }}><Bar value={u.charge} max={u.maxCharge} color={CHG} h={6} /></div>
+        </div>
+        {(u.burn > 0 || u.block > 0 || u.regen > 0 || u.amp > 0) && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+            {u.burn > 0 && <span style={{ fontSize: T.small, color: BURN, fontWeight: 700 }}>🔥 {u.burn}</span>}
+            {u.block > 0 && <span style={{ fontSize: T.small, color: '#7fd6ff', fontWeight: 700 }}>🛡 {u.block}</span>}
+            {u.regen > 0 && <span style={{ fontSize: T.small, color: WIN, fontWeight: 700 }}>🌿 {u.regen}</span>}
+            {u.amp > 0 && <span style={{ fontSize: T.small, color: AMP, fontWeight: 700 }}>⚡ {u.amp}</span>}
+          </div>
+        )}
+      </div>
     </button>
   );
 }
@@ -186,6 +220,7 @@ function useFight() {
   const [pool, setPool] = useState([]);
   const [active, setActive] = useState(null);
   const [pendingSkill, setPendingSkill] = useState(null);
+  const [fx, setFx] = useState({ actor: null, hits: [] }); // who's attacking / getting hit, for sprite anims
 
   const stateRef = useRef(null);
   const actorObjRef = useRef(null);
@@ -199,6 +234,8 @@ function useFight() {
   function emit(event) {
     feedRef.current = [...feedRef.current, feedLine(event)];
     setFeed(feedRef.current);
+    if (event.type === 'turn') setFx({ actor: event.actor.uid, hits: (event.hits || []).filter((h) => h.dmg > 0 || h.killed).map((h) => h.uid) });
+    else if (event.type === 'burn') setFx({ actor: null, hits: [event.target.uid] });
     if (stateRef.current) setSnap(snapshot(stateRef.current));
   }
   function requestActor(livingPool) {
@@ -243,25 +280,26 @@ function useFight() {
       : { A: createHumanDriver({ requestActor, requestDecision }), B: createAIDriver() };
     runBattle(state, drivers, emit).then((res) => { setPhase('done'); if (onDoneRef.current) onDoneRef.current(res, state); });
   }
-  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setActive(null); setPendingSkill(null); }
+  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setActive(null); setPendingSkill(null); setFx({ actor: null, hits: [] }); }
 
-  return { snap, feed, phase, pool, active, pendingSkill, feedBoxRef, resolveRef, pickSkill, pickTarget, begin, reset };
+  return { snap, feed, phase, pool, active, pendingSkill, fx, feedBoxRef, resolveRef, pickSkill, pickTarget, begin, reset };
 }
 
 // ── FightView — the shared battlefield + controls + feed for a live battle. ──
 function FightView({ fight, narrow, banner }) {
-  const { snap, feed, phase, pool, active, feedBoxRef, resolveRef, pickSkill, pickTarget } = fight;
+  const { snap, feed, phase, pool, active, fx, feedBoxRef, resolveRef, pickSkill, pickTarget } = fight;
   if (!snap) return null;
   const legal = active?.legal ?? [];
   const enemyUids = active?.enemyUids ?? [];
+  const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : (fx.hits || []).includes(u.uid) ? 'damaged' : 'idle';
   return (
     <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
       <div>
         <div style={{ fontSize: T.small, color: '#3ec9a0', fontWeight: 800, letterSpacing: 1, marginBottom: 8 }}>YOUR SIDE (A)</div>
-        {snap.A.map((u) => <UnitCard key={u.uid} u={u} isActor={active?.uid === u.uid} isTarget={false} onPick={() => {}} />)}
+        {snap.A.map((u) => <UnitCard key={u.uid} u={u} anim={animOf(u)} isActor={active?.uid === u.uid} isTarget={false} onPick={() => {}} />)}
         <div style={{ fontSize: T.small, color: '#e07a7a', fontWeight: 800, letterSpacing: 1, margin: '14px 0 8px' }}>ENEMY (B)</div>
         {snap.B.map((u) => (
-          <UnitCard key={u.uid} u={u} isActor={active?.uid === u.uid}
+          <UnitCard key={u.uid} u={u} anim={animOf(u)} isActor={active?.uid === u.uid}
             isTarget={phase === 'choose-target' && u.alive && enemyUids.includes(u.uid)} onPick={pickTarget} />
         ))}
       </div>
@@ -355,8 +393,13 @@ function RunMode({ narrow }) {
   if (runPhase === 'pick') {
     return (
       <div>
-        <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 2 }}>Pick <b style={{ color: ACCENT }}>2–3</b> creatures for your run.</div>
-        <div style={{ fontSize: T.small, color: DIM, marginBottom: 14 }}>You'll fight 3 waves in a row. Wounds carry over — you patch up a little between fights.</div>
+        <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
+          <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
+            Three packs guard the edge of the ring — Scouts, then the Pack, then the Warden. Clear all three in one push and the approach is yours. Your squad's wounds carry between fights; you only patch up a little. Choose who goes in.
+          </div>
+        </div>
+        <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span></div>
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 18 }}>
           {COMBAT_ROSTER.map((c) => {
             const ti = TYPE_INFO[c.type];
@@ -364,16 +407,20 @@ function RunMode({ narrow }) {
             const full = !on && picked.length >= 3;
             return (
               <button key={c.id} onClick={() => toggle(c.id)} disabled={full}
-                style={{ textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '12px 13px',
-                  background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.45 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <span style={{ fontSize: T.sub, color: ti.accent }}>{ti.glyph}</span>
-                  <span style={{ fontSize: T.label, fontWeight: 800, color: on ? '#eaf2ff' : '#ddd' }}>{c.name}</span>
-                  {on && <span style={{ marginLeft: 'auto', fontSize: T.micro, color: SEL, fontWeight: 800 }}>✓</span>}
+                style={{ textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
+                  background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={52} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: T.label, fontWeight: 800, color: on ? '#eaf2ff' : '#ddd' }}>{c.name}</span>
+                      {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
+                    </div>
+                    <div style={{ fontSize: T.micro, color: ti.accent, fontWeight: 700, letterSpacing: 1, margin: '2px 0 4px' }}>{ti.glyph} {c.type.toUpperCase()}</div>
+                    <div style={{ fontSize: T.micro, color: DIM }}>HP {c.hp} · ATK {c.atk} · SPD {c.speed}</div>
+                  </div>
                 </div>
-                <div style={{ fontSize: T.micro, color: ti.accent, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{c.type.toUpperCase()}</div>
-                <div style={{ fontSize: T.small, color: on ? '#b9c6d6' : '#8f8f9f', lineHeight: 1.4 }}>{ti.role}</div>
-                <div style={{ fontSize: T.micro, color: DIM, marginTop: 5 }}>HP {c.hp} · ATK {c.atk} · SPD {c.speed}</div>
+                <div style={{ fontSize: T.small, color: on ? '#b9c6d6' : '#8f8f9f', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
               </button>
             );
           })}
@@ -494,6 +541,7 @@ export function SeamLab({ onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(6,6,12,0.98)', zIndex: 9999, overflowY: 'auto', fontFamily: 'system-ui, sans-serif' }}>
+      <style>{FX_STYLE}</style>
       <div style={{ maxWidth: 920, margin: '0 auto', padding: narrow ? '14px 12px 48px' : '18px 18px 56px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>

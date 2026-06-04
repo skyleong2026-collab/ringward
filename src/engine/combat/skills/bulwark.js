@@ -13,7 +13,7 @@ export const BULWARK_SKILLS = {
     id: 'brace',
     name: 'Brace',
     kind: 'builder',
-    blurb: '+2 charge, raise your own block, and chip the target. Dig in.',
+    blurb: 'Dig in: +2 charge, raise a shield on yourself, and chip the target.',
     targetMode: 'enemy',
     canUse: () => true,
     apply(actor, [target]) {
@@ -30,7 +30,7 @@ export const BULWARK_SKILLS = {
     id: 'aegis',
     name: 'Aegis',
     kind: 'payoff',
-    blurb: 'Spend all charge to shield your whole line. More charge, more block.',
+    blurb: 'Spend ALL charge to throw a shield over your whole team. More charge, more block.',
     targetMode: 'allAllies',
     canUse: (actor) => actor.charge >= BULWARK.aegis.minCharge,
     apply(actor, _targets, state) {
@@ -47,7 +47,7 @@ export const BULWARK_SKILLS = {
     id: 'bodyguard',
     name: 'Bodyguard',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to drop heavy block on one ally — cover the wounded.',
+    blurb: 'Vent half your charge to slam a heavy shield onto one ally — cover the wounded.',
     targetMode: 'ally',
     canUse: (actor) => actor.charge >= BULWARK.bodyguard.minCharge,
     apply(actor, [target]) {
