@@ -67,7 +67,7 @@ function useViewport() {
   return w;
 }
 
-// ── Three escalating enemy waves (fresh each fight). ──
+// ── The climb: three escalating packs, then the boss (fresh each fight). ──
 const WAVES = [
   { name: 'Scouts', blurb: 'A pair of jumpy Reactors. Warm up.', seed: 101,
     enemies: () => [makeUnitDef('glowtail', 'Balanced'), makeUnitDef('fizzpop', 'Balanced')] },
@@ -75,6 +75,14 @@ const WAVES = [
     enemies: () => [makeUnitDef('swiftpaw', 'Balanced'), makeUnitDef('mossback', 'Balanced')] },
   { name: 'The Warden', blurb: 'A Bulwark wall guarding an Assassin. Break through.', seed: 303,
     enemies: () => [makeUnitDef('stoneward', 'Greedy'), makeUnitDef('veilclaw', 'Greedy')] },
+  // The peak: a single huge Reactor that HOARDS charge for one ruinous Overload,
+  // kept standing by a tender. Race it down or cut the healer. AOE + your bends shine.
+  { name: 'The Hollow King', boss: true, seed: 404,
+    blurb: 'The thing the others were guarding. It hoards fire for one ruinous blast — and a tender keeps it standing. Burn it down, or cut the healer first.',
+    enemies: () => [
+      { ...makeUnitDef('cinderpaw', 'Greedy'), name: 'The Hollow King', hp: 720, maxHp: 720, atk: 40, speed: 7 },
+      { ...makeUnitDef('mossback', 'Balanced'), name: 'Ashen Tender', hp: 240, maxHp: 240 },
+    ] },
 ];
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
@@ -279,10 +287,10 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss }) {
   const dead = !u.alive;
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
-  const size = big ? 92 : 78;
+  const size = boss ? (big ? 122 : 108) : big ? 92 : 78; // the boss looms larger
   const burstEf = burst ? EFFECT[burst] : null; // colored impact on whoever was affected
   const castEf = cast ? EFFECT[cast] : null; // the actor briefly glows the move's color
   const clickable = isTarget || selectable;
@@ -297,11 +305,13 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       style={{
         position: 'relative', cursor: clickable ? 'pointer' : 'default', textAlign: 'center',
         padding: '6px 6px 8px', borderRadius: 12, width: size + 26,
-        border: `2px solid ${ring}`,
-        background: isTarget ? '#10261a66' : isActor ? '#1a140866' : selectable ? '#15120a55' : 'transparent',
+        border: `2px solid ${boss && !isTarget ? LOSS : ring}`,
+        background: isTarget ? '#10261a66' : boss ? '#1a0d0f66' : isActor ? '#1a140866' : selectable ? '#15120a55' : 'transparent',
+        boxShadow: boss ? `0 0 20px ${LOSS}55` : 'none',
         animation: pulse, opacity: dead ? 0.55 : 1, transition: 'opacity .3s',
       }}
     >
+      {boss && <div style={{ position: 'absolute', top: -9, right: 6, fontSize: T.micro, fontWeight: 900, letterSpacing: 0.5, color: '#ffb38a', background: '#2a0d0d', border: `1px solid ${LOSS}`, padding: '0 5px', borderRadius: 4, zIndex: 8 }}>💀 BOSS</div>}
       {label && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: T.micro, fontWeight: 800, letterSpacing: 0.5, color: isTarget ? WIN : ACCENT, background: '#0b0b14', padding: '0 5px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 7 }}>{label}</div>}
       {/* floating damage/heal numbers */}
       <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 0, pointerEvents: 'none', zIndex: 6 }}>
@@ -532,7 +542,7 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill }) {
 }
 
 // ── FightView — the shared battlefield + center moves + feed for a live battle. ──
-function FightView({ fight, narrow, banner }) {
+function FightView({ fight, narrow, banner, bossUid }) {
   const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill } = fight;
   if (!snap) return null;
   const selecting = phase === 'select' || phase === 'select-target';
@@ -549,6 +559,7 @@ function FightView({ fight, narrow, banner }) {
           selectable={!isEnemy && selecting && pool.includes(u.uid) && previewUid !== u.uid}
           isTarget={isEnemy && phase === 'select-target' && u.alive && enemyUids.includes(u.uid)}
           burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n}
+          boss={u.uid === bossUid}
           onSelect={previewUnit}
           onPick={chooseTarget} popups={popsFor(u.uid)} />
       ))}
@@ -601,7 +612,29 @@ function BuildStrip({ taken }) {
   );
 }
 
-// ── RUN MODE — squad pick → (upgrade → wave) ×3, HP carries, win or wipe. ──
+// End-of-run recap: the build you drafted + what it actually did this run.
+function RunRecap({ taken, stats, squad }) {
+  const survivors = squad.filter((m) => m.hp > 0).length;
+  const cell = (label, value) => (
+    <div style={{ flex: 1, minWidth: 84, background: '#0c0c14', border: `1px solid ${LINE}`, borderRadius: 8, padding: '8px 6px' }}>
+      <div style={{ fontSize: T.head, fontWeight: 900, color: '#eee' }}>{value}</div>
+      <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700, letterSpacing: 0.5 }}>{label}</div>
+    </div>
+  );
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <BuildStrip taken={taken} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {cell('WAVES', `${stats.waves}/${WAVES.length}`)}
+        {cell('DAMAGE DEALT', stats.dmg.toLocaleString())}
+        {cell('BIGGEST HIT', stats.biggest)}
+        {cell('SURVIVORS', `${survivors}/${squad.length}`)}
+      </div>
+    </div>
+  );
+}
+
+// ── RUN MODE — squad pick → (upgrade → wave) ×3 → boss, HP carries, win or wipe. ──
 function RunMode({ narrow }) {
   const fight = useFight();
   const [runPhase, setRunPhase] = useState('pick'); // pick | upgrade | fighting | won | lost
@@ -611,6 +644,7 @@ function RunMode({ narrow }) {
   const [runMods, setRunMods] = useState({ ...EMPTY_MODS });
   const [taken, setTaken] = useState([]); // upgrades chosen this run (for the build strip)
   const [offer, setOffer] = useState([]); // 3 upgrade ids on the table now
+  const [stats, setStats] = useState({ dmg: 0, biggest: 0, waves: 0 }); // run recap tally
 
   function toggle(id) {
     setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
@@ -631,7 +665,12 @@ function RunMode({ narrow }) {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
       const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
-      if (!youLive || res.winner === 'B') { setSquad(next); setRunPhase('lost'); return; }
+      const won = youLive && res.winner !== 'B';
+      // Tally what your squad did this fight, for the end-of-run recap.
+      let fightDmg = 0, fightBig = 0;
+      finalState.log.forEach((e) => { if (e.type === 'turn' && e.actor.side === 'A') (e.hits || []).forEach((h) => { fightDmg += h.dmg || 0; if ((h.dmg || 0) > fightBig) fightBig = h.dmg; }); });
+      setStats((s) => ({ dmg: s.dmg + fightDmg, biggest: Math.max(s.biggest, fightBig), waves: s.waves + (won ? 1 : 0) }));
+      if (!won) { setSquad(next); setRunPhase('lost'); return; }
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * PATCHUP)) } : m);
       setSquad(patched);
@@ -644,7 +683,7 @@ function RunMode({ narrow }) {
 
   function startRun() {
     const sq = picked.map((id) => ({ id, hp: COMBAT_CREATURES[id].hp }));
-    setSquad(sq); setRunMods({ ...EMPTY_MODS }); setTaken([]); setWaveIdx(0);
+    setSquad(sq); setRunMods({ ...EMPTY_MODS }); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 });
     rollOffer(); setRunPhase('upgrade');
   }
   function applyUpgrade(up) {
@@ -656,7 +695,7 @@ function RunMode({ narrow }) {
     setRunMods(m); setSquad(sq); setTaken((t) => [...t, up]);
     startWave(waveIdx, sq, m);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); }
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
@@ -665,7 +704,7 @@ function RunMode({ narrow }) {
         <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
           <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
           <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
-            Three packs guard the edge of the ring — Scouts, then the Pack, then the Warden. Clear all three in one push and the approach is yours. Your squad's wounds carry between fights; you only patch up a little. Choose who goes in.
+            Three packs guard the edge of the ring — Scouts, the Pack, the Warden — and behind them waits the <b style={{ color: '#ffb38a' }}>Hollow King</b>. Clear all four in one push and the approach is yours. Wounds carry between fights; you only patch up a little. Choose who goes in.
           </div>
         </div>
         <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span></div>
@@ -710,7 +749,8 @@ function RunMode({ narrow }) {
         <BuildStrip taken={taken} />
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: T.head, fontWeight: 900, color: ACCENT }}>{waveIdx === 0 ? '⛰ Gear up for the approach' : `✓ Wave ${waveIdx} cleared — patched up (+${Math.round(PATCHUP * 100)}% HP)`}</div>
-          <div style={{ fontSize: T.body, color: '#cfcfda', marginTop: 5 }}>Pick <b style={{ color: ACCENT }}>one upgrade</b> for your squad — then face <b style={{ color: '#ddd' }}>{nextWave.name}</b>.</div>
+          {nextWave.boss && <div style={{ fontSize: T.sub, fontWeight: 900, color: LOSS, marginTop: 6 }}>💀 FINAL STAND — choose your last upgrade well.</div>}
+          <div style={{ fontSize: T.body, color: '#cfcfda', marginTop: 5 }}>Pick <b style={{ color: ACCENT }}>one upgrade</b> for your squad — then face <b style={{ color: nextWave.boss ? '#ffb38a' : '#ddd' }}>{nextWave.name}</b>.</div>
           <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>{nextWave.blurb}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
@@ -734,15 +774,17 @@ function RunMode({ narrow }) {
   const banner = (() => {
     if (runPhase === 'won') return (
       <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
-        <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RUN CLEARED</div>
-        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>You survived all 3 waves.</div>
+        <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
+        <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You broke <b>The Hollow King</b> and cleared the approach.</div>
+        <RunRecap taken={taken} stats={stats} squad={squad} />
         <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
       </div>
     );
     if (runPhase === 'lost') return (
       <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
-        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Wiped on {wave.name} (wave {waveIdx + 1}).</div>
+        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVES.length}.</div>
+        <RunRecap taken={taken} stats={stats} squad={squad} />
         <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
       </div>
     );
@@ -753,14 +795,16 @@ function RunMode({ narrow }) {
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
         {WAVES.map((w, i) => (
-          <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < waveIdx || runPhase === 'won' ? WIN : i === waveIdx ? ACCENT : '#26263a' }} />
+          <div key={i} title={w.name} style={{ flex: w.boss ? 1.4 : 1, height: 8, borderRadius: 3,
+            background: i < waveIdx || runPhase === 'won' ? WIN : i === waveIdx ? (w.boss ? LOSS : ACCENT) : '#26263a',
+            border: w.boss ? `1px solid ${LOSS}99` : 'none' }} />
         ))}
       </div>
       <div style={{ fontSize: T.small, color: DIM, marginBottom: 10 }}>
-        <b style={{ color: '#ddd' }}>Wave {waveIdx + 1}/3 · {wave.name}</b> — {wave.blurb}
+        <b style={{ color: wave.boss ? '#ffb38a' : '#ddd' }}>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVES.length} · {wave.name}</b> — {wave.blurb}
       </div>
       <BuildStrip taken={taken} />
-      <FightView fight={fight} narrow={narrow} banner={banner} />
+      <FightView fight={fight} narrow={narrow} banner={banner} bossUid={wave.boss ? 'B0' : null} />
     </div>
   );
 }
