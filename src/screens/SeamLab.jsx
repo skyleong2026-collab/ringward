@@ -194,6 +194,17 @@ function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, siz
 
 const KIND_COL = { payoff: AMP, wildcard: BURN, builder: DIM };
 
+// Charge as fill-up dots under a unit — no number to read.
+function ChargeDots({ value, max }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+      {Array.from({ length: max }).map((_, i) => (
+        <span key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: i < value ? CHG : '#2c2c3a', boxShadow: i < value ? `0 0 4px ${CHG}` : 'none', transition: 'background .2s' }} />
+      ))}
+    </span>
+  );
+}
+
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
 function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big }) {
@@ -231,8 +242,8 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       </div>
       <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} /></div>
       <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aab', marginTop: 2, fontWeight: 700 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
+      <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center' }}><ChargeDots value={u.charge} max={u.maxCharge} /></div>
       <div style={{ display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center', marginTop: 3, flexWrap: 'wrap', minHeight: 15 }}>
-        <span style={{ fontSize: T.micro, color: CHG, fontWeight: 700 }}>chg {u.charge}</span>
         {u.burn > 0 && <span style={{ fontSize: T.micro, color: BURN, fontWeight: 700 }}>🔥{u.burn}</span>}
         {u.block > 0 && <span style={{ fontSize: T.micro, color: '#7fd6ff', fontWeight: 700 }}>🛡{u.block}</span>}
         {u.regen > 0 && <span style={{ fontSize: T.micro, color: WIN, fontWeight: 700 }}>🌿{u.regen}</span>}
@@ -257,19 +268,26 @@ function popupsForEvent(event) {
 }
 
 // ── useFight — one battle's UI state + the human-driver promise machinery. ──
+// The engine asks for an actor, then a decision. We MERGE both into one free
+// "select" phase: tap any ready unit to PREVIEW its moves (switch as often as you
+// like, read every kit) — nothing commits until you pick a move (and target). Only
+// then do we resolve the actor and stash the decision for the engine's decide().
 function useFight() {
   const [snap, setSnap] = useState(null);
   const [feed, setFeed] = useState([]);
-  const [phase, setPhase] = useState('idle'); // idle | choose-actor | choose-skill | choose-target | done
-  const [pool, setPool] = useState([]);
-  const [active, setActive] = useState(null);
-  const [pendingSkill, setPendingSkill] = useState(null);
-  const [fx, setFx] = useState({ actor: null, hits: [] }); // who's attacking / getting hit, for sprite anims
-  const [popups, setPopups] = useState([]); // floating damage/heal numbers
+  const [phase, setPhase] = useState('idle'); // idle | select | select-target | done
+  const [pool, setPool] = useState([]); // uids that can still act this block
+  const [previewUid, setPreviewUid] = useState(null); // unit whose moves are shown
+  const [pendingSkill, setPendingSkill] = useState(null); // skill awaiting an enemy target
+  const [fx, setFx] = useState({ actor: null, hits: [] });
+  const [popups, setPopups] = useState([]);
 
   const stateRef = useRef(null);
-  const actorObjRef = useRef(null);
-  const resolveRef = useRef(null);
+  const poolRef = useRef([]); // current block's unit objects
+  const battleRef = useRef(null); // engine state (for legalSkills/enemiesOf)
+  const previewRef = useRef(null); // current preview uid (for handlers)
+  const commitRef = useRef(null); // resolve(actor) for the active requestActor
+  const decisionRef = useRef(null); // stashed decision for the next decide()
   const feedRef = useRef([]);
   const feedBoxRef = useRef(null);
   const onDoneRef = useRef(null);
@@ -288,38 +306,48 @@ function useFight() {
     }
     if (stateRef.current) setSnap(snapshot(stateRef.current));
   }
-  function requestActor(livingPool) {
+  function requestActor(livingPool, state) {
     return new Promise((resolve) => {
-      if (livingPool.length === 1) { resolve(livingPool[0]); return; }
+      poolRef.current = livingPool; battleRef.current = state;
+      const first = livingPool[0].uid;
+      previewRef.current = first; setPreviewUid(first);
       setPool(livingPool.map((u) => u.uid));
-      setPhase('choose-actor');
-      resolveRef.current = (uid) => { setPhase('idle'); resolve(livingPool.find((u) => u.uid === uid)); };
+      setPendingSkill(null);
+      setPhase('select');
+      commitRef.current = (unit, decision) => {
+        decisionRef.current = decision;
+        setPhase('idle'); setPool([]); setPreviewUid(null); previewRef.current = null; setPendingSkill(null);
+        resolve(unit);
+      };
     });
   }
-  function requestDecision(actor, state) {
-    return new Promise((resolve) => {
-      actorObjRef.current = actor;
-      setActive({ uid: actor.uid, name: actor.name, skillIds: actor.skillIds.slice(), legal: legalSkills(actor, state).map((s) => s.id), enemyUids: enemiesOf(state, actor).map((u) => u.uid) });
-      setPhase('choose-skill');
-      resolveRef.current = (decision) => { setPhase('idle'); setActive(null); setPendingSkill(null); resolve(decision); };
-    });
+  function requestDecision() { return Promise.resolve(decisionRef.current); }
+
+  function previewUnit(uid) { previewRef.current = uid; setPreviewUid(uid); setPendingSkill(null); setPhase('select'); }
+  function chooseSkill(skillId) {
+    const unit = poolRef.current.find((u) => u.uid === previewRef.current);
+    if (getSkill(skillId).targetMode === 'enemy') { setPendingSkill(skillId); setPhase('select-target'); return; }
+    const targetIds = getSkill(skillId).targetMode === 'allEnemies' ? enemiesOf(battleRef.current, unit).map((u) => u.uid) : [];
+    commitRef.current(unit, { skillId, targetIds });
   }
-  function pickSkill(skillId) {
-    const skill = getSkill(skillId);
-    if (skill.targetMode === 'allEnemies' || skill.targetMode === 'allAllies' || skill.targetMode === 'ally') {
-      // No enemy target to tap — resolve immediately (engine selectors pick allies).
-      const actor = actorObjRef.current;
-      const targetIds = skill.targetMode === 'allEnemies' ? enemiesOf(stateRef.current, actor).map((u) => u.uid) : [];
-      resolveRef.current({ skillId, targetIds });
-      return;
-    }
-    setPendingSkill(skillId);
-    setPhase('choose-target');
+  function chooseTarget(enemyUid) {
+    const unit = poolRef.current.find((u) => u.uid === previewRef.current);
+    commitRef.current(unit, { skillId: pendingSkill, targetIds: [enemyUid] });
   }
-  function pickTarget(uid) { resolveRef.current({ skillId: pendingSkill, targetIds: [uid] }); }
+  // What the center move-panel needs for the previewed unit.
+  function previewMoves() {
+    const unit = poolRef.current.find((u) => u.uid === previewUid);
+    if (!unit || !battleRef.current) return null;
+    return {
+      unit,
+      skillIds: unit.skillIds,
+      legalIds: legalSkills(unit, battleRef.current).map((s) => s.id),
+      enemyUids: enemiesOf(battleRef.current, unit).map((u) => u.uid),
+    };
+  }
 
   function begin(aDefs, bDefs, seed, mode, onComplete) {
-    feedRef.current = []; setFeed([]); setActive(null); setPendingSkill(null); setPool([]); setPopups([]); setFx({ actor: null, hits: [] });
+    feedRef.current = []; setFeed([]); setPool([]); setPreviewUid(null); previewRef.current = null; setPendingSkill(null); setPopups([]); setFx({ actor: null, hits: [] });
     onDoneRef.current = onComplete || null;
     const state = createBattleState(aDefs, bDefs, seed);
     stateRef.current = state;
@@ -330,17 +358,44 @@ function useFight() {
       : { A: createHumanDriver({ requestActor, requestDecision }), B: createAIDriver() };
     runBattle(state, drivers, emit).then((res) => { setPhase('done'); if (onDoneRef.current) onDoneRef.current(res, state); });
   }
-  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setActive(null); setPendingSkill(null); setFx({ actor: null, hits: [] }); setPopups([]); }
+  function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setPool([]); setPreviewUid(null); setPendingSkill(null); setFx({ actor: null, hits: [] }); setPopups([]); }
 
-  return { snap, feed, phase, pool, active, pendingSkill, fx, popups, feedBoxRef, resolveRef, pickSkill, pickTarget, begin, reset };
+  return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, previewMoves, begin, reset };
 }
 
-// ── FightView — the shared battlefield + controls + feed for a live battle. ──
+// The move panel that lives in the center "VS" lane — between your squad and the
+// enemy — for whichever unit you're previewing. Tapping a move commits (or asks for
+// a target). Floating it here keeps your eyes in the arena, not in a panel below.
+function CenterMoves({ moves, pendingSkill, phase, onSkill }) {
+  if (!moves) return <span style={{ color: DIM, fontWeight: 900, fontSize: T.head, opacity: 0.5 }}>VS</span>;
+  const { unit, skillIds, legalIds } = moves;
+  return (
+    <div style={{ width: '100%' }}>
+      <div style={{ fontSize: T.small, color: ACCENT, fontWeight: 800, textAlign: 'center', marginBottom: 6 }}>{unit.name} — pick a move</div>
+      {skillIds.map((sid) => {
+        const sk = getSkill(sid);
+        const usable = legalIds.includes(sid);
+        const chosen = pendingSkill === sid;
+        return (
+          <button key={sid} onClick={usable ? () => onSkill(sid) : undefined} disabled={!usable}
+            style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6, background: chosen ? '#1a1408' : PANEL, border: `2px solid ${chosen ? ACCENT : usable ? LINE : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed' }}>
+            <div style={{ fontSize: T.small, fontWeight: 800 }}>{sk.name} <span style={{ fontSize: T.micro, color: usable ? KIND_COL[sk.kind] : '#444', fontWeight: 700 }}>· {sk.kind}</span></div>
+            <div style={{ fontSize: T.micro, color: usable ? DIM : '#444', lineHeight: 1.35, marginTop: 2 }}>{sk.blurb}</div>
+          </button>
+        );
+      })}
+      {phase === 'select-target' && <div style={{ fontSize: T.micro, color: WIN, textAlign: 'center', fontWeight: 800 }}>now tap an enemy →</div>}
+    </div>
+  );
+}
+
+// ── FightView — the shared battlefield + center moves + feed for a live battle. ──
 function FightView({ fight, narrow, banner }) {
-  const { snap, feed, phase, pool, active, fx, popups, feedBoxRef, resolveRef, pickSkill, pickTarget } = fight;
+  const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill } = fight;
   if (!snap) return null;
-  const legal = active?.legal ?? [];
-  const enemyUids = active?.enemyUids ?? [];
+  const selecting = phase === 'select' || phase === 'select-target';
+  const moves = selecting ? fight.previewMoves() : null;
+  const enemyUids = moves?.enemyUids ?? [];
   const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : (fx.hits || []).includes(u.uid) ? 'damaged' : 'idle';
   const popsFor = (uid) => popups.filter((p) => p.uid === uid);
   const side = (units, isEnemy) => (
@@ -348,62 +403,42 @@ function FightView({ fight, narrow, banner }) {
       <div style={{ fontSize: T.small, color: isEnemy ? '#e07a7a' : '#3ec9a0', fontWeight: 800, letterSpacing: 1 }}>{isEnemy ? 'ENEMY' : 'YOUR SQUAD'}</div>
       {units.map((u) => (
         <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
-          isActor={active?.uid === u.uid}
-          selectable={!isEnemy && phase === 'choose-actor' && pool.includes(u.uid)}
-          isTarget={isEnemy && phase === 'choose-target' && u.alive && enemyUids.includes(u.uid)}
-          onSelect={(uid) => resolveRef.current(uid)}
-          onPick={pickTarget} popups={popsFor(u.uid)} />
+          isActor={!isEnemy && selecting && previewUid === u.uid}
+          selectable={!isEnemy && selecting && pool.includes(u.uid) && previewUid !== u.uid}
+          isTarget={isEnemy && phase === 'select-target' && u.alive && enemyUids.includes(u.uid)}
+          onSelect={previewUnit}
+          onPick={chooseTarget} popups={popsFor(u.uid)} />
       ))}
     </div>
   );
-  const prompt = phase === 'choose-actor' ? '👆 Tap a glowing unit to act'
-    : phase === 'choose-target' ? '🎯 Tap the enemy to hit'
-    : phase === 'choose-skill' && active ? `Pick ${active.name}'s move below`
+  const prompt = phase === 'select' ? '👆 Tap a unit (switch freely), then pick its move in the middle'
+    : phase === 'select-target' ? '🎯 Tap an enemy to hit'
     : null;
   return (
     <div>
       {prompt && <div style={{ textAlign: 'center', fontSize: T.body, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>{prompt}</div>}
-      {/* The arena: your squad faces the enemy */}
+      {/* The arena: your squad — center move lane — the enemy */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
         {side(snap.A, false)}
-        <div style={{ alignSelf: 'center', color: DIM, fontWeight: 900, fontSize: T.head, opacity: 0.5 }}>VS</div>
+        <div style={{ flex: moves ? 1.5 : 0.5, minWidth: moves ? 150 : 28, alignSelf: 'center', display: 'flex', justifyContent: 'center' }}>
+          <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} />
+        </div>
         {side(snap.B, true)}
       </div>
-      {/* Controls + log below the arena */}
+      {/* Banner + log below the arena */}
       <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
+        <div>{banner}</div>
         <div>
-        {banner}
-        {(phase === 'choose-skill' || phase === 'choose-target') && active && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 800, marginBottom: 8 }}>
-              {active.name}: pick a skill{phase === 'choose-target' ? ' → now tap a target enemy' : ''}
-            </div>
-            {active.skillIds.map((sid) => {
-              const sk = getSkill(sid);
-              const usable = legal.includes(sid);
-              const chosen = fight.pendingSkill === sid;
-              return (
-                <button key={sid} onClick={usable ? () => pickSkill(sid) : undefined} disabled={!usable}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 8, background: chosen ? '#1a1408' : PANEL, border: `2px solid ${chosen ? ACCENT : usable ? LINE : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 10, padding: '12px 14px', cursor: usable ? 'pointer' : 'not-allowed' }}>
-                  <div style={{ fontSize: T.label, fontWeight: 800 }}>{sk.name} <span style={{ fontSize: T.small, color: usable ? KIND_COL[sk.kind] : '#444', fontWeight: 700 }}>· {sk.kind}</span></div>
-                  <div style={{ fontSize: T.small, color: usable ? DIM : '#444', lineHeight: 1.45, marginTop: 3 }}>{sk.blurb}</div>
-                </button>
-              );
-            })}
+          <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>BATTLE LOG</div>
+          <div ref={feedBoxRef} style={{ background: '#0a0a12', border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, maxHeight: narrow ? 300 : 440, overflowY: 'auto' }}>
+            {feed.length === 0 && <div style={{ fontSize: T.body, color: '#555' }}>Battle log…</div>}
+            {feed.map((f, i) => (
+              <div key={i} style={{ fontSize: T.body, padding: '3px 0', lineHeight: 1.5,
+                color: f.kind === 'round' ? ACCENT : f.kind === 'end' ? WIN : f.kind === 'burn' ? BURN : f.kind === 'regen' ? WIN : f.side === 'A' ? '#9cd' : '#e0a0b8',
+                fontWeight: f.kind === 'round' || f.kind === 'end' ? 800 : 500,
+                borderTop: f.kind === 'round' ? `1px solid ${LINE}` : 'none', marginTop: f.kind === 'round' ? 6 : 0, paddingTop: f.kind === 'round' ? 6 : 3 }}>{f.text}</div>
+            ))}
           </div>
-        )}
-        </div>
-        <div>
-        <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>BATTLE LOG</div>
-        <div ref={feedBoxRef} style={{ background: '#0a0a12', border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, maxHeight: narrow ? 300 : 440, overflowY: 'auto' }}>
-          {feed.length === 0 && <div style={{ fontSize: T.body, color: '#555' }}>Battle log…</div>}
-          {feed.map((f, i) => (
-            <div key={i} style={{ fontSize: T.body, padding: '3px 0', lineHeight: 1.5,
-              color: f.kind === 'round' ? ACCENT : f.kind === 'end' ? WIN : f.kind === 'burn' ? BURN : f.kind === 'regen' ? WIN : f.side === 'A' ? '#9cd' : '#e0a0b8',
-              fontWeight: f.kind === 'round' || f.kind === 'end' ? 800 : 500,
-              borderTop: f.kind === 'round' ? `1px solid ${LINE}` : 'none', marginTop: f.kind === 'round' ? 6 : 0, paddingTop: f.kind === 'round' ? 6 : 3 }}>{f.text}</div>
-          ))}
-        </div>
         </div>
       </div>
     </div>
@@ -639,11 +674,11 @@ function LearnMode({ narrow, onGraduate }) {
   const charge = fight.snap?.A?.[0]?.charge ?? 0;
   let tip;
   if (stage === 'won') tip = "That's the whole game in one move: build ⚡charge, then spend it big. Each of the six creatures plays this way — and its LOOK tells you its flavor. Ready for a real run?";
-  else if (fight.phase === 'choose-target') tip = 'Now tap the enemy to land it.';
-  else if (fight.phase === 'choose-skill') tip = charge >= 2
-    ? "You've banked ⚡charge — pick OVERLOAD to dump it all into one big fire hit. (Hits even harder on a Burning 🔥 target.)"
-    : 'Pick CHARGE UP — it fills your ⚡charge a little and sets the enemy on fire 🔥. Do it a couple times to bank charge.';
-  else tip = 'Watch the meter under Cinderpaw — that orange bar is ⚡charge.';
+  else if (fight.phase === 'select-target') tip = 'Now tap the enemy to land it.';
+  else if (fight.phase === 'select') tip = charge >= 2
+    ? "You've banked ⚡charge (the dots under Cinderpaw) — pick OVERLOAD in the middle to dump it all into one big fire hit. (Hits even harder on a Burning 🔥 target.)"
+    : 'Pick CHARGE UP in the middle — it fills your ⚡charge dots and sets the enemy on fire 🔥. Do it a couple times to bank charge.';
+  else tip = 'Watch the dots under Cinderpaw — those are ⚡charge.';
 
   const banner = (
     <div>
