@@ -38,14 +38,16 @@ const SEL = '#9cd1ff';
 const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
 const PATCHUP = 0.3; // between-wave heal (fraction of max HP)
 
-// Per-Type identity used across the picker + waves.
+// Per-Type identity — color + shape + a plain-language nickname so a creature is
+// recognizable by FEEL, not by name. `focal` crops the concept-art strip to one
+// clear pose (these PNGs are wide turnaround sheets, ~4–7 poses each).
 const TYPE_INFO = {
-  Reactor: { glyph: '⚡', accent: BURN, role: 'Charge up, then Overload — ×2 on a Burning target.' },
-  Bulwark: { glyph: '🛡', accent: '#7fd6ff', role: 'Banks charge into block — shields the whole line.' },
-  Mender: { glyph: '🌿', accent: WIN, role: 'Heals and lays regen — wins by outlasting.' },
-  Booster: { glyph: '✦', accent: AMP, role: "Stacks Amp on an ally — doubles someone else's hits." },
-  Striker: { glyph: '⟡', accent: '#ffd166', role: 'Many fast hits + a first-strike Blitz bonus.' },
-  Assassin: { glyph: '☠', accent: '#ff7a9c', role: 'Hunts the weakest — Execute spikes ×2.5 on the wounded.' },
+  Reactor: { glyph: '🔥', accent: BURN, nick: 'The Hothead', role: 'Powers up, then blows up.' },
+  Bulwark: { glyph: '🛡', accent: '#7fd6ff', nick: 'The Wall', role: 'Soaks hits and guards the team.' },
+  Mender: { glyph: '🌿', accent: WIN, nick: 'The Healer', role: 'Keeps the squad alive.' },
+  Booster: { glyph: '✦', accent: AMP, nick: 'The Hype', role: 'Makes an ally hit way harder.' },
+  Striker: { glyph: '⚔', accent: '#ffd166', nick: 'The Brawler', role: 'Fast — lots of quick hits.' },
+  Assassin: { glyph: '🗡', accent: '#ff7a9c', nick: 'The Killer', role: 'Hunts and finishes the weak.' },
 };
 
 function useViewport() {
@@ -147,8 +149,18 @@ const FX_STYLE = `
 @keyframes seam-hitring { 0%{transform:translate(-50%,-50%) scale(.5);opacity:.9} 100%{transform:translate(-50%,-50%) scale(1.7);opacity:0} }
 `;
 
-// A creature sprite (public/sprites/{spriteId}.png) with a battle animation. Falls
-// back to a colored glyph disc if the PNG is missing.
+// Horizontal focal point (0–1) to crop ONE clear pose out of each wide turnaround
+// sheet. Default leftmost works for most; override where a later pose reads better.
+const FOCAL_X = {
+  spark: 0.04, flicker: 0.04, cinder: 0.04,
+  vault: 0.02, bastion: 0.02, bulwark: 0.02,
+  link: 0.04, nexus: 0.04, conduit: 0.04,
+  striker: 0.04, fang: 0.04, claw: 0.04,
+};
+
+// One creature, cropped big out of its concept-art strip and framed in its type
+// color with a shape badge — so you read it by color + silhouette, not by name.
+// Falls back to the big glyph if the PNG is missing.
 function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64 }) {
   const animCss = {
     idle: 'seam-idle 1.7s ease-in-out infinite',
@@ -156,14 +168,24 @@ function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, siz
     damaged: 'seam-damaged .45s ease-in-out',
     defeated: 'seam-defeated .7s ease-out forwards',
   }[anim] || 'seam-idle 1.7s ease-in-out infinite';
+  const focal = (FOCAL_X[spriteId] ?? 0.04) * 100;
   return (
-    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 10, overflow: 'hidden', position: 'relative', background: 'linear-gradient(135deg,#1a1a2a,#0c0c16)', border: `1px solid ${color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 42%, ${color}26, transparent 70%)` }} />
-      <span style={{ position: 'absolute', fontSize: size * 0.34, color: `${color}55` }}>{glyph}</span>
-      <div style={{ width: '100%', height: '100%', transform: `scaleX(${facing})`, position: 'relative' }}>
-        <img src={`/sprites/${spriteId}.png`} alt="" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
-          style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 6, animation: animCss }} />
+    <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 14, overflow: 'hidden', position: 'relative', background: `radial-gradient(circle at 50% 38%, ${color}33 0%, #0b0b14 72%)`, border: `2.5px solid ${color}`, boxShadow: `0 0 12px ${color}44, inset 0 0 16px ${color}22` }}>
+      {/* fallback glyph sits behind the art */}
+      <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, opacity: 0.5 }}>{glyph}</span>
+      <div style={{ position: 'absolute', inset: 0, transform: `scaleX(${facing})` }}>
+        <div style={{ width: '100%', height: '100%', animation: animCss }}>
+          <div style={{
+            width: '100%', height: '100%',
+            backgroundImage: `url(/sprites/${spriteId}.png)`,
+            backgroundSize: 'auto 122%',
+            backgroundPosition: `${focal}% 38%`,
+            backgroundRepeat: 'no-repeat',
+          }} />
+        </div>
       </div>
+      {/* shape badge — the type's color + glyph, bottom-right */}
+      <span style={{ position: 'absolute', right: 2, bottom: 1, fontSize: size * 0.26, filter: 'drop-shadow(0 1px 2px #000)' }}>{glyph}</span>
     </div>
   );
 }
@@ -444,18 +466,18 @@ function RunMode({ narrow }) {
               <button key={c.id} onClick={() => toggle(c.id)} disabled={full}
                 style={{ textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
                   background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={52} />
+                <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+                  <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: T.label, fontWeight: 800, color: on ? '#eaf2ff' : '#ddd' }}>{c.name}</span>
+                      <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
                       {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
                     </div>
-                    <div style={{ fontSize: T.micro, color: ti.accent, fontWeight: 700, letterSpacing: 1, margin: '2px 0 4px' }}>{ti.glyph} {c.type.toUpperCase()}</div>
+                    <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {c.type}</span></div>
                     <div style={{ fontSize: T.micro, color: DIM }}>HP {c.hp} · ATK {c.atk} · SPD {c.speed}</div>
                   </div>
                 </div>
-                <div style={{ fontSize: T.small, color: on ? '#b9c6d6' : '#8f8f9f', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
+                <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
               </button>
             );
           })}
