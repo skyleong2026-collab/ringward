@@ -23,12 +23,13 @@ function initUnit(creature, side, slot) {
     hp: creature.hp,
     atk: creature.atk,
     speed: creature.speed,
-    charge: 0,
+    charge: creature.charge ?? 0, // a run "Primed" upgrade can start a unit charged
     maxCharge: creature.maxCharge ?? MAX_CHARGE,
     statuses: { burn: 0, block: 0, regen: 0, amp: 0 }, // burn=DoT, block=absorb, regen=heal-over-time, amp=dmg buff
     alive: true,
     skillIds: creature.skillIds.slice(),
     temperament: creature.temperament ?? 'Balanced', // only the AI side reads this
+    mods: creature.mods ?? {}, // opt-in run-upgrade modifiers (dmgMult, healMult, …); {} = no-op
   };
 }
 

@@ -23,7 +23,7 @@ export const REACTOR_SKILLS = {
       if (!target) return { hits: [], note: 'no target' };
       const gain = REACTOR.chargeUp.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      applyBurn(target, REACTOR.chargeUp.burnApply);
+      applyBurn(target, REACTOR.chargeUp.burnApply, actor);
       const hit = dealDamage(target, actor.atk * REACTOR.chargeUp.chipMult, actor);
       return { hits: [hit], chargeGained: gain, burned: [target.uid] };
     },
@@ -61,7 +61,7 @@ export const REACTOR_SKILLS = {
       actor.charge -= vented;
       const line = enemiesOf(state, actor);
       const hits = line.map((e) => {
-        applyBurn(e, REACTOR.backdraft.burnApply);
+        applyBurn(e, REACTOR.backdraft.burnApply, actor);
         return dealDamage(e, actor.atk * REACTOR.backdraft.perCharge * vented, actor);
       });
       return { hits, chargeSpent: vented, burned: line.map((e) => e.uid) };

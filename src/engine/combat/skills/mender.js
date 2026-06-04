@@ -25,7 +25,7 @@ export const MENDER_SKILLS = {
     apply(actor, [target], state) {
       const gain = MENDER.mend.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      const heals = [heal(mostWounded(actor, state), MENDER.mend.healNow)];
+      const heals = [heal(mostWounded(actor, state), MENDER.mend.healNow, actor)];
       const hits = target ? [dealDamage(target, actor.atk * MENDER.mend.chipMult, actor)] : [];
       return { hits, heals, chargeGained: gain };
     },
@@ -44,7 +44,7 @@ export const MENDER_SKILLS = {
       actor.charge = 0;
       const ally = target || mostWounded(actor, state);
       const amount = MENDER.bloom.base + MENDER.bloom.perCharge * spent;
-      return { hits: [], heals: [heal(ally, amount)], chargeSpent: spent };
+      return { hits: [], heals: [heal(ally, amount, actor)], chargeSpent: spent };
     },
   },
 

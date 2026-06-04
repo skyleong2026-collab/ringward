@@ -13,8 +13,13 @@ export function ampMult(actor) {
   return 1 + AMP.dmgPerStack * stacks;
 }
 
+// Run-upgrade modifiers live on actor.mods (opt-in). A unit with no mods reads the
+// default, so threading `actor` through these is a no-op for every existing golden.
+const modMult = (actor, key) => actor?.mods?.[key] ?? 1;
+const modAdd = (actor, key) => actor?.mods?.[key] ?? 0;
+
 export function dealDamage(target, amount, actor) {
-  const dmg = Math.max(0, Math.round(amount * ampMult(actor)));
+  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult')));
   let remaining = dmg;
   const blocked = Math.min(target.statuses.block || 0, remaining);
   if (blocked > 0) target.statuses.block -= blocked;
@@ -28,13 +33,15 @@ export function dealDamage(target, amount, actor) {
   return { uid: target.uid, name: target.name, dmg: remaining, blocked, killed, hpAfter: target.hp };
 }
 
-export function applyBurn(target, stacks) {
-  target.statuses.burn = Math.min(BURN.maxStacks, (target.statuses.burn || 0) + stacks);
+export function applyBurn(target, stacks, actor) {
+  const add = stacks + modAdd(actor, 'burnBonus');
+  target.statuses.burn = Math.min(BURN.maxStacks, (target.statuses.burn || 0) + add);
 }
 
-export function addBlock(target, amount) {
+export function addBlock(target, amount, actor) {
   const cap = BLOCK.maxStack ?? Infinity;
-  target.statuses.block = Math.min(cap, (target.statuses.block || 0) + Math.max(0, Math.round(amount)));
+  const add = Math.max(0, Math.round(amount * modMult(actor, 'blockMult')));
+  target.statuses.block = Math.min(cap, (target.statuses.block || 0) + add);
   return { uid: target.uid, name: target.name, block: target.statuses.block };
 }
 
@@ -42,9 +49,9 @@ export const isBurning = (u) => (u.statuses.burn || 0) > 0;
 
 // Restore HP up to maxHp (never revives — a dead unit stays dead). Reports the
 // amount actually healed (clamped), so over-heal doesn't lie in the feed/golden.
-export function heal(target, amount) {
+export function heal(target, amount, actor) {
   if (!target.alive) return { uid: target.uid, name: target.name, healed: 0, hpAfter: target.hp };
-  const want = Math.max(0, Math.round(amount));
+  const want = Math.max(0, Math.round(amount * modMult(actor, 'healMult')));
   const before = target.hp;
   target.hp = Math.min(target.maxHp, target.hp + want);
   return { uid: target.uid, name: target.name, healed: target.hp - before, hpAfter: target.hp };
@@ -57,7 +64,8 @@ export function applyRegen(target, stacks) {
 
 // Lend an outgoing-damage buff to an ally (capped). Reports the resulting stacks so
 // the feed/golden reads who got boosted and by how much.
-export function applyAmp(target, stacks) {
-  target.statuses.amp = Math.min(AMP.maxStacks, (target.statuses.amp || 0) + stacks);
+export function applyAmp(target, stacks, actor) {
+  const add = stacks + modAdd(actor, 'ampBonus');
+  target.statuses.amp = Math.min(AMP.maxStacks, (target.statuses.amp || 0) + add);
   return { uid: target.uid, name: target.name, amp: target.statuses.amp };
 }

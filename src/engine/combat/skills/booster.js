@@ -27,7 +27,7 @@ export const BOOSTER_SKILLS = {
     apply(actor, [target], state) {
       const gain = BOOSTER.prime.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      const amps = [applyAmp(bestCarry(actor, state), BOOSTER.prime.ampStacks)];
+      const amps = [applyAmp(bestCarry(actor, state), BOOSTER.prime.ampStacks, actor)];
       const hits = target ? [dealDamage(target, actor.atk * BOOSTER.prime.chipMult, actor)] : [];
       return { hits, amps, chargeGained: gain };
     },
@@ -46,7 +46,7 @@ export const BOOSTER_SKILLS = {
       actor.charge = 0;
       const ally = target || bestCarry(actor, state);
       const stacks = BOOSTER.overdrive.base + BOOSTER.overdrive.perCharge * spent;
-      return { hits: [], amps: [applyAmp(ally, stacks)], chargeSpent: spent };
+      return { hits: [], amps: [applyAmp(ally, stacks, actor)], chargeSpent: spent };
     },
   },
 
@@ -63,7 +63,7 @@ export const BOOSTER_SKILLS = {
       actor.charge -= vented;
       const stacks = Math.max(1, BOOSTER.resonate.ampPerVent * vented);
       const line = alliesOf(state, actor);
-      const amps = line.map((a) => applyAmp(a, stacks));
+      const amps = line.map((a) => applyAmp(a, stacks, actor));
       return { hits: [], amps, chargeSpent: vented };
     },
   },

@@ -19,7 +19,7 @@ export const BULWARK_SKILLS = {
     apply(actor, [target]) {
       const gain = BULWARK.brace.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      const shield = addBlock(actor, BULWARK.brace.blockGain);
+      const shield = addBlock(actor, BULWARK.brace.blockGain, actor);
       const hits = target ? [dealDamage(target, actor.atk * BULWARK.brace.chipMult, actor)] : [];
       return { hits, chargeGained: gain, shields: [shield] };
     },
@@ -37,7 +37,7 @@ export const BULWARK_SKILLS = {
       const spent = actor.charge;
       actor.charge = 0;
       const line = alliesOf(state, actor);
-      const shields = line.map((a) => addBlock(a, BULWARK.aegis.blockPerCharge * spent));
+      const shields = line.map((a) => addBlock(a, BULWARK.aegis.blockPerCharge * spent, actor));
       return { hits: [], chargeSpent: spent, shields };
     },
   },
@@ -54,7 +54,7 @@ export const BULWARK_SKILLS = {
       const vented = Math.floor(actor.charge / 2);
       actor.charge -= vented;
       const ally = target || actor;
-      const shield = addBlock(ally, BULWARK.bodyguard.blockPerCharge * vented);
+      const shield = addBlock(ally, BULWARK.bodyguard.blockPerCharge * vented, actor);
       return { hits: [], chargeSpent: vented, shields: [shield] };
     },
   },

@@ -99,10 +99,33 @@ const MATCHUPS = {
     b: () => [makeUnitDef('fizzpop', 'Balanced'), makeUnitDef('glowtail', 'Balanced')] },
 };
 
-// A player creature carried through a run, with separate maxHp so wounds persist.
-function playerDef(member) {
+// The run's accumulated upgrade modifiers (no-op defaults). Combat reads these off
+// each unit; they bake in BETWEEN fights, so combat itself stays deterministic.
+const EMPTY_MODS = { dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0 };
+
+// The upgrade pool — pick 1 of 3 between fights; they compound into a build.
+const UPGRADES = [
+  { id: 'sharpen', icon: '⚔️', color: '#ff8a4a', name: 'Sharpened Edge', desc: '+30% damage from every attack.', apply: (m) => { m.dmgMult *= 1.3; } },
+  { id: 'wellspring', icon: '💚', color: WIN, name: 'Wellspring', desc: 'Heals are 40% stronger.', apply: (m) => { m.healMult *= 1.4; } },
+  { id: 'bastion', icon: '🛡️', color: '#7fd6ff', name: 'Bastion', desc: 'Shields hold 40% more.', apply: (m) => { m.blockMult *= 1.4; } },
+  { id: 'primed', icon: '⚡', color: CHG, name: 'Primed', desc: 'Start every fight with +2 charge.', apply: (m) => { m.chargeStart += 2; } },
+  { id: 'thickhide', icon: '❤️', color: '#ff6b6b', name: 'Thick Hide', desc: '+20% max HP for the whole squad.', apply: (m) => { m.hpMult *= 1.2; } },
+  { id: 'wildfire', icon: '🔥', color: BURN, name: 'Wildfire', desc: 'Your Burns land +1 extra stack.', apply: (m) => { m.burnBonus += 1; } },
+  { id: 'overhype', icon: '✦', color: AMP, name: 'Overhype', desc: 'Your Amp lands +1 extra stack.', apply: (m) => { m.ampBonus += 1; } },
+];
+const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
+const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1));
+
+// A player creature carried through a run: wounds persist (separate maxHp), and the
+// run's upgrade mods + Primed starting charge are baked onto the unit def.
+function playerDef(member, mods) {
   const base = COMBAT_CREATURES[member.id];
-  return { ...base, temperament: 'Balanced', maxHp: base.hp, hp: member.hp };
+  const maxHp = maxHpOf(member, mods);
+  return {
+    ...base, temperament: 'Balanced', maxHp, hp: Math.min(member.hp, maxHp),
+    charge: Math.min(base.maxCharge ?? 6, mods?.chargeStart ?? 0),
+    mods: { dmgMult: mods?.dmgMult ?? 1, healMult: mods?.healMult ?? 1, blockMult: mods?.blockMult ?? 1, burnBonus: mods?.burnBonus ?? 0, ampBonus: mods?.ampBonus ?? 0 },
+  };
 }
 
 // ── Friendly feed line from a raw engine event (the engine emits pure data). ──
@@ -464,45 +487,73 @@ function FightView({ fight, narrow, banner }) {
   );
 }
 
-// ── RUN MODE — squad pick → 3 waves, HP carries, win or wipe. ──
+// The accumulated build, shown as chips so you SEE your run getting stronger.
+function BuildStrip({ taken }) {
+  if (!taken.length) return null;
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+      <span style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1 }}>YOUR BUILD:</span>
+      {taken.map((u, i) => (
+        <span key={i} title={u.desc} style={{ fontSize: T.small, fontWeight: 700, color: u.color, background: '#15151f', border: `1px solid ${u.color}66`, borderRadius: 20, padding: '3px 9px' }}>{u.icon} {u.name}</span>
+      ))}
+    </div>
+  );
+}
+
+// ── RUN MODE — squad pick → (upgrade → wave) ×3, HP carries, win or wipe. ──
 function RunMode({ narrow }) {
   const fight = useFight();
-  const [runPhase, setRunPhase] = useState('pick'); // pick | fighting | cleared | won | lost
+  const [runPhase, setRunPhase] = useState('pick'); // pick | upgrade | fighting | won | lost
   const [picked, setPicked] = useState([]); // creature ids (2–3)
-  const [squad, setSquad] = useState([]); // [{id, hp, maxHp}] persistent across waves
-  const [waveIdx, setWaveIdx] = useState(0);
+  const [squad, setSquad] = useState([]); // [{id, hp}] persistent across waves
+  const [waveIdx, setWaveIdx] = useState(0); // the wave about to be fought
+  const [runMods, setRunMods] = useState({ ...EMPTY_MODS });
+  const [taken, setTaken] = useState([]); // upgrades chosen this run (for the build strip)
+  const [offer, setOffer] = useState([]); // 3 upgrade ids on the table now
 
   function toggle(id) {
     setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
   }
+  function rollOffer() {
+    const pool = [...UPGRADES];
+    const out = [];
+    for (let k = 0; k < 3 && pool.length; k++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
+    setOffer(out);
+  }
 
-  function startWave(idx, sq) {
+  function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
-    const aDefs = fielded.map((i) => playerDef(sq[i]));
+    const aDefs = fielded.map((i) => playerDef(sq[i], mods));
     fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
-      setSquad(next);
       const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
-      if (!youLive || res.winner === 'B') setRunPhase('lost');
-      else if (idx === WAVES.length - 1) setRunPhase('won');
-      else setRunPhase('cleared');
+      if (!youLive || res.winner === 'B') { setSquad(next); setRunPhase('lost'); return; }
+      // Patch survivors up a little for the next push.
+      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * PATCHUP)) } : m);
+      setSquad(patched);
+      if (idx === WAVES.length - 1) { setRunPhase('won'); return; }
+      setWaveIdx(idx + 1); rollOffer(); setRunPhase('upgrade');
     });
     setWaveIdx(idx);
     setRunPhase('fighting');
   }
 
   function startRun() {
-    const sq = picked.map((id) => ({ id, hp: COMBAT_CREATURES[id].hp, maxHp: COMBAT_CREATURES[id].hp }));
-    setSquad(sq);
-    startWave(0, sq);
+    const sq = picked.map((id) => ({ id, hp: COMBAT_CREATURES[id].hp }));
+    setSquad(sq); setRunMods({ ...EMPTY_MODS }); setTaken([]); setWaveIdx(0);
+    rollOffer(); setRunPhase('upgrade');
   }
-  function continueRun() {
-    const patched = squad.map((m) => m.hp > 0 ? { ...m, hp: Math.min(m.maxHp, m.hp + Math.round(m.maxHp * PATCHUP)) } : m);
-    setSquad(patched);
-    startWave(waveIdx + 1, patched);
+  function applyUpgrade(up) {
+    const m = { ...runMods }; up.apply(m);
+    let sq = squad;
+    if (m.hpMult !== runMods.hpMult) {
+      sq = squad.map((mem) => mem.hp > 0 ? { ...mem, hp: mem.hp + (maxHpOf(mem, m) - maxHpOf(mem, runMods)) } : mem);
+    }
+    setRunMods(m); setSquad(sq); setTaken((t) => [...t, up]);
+    startWave(waveIdx, sq, m);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); }
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
@@ -548,16 +599,36 @@ function RunMode({ narrow }) {
     );
   }
 
+  // ── Upgrade choice: pick 1 of 3 before each wave. ──
+  if (runPhase === 'upgrade') {
+    const nextWave = WAVES[waveIdx];
+    return (
+      <div>
+        <BuildStrip taken={taken} />
+        <div style={{ textAlign: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: T.head, fontWeight: 900, color: ACCENT }}>{waveIdx === 0 ? '⛰ Gear up for the approach' : `✓ Wave ${waveIdx} cleared — patched up (+${Math.round(PATCHUP * 100)}% HP)`}</div>
+          <div style={{ fontSize: T.body, color: '#cfcfda', marginTop: 5 }}>Pick <b style={{ color: ACCENT }}>one upgrade</b> for your squad — then face <b style={{ color: '#ddd' }}>{nextWave.name}</b>.</div>
+          <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>{nextWave.blurb}</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
+          {offer.map((id) => {
+            const up = UPGRADE_BY_ID[id];
+            return (
+              <button key={id} onClick={() => applyUpgrade(up)} style={{ textAlign: 'center', cursor: 'pointer', borderRadius: 14, padding: '20px 14px', background: PANEL, border: `2px solid ${up.color}`, boxShadow: `0 0 14px ${up.color}33` }}>
+                <div style={{ fontSize: 36, lineHeight: 1 }}>{up.icon}</div>
+                <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}</div>
+                <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 6 }}>{up.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── In a run: progress bar + the fight (+ result banner). ──
   const wave = WAVES[waveIdx];
   const banner = (() => {
-    if (runPhase === 'cleared') return (
-      <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 16, marginBottom: 12, textAlign: 'center' }}>
-        <div style={{ fontSize: T.sub, fontWeight: 900, color: WIN }}>Wave {waveIdx + 1} cleared!</div>
-        <div style={{ fontSize: T.small, color: DIM, margin: '4px 0 12px' }}>Your squad patches up (+{Math.round(PATCHUP * 100)}% HP). Next: <b style={{ color: '#ddd' }}>{WAVES[waveIdx + 1].name}</b></div>
-        <button onClick={continueRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEXT WAVE →</button>
-      </div>
-    );
     if (runPhase === 'won') return (
       <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RUN CLEARED</div>
@@ -582,9 +653,10 @@ function RunMode({ narrow }) {
           <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < waveIdx || runPhase === 'won' ? WIN : i === waveIdx ? ACCENT : '#26263a' }} />
         ))}
       </div>
-      <div style={{ fontSize: T.small, color: DIM, marginBottom: 12 }}>
+      <div style={{ fontSize: T.small, color: DIM, marginBottom: 10 }}>
         <b style={{ color: '#ddd' }}>Wave {waveIdx + 1}/3 · {wave.name}</b> — {wave.blurb}
       </div>
+      <BuildStrip taken={taken} />
       <FightView fight={fight} narrow={narrow} banner={banner} />
     </div>
   );
