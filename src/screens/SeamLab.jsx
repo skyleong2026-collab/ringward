@@ -20,6 +20,7 @@ import {
   getSkill,
   legalSkills,
   enemiesOf,
+  alliesOf,
   makeUnitDef,
   COMBAT_CREATURES,
   COMBAT_ROSTER,
@@ -287,7 +288,7 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel }) {
   const dead = !u.alive;
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
   const size = boss ? (big ? 122 : 108) : big ? 92 : 78; // the boss looms larger
@@ -298,7 +299,7 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
   // outline. The eye should land on who's acting, not on everyone who could act.
   const ring = isTarget ? WIN : isActor ? ACCENT : selectable ? '#6e5526' : 'transparent';
   const pulse = isActor ? 'seam-ready 1.2s ease-in-out infinite' : isTarget ? 'seam-targetpulse 1.2s ease-in-out infinite' : 'none';
-  const label = isActor ? '▶ ACTING' : selectable ? '▷ TAP TO ACT' : isTarget ? '◀ TAP TO HIT' : null;
+  const label = isActor ? '▶ ACTING' : selectable ? '▷ TAP TO ACT' : isTarget ? (targetLabel || '◀ TAP TO HIT') : null;
   return (
     <div
       onClick={clickable ? () => (isTarget ? onPick(u.uid) : onSelect(u.uid)) : undefined}
@@ -456,26 +457,28 @@ function useFight(opts = {}) {
     if (!unit || !battleRef.current || !commitRef.current) return;
     const legal = legalSkills(unit, battleRef.current);
     if (legal.length !== 1) return;
-    const only = legal[0];
-    if (only.targetMode === 'enemy') { setPendingSkill(only.id); setPhase('select-target'); return; }
-    const targetIds = only.targetMode === 'allEnemies' ? enemiesOf(battleRef.current, unit).map((u) => u.uid) : [];
-    commitRef.current(unit, { skillId: only.id, targetIds });
+    // One usable move → skip the pick, but still show the target-confirm beat.
+    setPendingSkill(legal[0].id); setPhase('select-target');
   }
 
   function previewUnit(uid) {
     previewRef.current = uid; setPreviewUid(uid); setPendingSkill(null); setPhase('select');
     if (autoSkip) maybeAutoSkill(uid);
   }
-  function chooseSkill(skillId) {
+  // Every move now routes through one confirm beat — single, AOE, and ally alike.
+  function chooseSkill(skillId) { setPendingSkill(skillId); setPhase('select-target'); }
+  // Resolve targets from the move's scope: a single tap on the chosen side, or the
+  // whole side for AOE / whole-team moves (tap any to confirm).
+  function chooseTarget(uid) {
     const unit = poolRef.current.find((u) => u.uid === previewRef.current);
-    if (getSkill(skillId).targetMode === 'enemy') { setPendingSkill(skillId); setPhase('select-target'); return; }
-    const targetIds = getSkill(skillId).targetMode === 'allEnemies' ? enemiesOf(battleRef.current, unit).map((u) => u.uid) : [];
-    commitRef.current(unit, { skillId, targetIds });
+    const mode = getSkill(pendingSkill).targetMode;
+    let targetIds;
+    if (mode === 'allEnemies') targetIds = enemiesOf(battleRef.current, unit).map((u) => u.uid);
+    else if (mode === 'allAllies') targetIds = alliesOf(battleRef.current, unit).map((u) => u.uid);
+    else targetIds = [uid]; // single enemy or single ally
+    commitRef.current(unit, { skillId: pendingSkill, targetIds });
   }
-  function chooseTarget(enemyUid) {
-    const unit = poolRef.current.find((u) => u.uid === previewRef.current);
-    commitRef.current(unit, { skillId: pendingSkill, targetIds: [enemyUid] });
-  }
+  function cancelTarget() { setPendingSkill(null); setPhase('select'); } // back to move-pick
   // What the center move-panel needs for the previewed unit.
   function previewMoves() {
     const unit = poolRef.current.find((u) => u.uid === previewUid);
@@ -485,6 +488,7 @@ function useFight(opts = {}) {
       skillIds: unit.skillIds,
       legalIds: legalSkills(unit, battleRef.current).map((s) => s.id),
       enemyUids: enemiesOf(battleRef.current, unit).map((u) => u.uid),
+      allyUids: alliesOf(battleRef.current, unit).map((u) => u.uid),
     };
   }
 
@@ -503,13 +507,13 @@ function useFight(opts = {}) {
   }
   function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setPool([]); setPreviewUid(null); setPendingSkill(null); setFx({ actor: null, cast: null, bursts: {}, n: 0 }); setPopups([]); holdRef.current = Promise.resolve(); }
 
-  return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, previewMoves, begin, reset };
+  return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, cancelTarget, previewMoves, begin, reset };
 }
 
 // The move panel that lives in the center "VS" lane — between your squad and the
 // enemy — for whichever unit you're previewing. Tapping a move commits (or asks for
 // a target). Floating it here keeps your eyes in the arena, not in a panel below.
-function CenterMoves({ moves, pendingSkill, phase, onSkill }) {
+function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, tgtAll }) {
   if (!moves) return <span style={{ color: DIM, fontWeight: 900, fontSize: T.head, opacity: 0.5 }}>VS</span>;
   const { unit, skillIds, legalIds } = moves;
   return (
@@ -536,37 +540,58 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill }) {
           </button>
         );
       })}
-      {phase === 'select-target' && <div style={{ fontSize: T.micro, color: WIN, textAlign: 'center', fontWeight: 800 }}>now tap an enemy →</div>}
+      {phase === 'select-target' && (
+        <div style={{ marginTop: 4 }}>
+          <div style={{ fontSize: T.micro, color: WIN, textAlign: 'center', fontWeight: 800, marginBottom: 6 }}>
+            {tgtAll ? `↓ tap to confirm — ${tgtAllies ? 'whole team' : 'all enemies'}` : `↓ tap ${tgtAllies ? 'an ally' : 'an enemy'}`}
+          </div>
+          <button onClick={onBack} style={{ width: '100%', background: 'transparent', border: `1px solid ${LINE}`, color: DIM, borderRadius: 8, padding: '5px 0', cursor: 'pointer', fontSize: T.micro, fontWeight: 800 }}>↩ Back</button>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── FightView — the shared battlefield + center moves + feed for a live battle. ──
 function FightView({ fight, narrow, banner, bossUid }) {
-  const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill } = fight;
+  const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill, cancelTarget } = fight;
   if (!snap) return null;
   const selecting = phase === 'select' || phase === 'select-target';
   const moves = selecting ? fight.previewMoves() : null;
   const enemyUids = moves?.enemyUids ?? [];
+  const allyUids = moves?.allyUids ?? [];
+  // Targeting context for the confirm beat (single/AOE × enemies/allies).
+  const tgtMode = phase === 'select-target' && fight.pendingSkill ? getSkill(fight.pendingSkill).targetMode : null;
+  const tgtAllies = tgtMode === 'ally' || tgtMode === 'allAllies';
+  const tgtAll = tgtMode === 'allEnemies' || tgtMode === 'allAllies';
+  const tgtUids = tgtAllies ? allyUids : enemyUids;
+  const verb = !fight.pendingSkill ? 'HIT'
+    : tgtAllies ? ({ heal: 'HEAL', shield: 'SHIELD', boost: 'BUFF' }[SKILL_EFFECT[fight.pendingSkill]] || 'BUFF')
+    : 'HIT';
+  const targetLabel = tgtAll ? `◀ ${verb} ALL` : `◀ TAP TO ${verb}`;
   const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : fx.bursts?.[u.uid] === 'attack' ? 'damaged' : 'idle';
   const popsFor = (uid) => popups.filter((p) => p.uid === uid);
   const side = (units, isEnemy) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
       <div style={{ fontSize: T.small, color: isEnemy ? '#e07a7a' : '#3ec9a0', fontWeight: 800, letterSpacing: 1 }}>{isEnemy ? 'ENEMY' : 'YOUR SQUAD'}</div>
-      {units.map((u) => (
-        <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
-          isActor={!isEnemy && selecting && previewUid === u.uid}
-          selectable={!isEnemy && selecting && pool.includes(u.uid) && previewUid !== u.uid}
-          isTarget={isEnemy && phase === 'select-target' && u.alive && enemyUids.includes(u.uid)}
-          burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n}
-          boss={u.uid === bossUid}
-          onSelect={previewUnit}
-          onPick={chooseTarget} popups={popsFor(u.uid)} />
-      ))}
+      {units.map((u) => {
+        const onTargetSide = tgtAllies ? !isEnemy : isEnemy;
+        const isTgt = phase === 'select-target' && u.alive && onTargetSide && tgtUids.includes(u.uid);
+        const isAct = !isEnemy && selecting && previewUid === u.uid && !isTgt;
+        const canSwitch = !isEnemy && (phase === 'select' || (phase === 'select-target' && !tgtAllies)) && pool.includes(u.uid) && previewUid !== u.uid && !isTgt;
+        return (
+          <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
+            isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={targetLabel}
+            burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n}
+            boss={u.uid === bossUid}
+            onSelect={previewUnit}
+            onPick={chooseTarget} popups={popsFor(u.uid)} />
+        );
+      })}
     </div>
   );
   const prompt = phase === 'select' ? '👆 Tap a unit (switch freely), then pick its move in the middle'
-    : phase === 'select-target' ? '🎯 Tap an enemy to hit'
+    : phase === 'select-target' ? (tgtAll ? `🎯 Tap to confirm — ${verb.toLowerCase()}s ${tgtAllies ? 'your whole team' : 'ALL enemies'}` : `🎯 Tap ${tgtAllies ? 'an ally' : 'an enemy'} to ${verb.toLowerCase()}`)
     : null;
   return (
     <div>
@@ -575,7 +600,7 @@ function FightView({ fight, narrow, banner, bossUid }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
         {side(snap.A, false)}
         <div style={{ flex: moves ? 1.5 : 0.5, minWidth: moves ? 150 : 28, alignSelf: 'center', display: 'flex', justifyContent: 'center' }}>
-          <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} />
+          <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} onBack={cancelTarget} tgtAllies={tgtAllies} tgtAll={tgtAll} />
         </div>
         {side(snap.B, true)}
       </div>
