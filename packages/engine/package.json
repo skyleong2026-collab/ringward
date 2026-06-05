@@ -1,0 +1,20 @@
+{
+  "name": "@8gents/engine",
+  "version": "1.0.0",
+  "description": "8gents pure game logic engine — battle simulation, progression, RNG, GPS",
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "*.js"
+  ],
+  "keywords": [
+    "game-engine",
+    "battle-simulation",
+    "creature-arpg"
+  ],
+  "author": "Sky",
+  "license": "MIT"
+}

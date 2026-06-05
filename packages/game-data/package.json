@@ -1,0 +1,20 @@
+{
+  "name": "@8gents/game-data",
+  "version": "1.0.0",
+  "description": "8gents game content — creatures, items, encounters, dungeons, zones",
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "*.js"
+  ],
+  "keywords": [
+    "game-content",
+    "creatures",
+    "items"
+  ],
+  "author": "Sky",
+  "license": "MIT"
+}
