@@ -233,6 +233,7 @@ const FX_STYLE = `
 @keyframes seam-hitring { 0%{transform:translate(-50%,-50%) scale(.5);opacity:.9} 100%{transform:translate(-50%,-50%) scale(1.7);opacity:0} }
 @keyframes seam-ready { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,0)} 50%{box-shadow:0 0 14px 3px rgba(232,160,64,.7)} }
 @keyframes seam-targetpulse { 0%,100%{box-shadow:0 0 0 0 rgba(126,211,33,0)} 50%{box-shadow:0 0 14px 3px rgba(126,211,33,.75)} }
+@keyframes seam-aoepulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,122,58,0)} 50%{box-shadow:0 0 16px 4px rgba(255,122,58,.85)} }
 @keyframes seam-iconpop { 0%{transform:translate(-50%,-50%) scale(.3);opacity:0} 28%{opacity:1} 100%{transform:translate(-50%,-115%) scale(1.7);opacity:0} }
 @keyframes seam-castglow { 0%{opacity:0} 35%{opacity:.85} 100%{opacity:0} }
 /* a thrown bolt streaks ACROSS the arena into the target (direction by side) */
@@ -355,7 +356,7 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, move, hitN, fire }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire }) {
   const dead = !u.alive;
   const hurt = u.alive && u.maxHp > 0 && u.hp / u.maxHp <= 0.3; // badly wounded — show distress so the player KNOWS to heal/guard it
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
@@ -372,8 +373,8 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
   const clickable = isTarget || selectable;
   // The unit you're DRIVING (isActor) flashes; other ready units get a calm static
   // outline. The eye should land on who's acting, not on everyone who could act.
-  const ring = isTarget ? WIN : isActor ? ACCENT : selectable ? '#6e5526' : 'transparent';
-  const pulse = isActor ? 'seam-ready 1.2s ease-in-out infinite' : isTarget ? 'seam-targetpulse 1.2s ease-in-out infinite' : 'none';
+  const ring = isTarget ? (aoe ? '#ff7a3a' : WIN) : isActor ? ACCENT : selectable ? '#6e5526' : 'transparent';
+  const pulse = isActor ? 'seam-ready 1.2s ease-in-out infinite' : isTarget ? (aoe ? 'seam-aoepulse 1s ease-in-out infinite' : 'seam-targetpulse 1.2s ease-in-out infinite') : 'none';
   const label = isActor ? '▶ ACTING' : selectable ? '▷ TAP TO ACT' : isTarget ? (targetLabel || '◀ TAP TO HIT') : null;
   return (
     <div
@@ -388,7 +389,9 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       }}
     >
       {boss && <div style={{ position: 'absolute', top: -9, right: 6, fontSize: T.micro, fontWeight: 900, letterSpacing: 0.5, color: '#ffb38a', background: '#2a0d0d', border: `1px solid ${LOSS}`, padding: '0 5px', borderRadius: 4, zIndex: 8 }}>💀 BOSS</div>}
-      {label && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: T.micro, fontWeight: 800, letterSpacing: 0.5, color: isTarget ? WIN : ACCENT, background: '#0b0b14', padding: '0 5px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 7 }}>{label}</div>}
+      {label && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: T.micro, fontWeight: 800, letterSpacing: 0.5, color: isTarget ? (aoe ? '#ff7a3a' : WIN) : ACCENT, background: '#0b0b14', padding: '0 5px', borderRadius: 4, whiteSpace: 'nowrap', zIndex: 7 }}>{label}</div>}
+      {/* target marker — a kid can read 🎯 "pick one" vs 💥 "hits ALL of them" without words */}
+      {isTarget && targetMark && <div style={{ position: 'absolute', top: size * 0.16, left: '50%', fontSize: size * 0.42, animation: 'seam-alert .8s ease-in-out infinite', pointerEvents: 'none', zIndex: 7, filter: 'drop-shadow(0 1px 3px #000)' }}>{targetMark}</div>}
       {/* floating damage/heal numbers */}
       <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 0, pointerEvents: 'none', zIndex: 6 }}>
         {popups.map((p) => (
@@ -690,9 +693,12 @@ function FightView({ fight, narrow, banner, bossUid }) {
         const isTgt = phase === 'select-target' && u.alive && onTargetSide && tgtUids.includes(u.uid);
         const isAct = !isEnemy && selecting && previewUid === u.uid && !isTgt;
         const canSwitch = !isEnemy && (phase === 'select' || (phase === 'select-target' && !tgtAllies)) && pool.includes(u.uid) && previewUid !== u.uid && !isTgt;
+        // a picture for who gets hit: 🎯 pick ONE of these · 💥 hits ALL enemies · ✨ buffs the whole team
+        const mark = isTgt ? (tgtAll ? (tgtAllies ? '✨' : '💥') : '🎯') : null;
         return (
           <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
             isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={targetLabel}
+            targetMark={mark} aoe={isTgt && tgtAll && !tgtAllies}
             burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move} hitN={fx.hitCounts?.[u.uid]} fire={fx.fire}
             boss={u.uid === bossUid}
             onSelect={previewUnit}
