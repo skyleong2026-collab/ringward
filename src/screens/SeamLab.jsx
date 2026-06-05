@@ -313,7 +313,7 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, move }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, move, hitN }) {
   const dead = !u.alive;
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
   const size = boss ? (big ? 122 : 108) : big ? 92 : 78; // the boss looms larger
@@ -323,7 +323,9 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
   const streak = burst === 'attack' ? MOVE_STREAK[move] : null; // bolt travels in, slash swipes
   const fromLeft = u.side === 'B'; // your squad (side A) is on the left, so attacks on enemies fly in from the left
   const trailX = fromLeft ? -1 : 1;
-  const ringDelay = streak ? '.18s' : '0s'; // let the bolt/slash land, then the ring blooms
+  const STAGGER = 0.13; // seconds between staggered hits of a multi-hit move (Jab/Flurry barrage)
+  const nStreaks = streak ? Math.min(hitN || 1, 5) : 0; // a Flurry lands as several quick swipes, not one
+  const ringDelay = `${0.18 + Math.max(0, nStreaks - 1) * STAGGER}s`; // ring blooms after the last hit lands
   const clickable = isTarget || selectable;
   // The unit you're DRIVING (isActor) flashes; other ready units get a calm static
   // outline. The eye should land on who's acting, not on everyone who could act.
@@ -352,8 +354,12 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       </div>
       <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
         {castEf && <div key={`c${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.15, height: size * 1.15, borderRadius: '50%', background: `radial-gradient(circle, ${castEf.color}cc 0%, transparent 70%)`, animation: 'seam-castglow .55s ease-out forwards', pointerEvents: 'none', zIndex: 3 }} />}
-        {streak === 'bolt' && <div key={`b${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.36, height: size * 0.36, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${burstEf.color} 45%, transparent 74%)`, boxShadow: `0 0 16px 4px ${burstEf.color}, ${trailX * -20}px 0 22px ${burstEf.color}aa`, animation: `${fromLeft ? 'seam-bolt-L' : 'seam-bolt-R'} .4s ease-in forwards`, pointerEvents: 'none', zIndex: 4 }} />}
-        {streak === 'slash' && <div key={`s${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.98, height: Math.max(4, size * 0.07), borderRadius: 4, background: `linear-gradient(90deg, transparent, #fff, ${burstEf.color}, transparent)`, boxShadow: `0 0 14px 3px ${burstEf.color}`, animation: 'seam-slash .32s ease-out forwards', pointerEvents: 'none', zIndex: 4 }} />}
+        {streak === 'bolt' && Array.from({ length: nStreaks }).map((_, i) => (
+          <div key={`b${fxN}-${i}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.36, height: size * 0.36, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${burstEf.color} 45%, transparent 74%)`, boxShadow: `0 0 16px 4px ${burstEf.color}, ${trailX * -20}px 0 22px ${burstEf.color}aa`, animation: `${fromLeft ? 'seam-bolt-L' : 'seam-bolt-R'} .4s ease-in forwards`, animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 }} />
+        ))}
+        {streak === 'slash' && Array.from({ length: nStreaks }).map((_, i) => (
+          <div key={`s${fxN}-${i}`} style={{ position: 'absolute', top: `${44 + (i % 2 ? 7 : -3)}%`, left: '50%', width: size * 0.98, height: Math.max(4, size * 0.07), borderRadius: 4, background: `linear-gradient(90deg, transparent, #fff, ${burstEf.color}, transparent)`, boxShadow: `0 0 14px 3px ${burstEf.color}`, animation: 'seam-slash .32s ease-out forwards', animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 }} />
+        ))}
         {burstEf && <div key={`r${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.85, height: size * 0.85, borderRadius: '50%', border: `3px solid ${burstEf.color}`, boxShadow: `0 0 12px ${burstEf.color}`, animation: 'seam-hitring .5s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 4 }} />}
         {burstEf && <div key={`i${fxN}`} style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{impactIcon}</div>}
         <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
@@ -442,11 +448,12 @@ function useFight(opts = {}) {
     // and glow the actor in the move's own color. Then hold so it all plays out.
     if (event.type === 'turn') {
       const bursts = {};
-      (event.hits || []).forEach((h) => { if (h.dmg > 0 || h.killed) bursts[h.uid] = 'attack'; });
+      const hitCounts = {}; // a multi-hit move (Jab/Flurry) lands several hits on one uid — count them so the streak staggers into a real barrage
+      (event.hits || []).forEach((h) => { if (h.dmg > 0 || h.killed) { bursts[h.uid] = 'attack'; hitCounts[h.uid] = (hitCounts[h.uid] || 0) + 1; } });
       (event.shields || []).forEach((s) => { if (s.block > 0 && s.uid) bursts[s.uid] = 'shield'; });
       (event.heals || []).forEach((h) => { if (h.healed > 0) bursts[h.uid] = 'heal'; });
       (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
-      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, n: ++FX_NONCE });
+      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, n: ++FX_NONCE });
       startHold(HOLD_MS[event.skill.kind] ?? 1300); // big payoffs land heavier than chip builders
     } else if (event.type === 'burn') {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, n: ++FX_NONCE });
@@ -614,7 +621,7 @@ function FightView({ fight, narrow, banner, bossUid }) {
         return (
           <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
             isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={targetLabel}
-            burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move}
+            burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move} hitN={fx.hitCounts?.[u.uid]}
             boss={u.uid === bossUid}
             onSelect={previewUnit}
             onPick={chooseTarget} popups={popsFor(u.uid)} />
