@@ -251,6 +251,8 @@ const FX_STYLE = `
 @keyframes seam-alert { 0%,100%{transform:translate(-50%,0) scale(1)} 50%{transform:translate(-50%,-4px) scale(1.18)} }
 @keyframes seam-rise { 0%{opacity:0;transform:translateY(2px) scale(.5)} 25%{opacity:1} 100%{opacity:0;transform:translateY(-30px) scale(.2)} }
 @keyframes seam-aura { 0%,100%{opacity:.35} 50%{opacity:.8} }
+@keyframes seam-point { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-7px)} }
+@keyframes seam-hintglow { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,.15)} 50%{box-shadow:0 0 16px 3px rgba(232,160,64,.85)} }
 `;
 
 // Horizontal focal point (0–1) to crop ONE clear pose out of each wide turnaround
@@ -627,7 +629,7 @@ function useFight(opts = {}) {
 // The move panel that lives in the center "VS" lane — between your squad and the
 // enemy — for whichever unit you're previewing. Tapping a move commits (or asks for
 // a target). Floating it here keeps your eyes in the arena, not in a panel below.
-function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, tgtAll }) {
+function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, tgtAll, hintSkill }) {
   if (!moves) return <span style={{ color: DIM, fontWeight: 900, fontSize: T.head, opacity: 0.5 }}>VS</span>;
   const { unit, skillIds, legalIds } = moves;
   return (
@@ -639,9 +641,11 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
         const chosen = pendingSkill === sid;
         const ef = effectOf(sid);
         const tt = TARGET_TAG[sk.targetMode];
+        const hinted = hintSkill === sid && usable && !chosen; // LEARN points a finger at the move to tap
         return (
           <button key={sid} onClick={usable ? () => onSkill(sid) : undefined} disabled={!usable}
-            style={{ display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%', textAlign: 'left', marginBottom: 6, background: usable ? ef.bg : '#14141c', border: `2px solid ${chosen ? '#fff' : usable ? ef.color : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed', opacity: usable ? 1 : 0.55 }}>
+            style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%', textAlign: 'left', marginBottom: 6, background: usable ? ef.bg : '#14141c', border: `2px solid ${chosen ? '#fff' : hinted ? ACCENT : usable ? ef.color : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed', opacity: usable ? 1 : 0.55, animation: hinted ? 'seam-hintglow 1s ease-in-out infinite' : 'none' }}>
+            {hinted && <span style={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', fontSize: T.head, animation: 'seam-point .7s ease-in-out infinite', pointerEvents: 'none', zIndex: 8, filter: 'drop-shadow(0 1px 3px #000)' }}>👈</span>}
             <span style={{ fontSize: T.label, lineHeight: 1, marginTop: 1, filter: usable ? 'none' : 'grayscale(1)' }}>{ef.icon}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: T.small, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -667,7 +671,7 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
 }
 
 // ── FightView — the shared battlefield + center moves + feed for a live battle. ──
-function FightView({ fight, narrow, banner, bossUid }) {
+function FightView({ fight, narrow, banner, bossUid, hintSkill }) {
   const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill, cancelTarget } = fight;
   if (!snap) return null;
   const selecting = phase === 'select' || phase === 'select-target';
@@ -717,7 +721,7 @@ function FightView({ fight, narrow, banner, bossUid }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
         {side(snap.A, false)}
         <div style={{ flex: moves ? 1.5 : 0.5, minWidth: moves ? 150 : 28, alignSelf: 'center', display: 'flex', justifyContent: 'center' }}>
-          <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} onBack={cancelTarget} tgtAllies={tgtAllies} tgtAll={tgtAll} />
+          <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} onBack={cancelTarget} tgtAllies={tgtAllies} tgtAll={tgtAll} hintSkill={hintSkill} />
         </div>
         {side(snap.B, true)}
       </div>
@@ -1091,30 +1095,38 @@ function LearnMode({ narrow, onGraduate }) {
   }
 
   if (stage === 'intro') {
+    // Wordless on-ramp: the creature, then the ONE idea as a picture —
+    // fill ⚡ ⚡, then it becomes a 💥. No paragraph to read.
+    const chip = (bg, brd, children) => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: bg, border: `2px solid ${brd}`, borderRadius: 12, padding: '10px 14px' }}>{children}</div>
+    );
     return (
-      <div style={{ textAlign: 'center', maxWidth: 520, margin: '0 auto', paddingTop: 6 }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-          <Sprite spriteId="cinder" color={ti.accent} glyph={ti.glyph} size={130} />
+      <div style={{ textAlign: 'center', maxWidth: 520, margin: '0 auto', paddingTop: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+          <Sprite spriteId="cinder" color={ti.accent} glyph={ti.glyph} size={140} />
         </div>
-        <div style={{ fontSize: T.head, fontWeight: 900, color: ti.accent }}>{ti.glyph} The Hothead</div>
-        <div style={{ fontSize: T.body, color: '#cfcfda', lineHeight: 1.6, margin: '12px 0 18px' }}>
-          Meet <b style={{ color: '#eee' }}>Cinderpaw</b>. It's wrapped in flame — so everything it does is fire: it <b style={{ color: BURN }}>Burns</b> enemies, then <b style={{ color: AMP }}>Overloads</b> for a huge hit. <i>A creature's look tells you what it does.</i>
-          <br /><br />
-          One rule runs the whole game: small moves <b>build ⚡charge</b>, then you <b>spend it</b> on a big one. Let's try it on a straw target — no danger.
+        <div style={{ fontSize: T.sub, fontWeight: 900, color: ti.accent, marginBottom: 16 }}>🔥 Cinderpaw</div>
+        {/* the whole game, as a picture: fill charge → spend it big */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
+          {chip('#15120a', CHG, <><ChargeDots value={2} max={2} /><span style={{ fontSize: T.small, fontWeight: 800, color: CHG }}>fill up</span></>)}
+          <span style={{ fontSize: T.head, color: DIM }}>→</span>
+          {chip('#1f0f08', BURN, <><span style={{ fontSize: T.sub }}>💥</span><span style={{ fontSize: T.small, fontWeight: 800, color: '#ff9a5a' }}>BIG HIT</span></>)}
         </div>
-        <button onClick={start} style={{ width: '100%', padding: '15px 0', border: 'none', borderRadius: 12, background: ACCENT, color: '#1a1408', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>TEACH ME →</button>
+        <button onClick={start} style={{ width: '100%', padding: '16px 0', border: 'none', borderRadius: 12, background: ACCENT, color: '#1a1408', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>▶ START 👆</button>
       </div>
     );
   }
 
   const charge = fight.snap?.A?.[0]?.charge ?? 0;
-  let tip;
-  if (stage === 'won') tip = "That's the whole game in one move: build ⚡charge, then spend it big. Each of the six creatures plays this way — and its LOOK tells you its flavor. Ready for a real run?";
-  else if (fight.phase === 'select-target') tip = 'Now tap the enemy to land it.';
-  else if (fight.phase === 'select') tip = charge >= 2
-    ? "You've banked ⚡charge (the dots under Cinderpaw) — pick OVERLOAD in the middle to dump it all into one big fire hit. (Hits even harder on a Burning 🔥 target.)"
-    : 'Pick CHARGE UP in the middle — it fills your ⚡charge dots and sets the enemy on fire 🔥. Do it a couple times to bank charge.';
-  else tip = 'Watch the dots under Cinderpaw — those are ⚡charge.';
+  // Short, picture-led prompts. The finger (hintSkill) points at the exact move to
+  // tap, so a kid can play by following 👈 — no sentence to read.
+  let tip, hintSkill = null;
+  if (stage === 'won') tip = '⚡ build → 💥 spend. You did it! 🎉';
+  else if (fight.phase === 'select-target') tip = '👇 Tap the target!';
+  else if (fight.phase === 'select') {
+    if (charge >= 2) { tip = '💥 Now hit BIG — tap 👈'; hintSkill = 'overload'; }
+    else { tip = '⚡ Fill your power — tap 👈'; hintSkill = 'chargeUp'; }
+  } else tip = '⚡ Watch the dots fill up';
 
   const banner = (
     <div>
@@ -1122,7 +1134,7 @@ function LearnMode({ narrow, onGraduate }) {
       {stage === 'won' && <button onClick={onGraduate} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: WIN, color: '#06120a', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer', marginBottom: 12 }}>START A REAL RUN →</button>}
     </div>
   );
-  return <FightView fight={fight} narrow={narrow} banner={banner} />;
+  return <FightView fight={fight} narrow={narrow} banner={banner} hintSkill={hintSkill} />;
 }
 
 export function SeamLab({ onClose, slag = 0, onSlag }) {
