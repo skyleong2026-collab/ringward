@@ -38,7 +38,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vD-T';
+const VERSION = 'vD-U';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -231,6 +231,16 @@ function App() {
 
   function persistCurrencies(c) {
     try { localStorage.setItem('8gents_currencies', JSON.stringify(c)); } catch { /* best-effort */ }
+  }
+
+  // Add (or spend, if n<0) slag in the ONE shared wallet — so a SEAM run banks into
+  // the same slag the Forge spends. Clamped at 0; persisted immediately.
+  function addSlag(n) {
+    setCurrencies((c) => {
+      const next = { ...c, slag: Math.max(0, (c.slag ?? 0) + n) };
+      persistCurrencies(next);
+      return next;
+    });
   }
 
   // vC-N: recruitable species the player has discovered (via contract wins). A
@@ -1169,7 +1179,7 @@ function App() {
       {showIntro && <IntroFrame onBegin={dismissIntro} />}
       {!showIntro && showGuide && <GuidedCoach onClose={dismissGuide} />}
       {showLab && <ReactorSandbox onClose={() => setShowLab(false)} />}
-      {showSeamLab && <SeamLab onClose={() => setShowSeamLab(false)} />}
+      {showSeamLab && <SeamLab onClose={() => setShowSeamLab(false)} slag={currencies.slag ?? 0} onSlag={addSlag} />}
     </div>
   );
 }

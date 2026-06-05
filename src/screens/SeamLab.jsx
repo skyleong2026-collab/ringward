@@ -140,6 +140,35 @@ const UPGRADES = [
   { id: 'lifebloom', icon: '🌿', color: WIN, name: 'Lifebloom', needsType: 'Mender', desc: 'Mend leaves a regen ward on whoever it heals.', apply: (m) => { m.mendRegen += 1; } },
   { id: 'powerchord', icon: '✦', color: AMP, name: 'Power Chord', needsType: 'Booster', desc: 'Prime amps your WHOLE team, not just the strongest.', apply: (m) => { m.primeTeam = 1; } },
 ];
+
+// ── Permanent PERKS (§ meta) — bought once with slag, they persist across runs and
+// apply at the START of every run. This is what makes a run leave something behind:
+// you bank slag, buy a lasting edge, and the next run begins stronger. ──
+const PERKS = [
+  { id: 'p_hardy', icon: '❤️', color: '#ff6b6b', name: 'Hardy Stock', cost: 60, desc: 'Every run begins with +12% max HP.', apply: (m) => { m.hpMult *= 1.12; } },
+  { id: 'p_spark', icon: '⚡', color: CHG, name: 'Live Wire', cost: 50, desc: 'Start every fight with +1 charge banked.', apply: (m) => { m.chargeStart += 1; } },
+  { id: 'p_edge', icon: '⚔️', color: '#ff8a4a', name: 'Honed Edge', cost: 60, desc: '+12% attack damage, every run.', apply: (m) => { m.dmgMult *= 1.12; } },
+  { id: 'p_foresight', icon: '👁', color: ACCENT, name: 'Foresight', cost: 80, desc: 'See 4 upgrade choices each pick, not 3.', apply: () => {} },
+  { id: 'p_medic', icon: '🌿', color: WIN, name: 'Field Medic', cost: 70, desc: 'Patch up +15% more between fights.', apply: () => {} },
+];
+const PERKS_KEY = '8gents_seam_perks';
+function loadPerks() {
+  try { return JSON.parse(localStorage.getItem(PERKS_KEY) || '[]'); } catch { return []; }
+}
+function savePerks(ids) {
+  try { localStorage.setItem(PERKS_KEY, JSON.stringify(ids)); } catch { /* best-effort */ }
+}
+// Build the starting mods for a run from the perks you own (vs. EMPTY_MODS before).
+function perkBaseMods(owned) {
+  const m = { ...EMPTY_MODS };
+  PERKS.forEach((p) => { if (owned.includes(p.id)) p.apply(m); });
+  return m;
+}
+
+// Slag a run pays out — a full clear banks a lot; a wipe still leaves a little, so
+// every run feeds the meta. Loss scales with how far you pushed.
+const WIN_SLAG = 100;
+const lossSlag = (wavesCleared) => Math.max(5, wavesCleared * 15);
 const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
 const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1));
 
@@ -687,6 +716,17 @@ function BuildStrip({ taken }) {
   );
 }
 
+// The slag a run banked — the thing it left behind. Shown big on win/loss so the
+// reward reads, with the new wallet total beside it.
+function SlagBanked({ earned, balance }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: '#15150c', border: `1px solid #c9c98a55`, borderRadius: 10, padding: '9px 12px', marginBottom: 12 }}>
+      <span style={{ fontSize: T.sub, fontWeight: 900, color: '#e8e89a' }}>⚒ +{earned} slag</span>
+      <span style={{ fontSize: T.small, color: DIM, fontWeight: 700 }}>banked · {balance} total</span>
+    </div>
+  );
+}
+
 // End-of-run recap: the build you drafted + what it actually did this run.
 function RunRecap({ taken, stats, squad }) {
   const survivors = squad.filter((m) => m.hp > 0).length;
@@ -710,7 +750,7 @@ function RunRecap({ taken, stats, squad }) {
 }
 
 // ── RUN MODE — squad pick → (upgrade → wave) ×3 → boss, HP carries, win or wipe. ──
-function RunMode({ narrow }) {
+function RunMode({ narrow, slag = 0, onSlag }) {
   const fight = useFight();
   const [runPhase, setRunPhase] = useState('pick'); // pick | upgrade | fighting | won | lost
   const [picked, setPicked] = useState([]); // creature ids (2–3)
@@ -720,6 +760,19 @@ function RunMode({ narrow }) {
   const [taken, setTaken] = useState([]); // upgrades chosen this run (for the build strip)
   const [offer, setOffer] = useState([]); // 3 upgrade ids on the table now
   const [stats, setStats] = useState({ dmg: 0, biggest: 0, waves: 0 }); // run recap tally
+  const [owned, setOwned] = useState(loadPerks); // permanent perks bought with slag
+  const [earned, setEarned] = useState(0); // slag this run banked (for the recap)
+
+  // Perk-driven dials, recomputed from what you own.
+  const offerCount = owned.includes('p_foresight') ? 4 : 3;
+  const patchup = PATCHUP + (owned.includes('p_medic') ? 0.15 : 0);
+
+  function buyPerk(p) {
+    if (owned.includes(p.id) || slag < p.cost || !onSlag) return;
+    onSlag(-p.cost);
+    const next = [...owned, p.id];
+    setOwned(next); savePerks(next);
+  }
 
   function toggle(id) {
     setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
@@ -729,7 +782,7 @@ function RunMode({ narrow }) {
     const types = new Set(picked.map((id) => COMBAT_CREATURES[id].type));
     const pool = UPGRADES.filter((u) => !u.needsType || types.has(u.needsType));
     const out = [];
-    for (let k = 0; k < 3 && pool.length; k++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
+    for (let k = 0; k < offerCount && pool.length; k++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
     setOffer(out);
   }
 
@@ -745,11 +798,14 @@ function RunMode({ narrow }) {
       let fightDmg = 0, fightBig = 0;
       finalState.log.forEach((e) => { if (e.type === 'turn' && e.actor.side === 'A') (e.hits || []).forEach((h) => { fightDmg += h.dmg || 0; if ((h.dmg || 0) > fightBig) fightBig = h.dmg; }); });
       setStats((s) => ({ dmg: s.dmg + fightDmg, biggest: Math.max(s.biggest, fightBig), waves: s.waves + (won ? 1 : 0) }));
-      if (!won) { setSquad(next); setRunPhase('lost'); return; }
+      if (!won) {
+        const got = lossSlag(idx); onSlag?.(got); setEarned(got); // even a wipe banks a little
+        setSquad(next); setRunPhase('lost'); return;
+      }
       // Patch survivors up a little for the next push.
-      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * PATCHUP)) } : m);
+      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
       setSquad(patched);
-      if (idx === WAVES.length - 1) { setRunPhase('won'); return; }
+      if (idx === WAVES.length - 1) { onSlag?.(WIN_SLAG); setEarned(WIN_SLAG); setRunPhase('won'); return; }
       setWaveIdx(idx + 1); rollOffer(); setRunPhase('upgrade');
     });
     setWaveIdx(idx);
@@ -757,8 +813,9 @@ function RunMode({ narrow }) {
   }
 
   function startRun() {
-    const sq = picked.map((id) => ({ id, hp: COMBAT_CREATURES[id].hp }));
-    setSquad(sq); setRunMods({ ...EMPTY_MODS }); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 });
+    const base = perkBaseMods(owned); // permanent perks set the run's opening mods
+    const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base) }));
+    setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0);
     rollOffer(); setRunPhase('upgrade');
   }
   function applyUpgrade(up) {
@@ -770,7 +827,7 @@ function RunMode({ narrow }) {
     setRunMods(m); setSquad(sq); setTaken((t) => [...t, up]);
     startWave(waveIdx, sq, m);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); }
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
@@ -780,6 +837,32 @@ function RunMode({ narrow }) {
           <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
           <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
             Three packs guard the edge of the ring — Scouts, the Pack, the Warden — and behind them waits the <b style={{ color: '#ffb38a' }}>Hollow King</b>. Clear all four in one push and the approach is yours. Wounds carry between fights; you only patch up a little. Choose who goes in.
+          </div>
+        </div>
+        {/* ── THE FORGE: spend slag banked from past runs on a permanent edge ── */}
+        <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ fontSize: T.sub, color: '#cdb6ff', fontWeight: 900, letterSpacing: 0.5 }}>⚒ THE FORGE</div>
+            <div style={{ fontSize: T.small, fontWeight: 800, color: '#c9c98a' }}>⚒ {slag} slag</div>
+          </div>
+          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Slag you bank from runs buys a <b style={{ color: '#cdb6ff' }}>permanent</b> edge — it carries into every run from here on. This is what a run leaves behind.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+            {PERKS.map((p) => {
+              const have = owned.includes(p.id);
+              const afford = slag >= p.cost;
+              return (
+                <button key={p.id} onClick={() => buyPerk(p)} disabled={have || !afford}
+                  style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: have || !afford ? 'default' : 'pointer',
+                    background: have ? '#10231a' : PANEL, border: `1.5px solid ${have ? WIN : afford ? `${p.color}99` : LINE}`, opacity: !have && !afford ? 0.5 : 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                    <span style={{ fontSize: T.body }}>{p.icon}</span>
+                    <span style={{ fontSize: T.small, fontWeight: 900, color: have ? WIN : p.color }}>{p.name}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: have ? WIN : afford ? '#c9c98a' : DIM }}>{have ? '✓ OWNED' : `${p.cost} ⚒`}</span>
+                  </div>
+                  <div style={{ fontSize: T.micro, color: have ? '#bfe8cf' : '#9a9aaa', lineHeight: 1.35 }}>{p.desc}</div>
+                </button>
+              );
+            })}
           </div>
         </div>
         <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span></div>
@@ -823,7 +906,7 @@ function RunMode({ narrow }) {
       <div>
         <BuildStrip taken={taken} />
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: T.head, fontWeight: 900, color: ACCENT }}>{waveIdx === 0 ? '⛰ Gear up for the approach' : `✓ Wave ${waveIdx} cleared — patched up (+${Math.round(PATCHUP * 100)}% HP)`}</div>
+          <div style={{ fontSize: T.head, fontWeight: 900, color: ACCENT }}>{waveIdx === 0 ? '⛰ Gear up for the approach' : `✓ Wave ${waveIdx} cleared — patched up (+${Math.round(patchup * 100)}% HP)`}</div>
           {nextWave.boss && <div style={{ fontSize: T.sub, fontWeight: 900, color: LOSS, marginTop: 6 }}>💀 FINAL STAND — choose your last upgrade well.</div>}
           <div style={{ fontSize: T.body, color: '#cfcfda', marginTop: 5 }}>Pick <b style={{ color: ACCENT }}>one upgrade</b> for your squad — then face <b style={{ color: nextWave.boss ? '#ffb38a' : '#ddd' }}>{nextWave.name}</b>.</div>
           <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>{nextWave.blurb}</div>
@@ -851,6 +934,7 @@ function RunMode({ narrow }) {
       <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
         <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You broke <b>The Hollow King</b> and cleared the approach.</div>
+        <SlagBanked earned={earned} balance={slag} />
         <RunRecap taken={taken} stats={stats} squad={squad} />
         <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
       </div>
@@ -859,6 +943,7 @@ function RunMode({ narrow }) {
       <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
         <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVES.length}.</div>
+        <SlagBanked earned={earned} balance={slag} />
         <RunRecap taken={taken} stats={stats} squad={squad} />
         <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
       </div>
@@ -1002,7 +1087,7 @@ function LearnMode({ narrow, onGraduate }) {
   return <FightView fight={fight} narrow={narrow} banner={banner} />;
 }
 
-export function SeamLab({ onClose }) {
+export function SeamLab({ onClose, slag = 0, onSlag }) {
   const vw = useViewport();
   const narrow = vw < 760;
   const [tab, setTab] = useState('learn'); // 'learn' | 'run' | 'sandbox'
@@ -1027,7 +1112,7 @@ export function SeamLab({ onClose }) {
           {tabBtn('run', '⚔ RUN')}
           {tabBtn('sandbox', '🔬 Sandbox')}
         </div>
-        {tab === 'learn' ? <LearnMode narrow={narrow} onGraduate={() => setTab('run')} /> : tab === 'run' ? <RunMode narrow={narrow} /> : <Sandbox narrow={narrow} />}
+        {tab === 'learn' ? <LearnMode narrow={narrow} onGraduate={() => setTab('run')} /> : tab === 'run' ? <RunMode narrow={narrow} slag={slag} onSlag={onSlag} /> : <Sandbox narrow={narrow} />}
       </div>
     </div>
   );
