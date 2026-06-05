@@ -345,6 +345,18 @@ const TARGET_TAG = {
   allAllies: { label: 'Whole team', icon: '💥', aoe: true },
 };
 
+// What a move DOES, as a strip of icons instead of a sentence — so a kid can read
+// the kit at a glance. ⚡▲ builds charge, ⚡▼ spends it; then the effect glyphs.
+// (Presentation only; the engine is the source of truth — these just mirror it.)
+const MOVE_FX = {
+  chargeUp: ['⚡▲2', '🔥', '👊'],            overload: ['⚡▼', '💥 big', '🔥×2'],     backdraft: ['⚡▼', '💥 all', '🔥'],
+  brace: ['⚡▲', '🛡 self', '👊'],          aegis: ['⚡▼', '🛡 team'],               bodyguard: ['⚡▼', '🛡 ally'],
+  mend: ['⚡▲', '💚 heal', '👊'],           bloom: ['⚡▼', '💚 big'],                ward: ['⚡▼', '🌿 team'],
+  prime: ['⚡▲', '✦ ally', '👊'],           overdrive: ['⚡▼', '✦ carry'],           resonate: ['⚡▼', '✦ team'],
+  jab: ['⚡▲', '👊👊'],                      flurry: ['⚡▼', '👊 lots'],               blitz: ['⚡▼', '💥 fast'],
+  mark: ['⚡▲', '🎯 hurt'],                 execute: ['⚡▼', '💀 low HP'],            ambush: ['⚡▼', '🗡 weakest'],
+};
+
 // Charge as fill-up dots under a unit — no number to read.
 function ChargeDots({ value, max }) {
   return (
@@ -643,7 +655,7 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
         const tt = TARGET_TAG[sk.targetMode];
         const hinted = hintSkill === sid && usable && !chosen; // LEARN points a finger at the move to tap
         return (
-          <button key={sid} onClick={usable ? () => onSkill(sid) : undefined} disabled={!usable}
+          <button key={sid} onClick={usable ? () => onSkill(sid) : undefined} disabled={!usable} title={sk.blurb}
             style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%', textAlign: 'left', marginBottom: 6, background: usable ? ef.bg : '#14141c', border: `2px solid ${chosen ? '#fff' : hinted ? ACCENT : usable ? ef.color : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed', opacity: usable ? 1 : 0.55, animation: hinted ? 'seam-hintglow 1s ease-in-out infinite' : 'none' }}>
             {hinted && <span style={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', fontSize: T.head, animation: 'seam-point .7s ease-in-out infinite', pointerEvents: 'none', zIndex: 8, filter: 'drop-shadow(0 1px 3px #000)' }}>👈</span>}
             <span style={{ fontSize: T.label, lineHeight: 1, marginTop: 1, filter: usable ? 'none' : 'grayscale(1)' }}>{ef.icon}</span>
@@ -653,7 +665,12 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
                 <span style={{ fontSize: T.micro, color: usable ? ef.color : '#555', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>· {ef.label}</span>
                 {tt && <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.3, padding: '0 6px', borderRadius: 10, whiteSpace: 'nowrap', border: `1px solid ${tt.aoe ? '#ff7a4a' : '#55556a'}`, background: tt.aoe ? '#3a1d10' : 'transparent', color: !usable ? '#555' : tt.aoe ? '#ffb38a' : '#9a9aaa' }}>{tt.icon} {tt.aoe ? 'AOE' : 'SINGLE'}</span>}
               </div>
-              <div style={{ fontSize: T.micro, color: usable ? '#bdbdcb' : '#444', lineHeight: 1.35, marginTop: 2 }}>{sk.blurb}</div>
+              {/* effect strip — icons instead of a sentence, so the kit reads at a glance */}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                {(MOVE_FX[sid] || [sk.blurb]).map((chip, i) => (
+                  <span key={i} style={{ fontSize: T.micro, fontWeight: 800, color: usable ? '#d8d8e2' : '#555', background: usable ? '#00000038' : 'transparent', border: `1px solid ${usable ? ef.color + '55' : '#2a2a36'}`, borderRadius: 7, padding: '1px 6px', whiteSpace: 'nowrap' }}>{chip}</span>
+                ))}
+              </div>
             </span>
           </button>
         );
