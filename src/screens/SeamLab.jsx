@@ -206,6 +206,11 @@ const FX_STYLE = `
 @keyframes seam-targetpulse { 0%,100%{box-shadow:0 0 0 0 rgba(126,211,33,0)} 50%{box-shadow:0 0 14px 3px rgba(126,211,33,.75)} }
 @keyframes seam-iconpop { 0%{transform:translate(-50%,-50%) scale(.3);opacity:0} 28%{opacity:1} 100%{transform:translate(-50%,-115%) scale(1.7);opacity:0} }
 @keyframes seam-castglow { 0%{opacity:0} 35%{opacity:.85} 100%{opacity:0} }
+/* a thrown bolt streaks ACROSS the arena into the target (direction by side) */
+@keyframes seam-bolt-L { 0%{opacity:0;transform:translate(-50%,-50%) translateX(-104px) scale(.45)} 18%{opacity:1} 78%{opacity:1;transform:translate(-50%,-50%) translateX(0) scale(1)} 100%{opacity:0;transform:translate(-50%,-50%) translateX(0) scale(1.25)} }
+@keyframes seam-bolt-R { 0%{opacity:0;transform:translate(-50%,-50%) translateX(104px) scale(.45)} 18%{opacity:1} 78%{opacity:1;transform:translate(-50%,-50%) translateX(0) scale(1)} 100%{opacity:0;transform:translate(-50%,-50%) translateX(0) scale(1.25)} }
+/* a melee slash swipes across the target */
+@keyframes seam-slash { 0%{opacity:0;transform:translate(-50%,-50%) rotate(-28deg) scaleX(.15)} 26%{opacity:1} 60%{opacity:1;transform:translate(-50%,-50%) rotate(-28deg) scaleX(1)} 100%{opacity:0;transform:translate(-50%,-50%) rotate(-28deg) scaleX(1.2)} }
 `;
 
 // Horizontal focal point (0–1) to crop ONE clear pose out of each wide turnaround
@@ -266,6 +271,26 @@ const EFFECT = {
 };
 const effectOf = (sid) => EFFECT[SKILL_EFFECT[sid]] || EFFECT.attack;
 
+// Each move gets its OWN impact read so "the move matches the look" — a signature
+// icon, and how its hit travels: fire-types THROW a bolt across the arena,
+// physical strikers/assassins SWIPE a slash on the target. Color still comes from
+// the effect bucket (attack=orange, etc.) so the learned color language holds.
+const MOVE_ICON = {
+  chargeUp: '🔥', overload: '🔥', backdraft: '💥',
+  jab: '👊', flurry: '⚔️', blitz: '⚡',
+  mark: '🎯', execute: '🗡️', ambush: '🗡️',
+  brace: '🛡️', aegis: '🛡️', bodyguard: '🛡️',
+  mend: '💚', bloom: '🌸', ward: '🌿',
+  prime: '⬆️', overdrive: '🚀', resonate: '🎶',
+};
+// 'bolt' = travels across the arena; 'slash' = melee swipe on the target. Support
+// moves have no streak (they resolve on the ally with the cast glow + ring).
+const MOVE_STREAK = {
+  chargeUp: 'bolt', overload: 'bolt', backdraft: 'bolt',
+  jab: 'slash', flurry: 'slash', blitz: 'slash',
+  mark: 'slash', execute: 'slash', ambush: 'slash',
+};
+
 // Who a move reaches — derived from the engine's targetMode — so you can read at a
 // glance whether it's single-target or hits everyone (AOE).
 const TARGET_TAG = {
@@ -288,12 +313,17 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, move }) {
   const dead = !u.alive;
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
   const size = boss ? (big ? 122 : 108) : big ? 92 : 78; // the boss looms larger
   const burstEf = burst ? EFFECT[burst] : null; // colored impact on whoever was affected
   const castEf = cast ? EFFECT[cast] : null; // the actor briefly glows the move's color
+  const impactIcon = (move && MOVE_ICON[move]) || (burstEf && burstEf.icon); // signature per-move icon
+  const streak = burst === 'attack' ? MOVE_STREAK[move] : null; // bolt travels in, slash swipes
+  const fromLeft = u.side === 'B'; // your squad (side A) is on the left, so attacks on enemies fly in from the left
+  const trailX = fromLeft ? -1 : 1;
+  const ringDelay = streak ? '.18s' : '0s'; // let the bolt/slash land, then the ring blooms
   const clickable = isTarget || selectable;
   // The unit you're DRIVING (isActor) flashes; other ready units get a calm static
   // outline. The eye should land on who's acting, not on everyone who could act.
@@ -322,8 +352,10 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       </div>
       <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
         {castEf && <div key={`c${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.15, height: size * 1.15, borderRadius: '50%', background: `radial-gradient(circle, ${castEf.color}cc 0%, transparent 70%)`, animation: 'seam-castglow .55s ease-out forwards', pointerEvents: 'none', zIndex: 3 }} />}
-        {burstEf && <div key={`r${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.85, height: size * 0.85, borderRadius: '50%', border: `3px solid ${burstEf.color}`, boxShadow: `0 0 12px ${burstEf.color}`, animation: 'seam-hitring .5s ease-out forwards', pointerEvents: 'none', zIndex: 4 }} />}
-        {burstEf && <div key={`i${fxN}`} style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{burstEf.icon}</div>}
+        {streak === 'bolt' && <div key={`b${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.36, height: size * 0.36, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${burstEf.color} 45%, transparent 74%)`, boxShadow: `0 0 16px 4px ${burstEf.color}, ${trailX * -20}px 0 22px ${burstEf.color}aa`, animation: `${fromLeft ? 'seam-bolt-L' : 'seam-bolt-R'} .4s ease-in forwards`, pointerEvents: 'none', zIndex: 4 }} />}
+        {streak === 'slash' && <div key={`s${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.98, height: Math.max(4, size * 0.07), borderRadius: 4, background: `linear-gradient(90deg, transparent, #fff, ${burstEf.color}, transparent)`, boxShadow: `0 0 14px 3px ${burstEf.color}`, animation: 'seam-slash .32s ease-out forwards', pointerEvents: 'none', zIndex: 4 }} />}
+        {burstEf && <div key={`r${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.85, height: size * 0.85, borderRadius: '50%', border: `3px solid ${burstEf.color}`, boxShadow: `0 0 12px ${burstEf.color}`, animation: 'seam-hitring .5s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 4 }} />}
+        {burstEf && <div key={`i${fxN}`} style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{impactIcon}</div>}
         <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
       </div>
       <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -414,7 +446,7 @@ function useFight(opts = {}) {
       (event.shields || []).forEach((s) => { if (s.block > 0 && s.uid) bursts[s.uid] = 'shield'; });
       (event.heals || []).forEach((h) => { if (h.healed > 0) bursts[h.uid] = 'heal'; });
       (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
-      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, n: ++FX_NONCE });
+      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, n: ++FX_NONCE });
       startHold(HOLD_MS[event.skill.kind] ?? 1300); // big payoffs land heavier than chip builders
     } else if (event.type === 'burn') {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, n: ++FX_NONCE });
@@ -582,7 +614,7 @@ function FightView({ fight, narrow, banner, bossUid }) {
         return (
           <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
             isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={targetLabel}
-            burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n}
+            burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move}
             boss={u.uid === bossUid}
             onSelect={previewUnit}
             onPick={chooseTarget} popups={popsFor(u.uid)} />
