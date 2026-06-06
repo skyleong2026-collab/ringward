@@ -1614,6 +1614,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
+  const [targetChoice, setTargetChoice] = useState(null); // who's tentatively selected on the target-pick screen (confirm to commit)
   const [cores, setCores] = useState(loadCores); // {creatureId: unspent Cores ⬡} — permanent
   const [treeAlloc, setTreeAlloc] = useState(loadTreeAlloc); // {creatureId: [nodeId]} unlocked — permanent
   const [treeEquip, setTreeEquip] = useState(loadEquip); // {creatureId: [nodeId]} equipped loadout
@@ -1850,7 +1851,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2143,8 +2144,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           })}
         </div>
         {(() => {
+          // The ring picker is the RUN selector — it always shows (even with everything
+          // caught, you still pick a ring to raid for Cores + boss clears that open the
+          // way inward). It just stops being a "hunt" once the catch pool is empty.
           const lockedIds = COMBAT_ROSTER.map((c) => c.id).filter((id) => !stable.includes(id));
-          if (lockedIds.length === 0) return null;
           const lockedSet = new Set(lockedIds);
           // Uncaught creatures this ground leans toward — what you're hunting for.
           const targetsOf = (g) => g.biasIds.filter((id) => lockedSet.has(id));
@@ -2155,8 +2158,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <span style={{ fontSize: 16, lineHeight: 1 }}>🧭</span>
-                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO HUNT</div>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length} grunling{lockedIds.length !== 1 ? 's' : ''} still out there</span>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO RAID</div>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length > 0 ? `${lockedIds.length} grunling${lockedIds.length !== 1 ? 's' : ''} still out there` : 'all grunlings caught'}</span>
               </div>
               {/* Ring picker — choose where to push; it biases who you draw out on a clear. */}
               <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 7, marginBottom: 10 }}>
@@ -2168,19 +2171,18 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   const on = !locked && g.id === sel.id;
                   const glyphs = [...new Set(g.biasIds.map((id) => TYPE_INFO[COMBAT_CREATURES[id].type].glyph))].join('');
                   return (
-                    <button key={g.id} onClick={() => { if (!locked) { setGround(g.id); saveGround(g.id); } }} disabled={locked || cleared}
-                      style={{ textAlign: 'left', cursor: locked || cleared ? 'default' : 'pointer', borderRadius: 10, padding: '8px 9px',
-                        background: on ? '#16202e' : PANEL, border: `1.5px solid ${on ? SEL : locked ? '#23232e' : LINE}`, opacity: locked ? 0.5 : cleared ? 0.4 : 1,
+                    <button key={g.id} onClick={() => { if (!locked) { setGround(g.id); saveGround(g.id); } }} disabled={locked}
+                      style={{ textAlign: 'left', cursor: locked ? 'default' : 'pointer', borderRadius: 10, padding: '8px 9px',
+                        background: on ? '#16202e' : PANEL, border: `1.5px solid ${on ? SEL : locked ? '#23232e' : LINE}`, opacity: locked ? 0.5 : 1,
                         boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ fontSize: T.small }}>{locked ? '🔒' : glyphs}</span>
                         <span style={{ fontSize: T.micro, fontWeight: 900, color: on ? '#eaf2ff' : '#cfcfda', lineHeight: 1.15 }}>{g.name}</span>
                         <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 9, fontWeight: 900, color: ti.color, letterSpacing: 0.3 }} title={`Tier ${tierOfDepth(g.depth)} · ${ti.name}`}>{ti.pips}</span>
                       </div>
-                      <div style={{ fontSize: T.micro, color: locked ? '#6a6a7a' : cleared ? WIN : on ? '#9be7ff' : DIM, fontWeight: 700, marginTop: 3 }}>
+                      <div style={{ fontSize: T.micro, color: locked ? '#6a6a7a' : on ? '#9be7ff' : DIM, fontWeight: 700, marginTop: 3 }}>
                         {locked ? `🔒 ${ti.name} · fight deeper to reach`
-                          : cleared ? '✓ cleared out'
-                          : <><span style={{ color: diffOf(g.depth).color }}>{diffOf(g.depth).label}</span> · likely: {targets.map((id) => COMBAT_CREATURES[id].name).join(', ')}</>}
+                          : <><span style={{ color: diffOf(g.depth).color }}>{diffOf(g.depth).label}</span> · {cleared ? <span style={{ color: WIN }}>✓ all caught — run for Cores</span> : `likely: ${targets.map((id) => COMBAT_CREATURES[id].name).join(', ')}`}</>}
                       </div>
                     </button>
                   );
@@ -2262,7 +2264,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const fighters = eligible.length > 0 ? eligible : squad.filter((m) => m.hp > 0);
     return (
       <div>
-        <button onClick={() => { setPendingUpgrade(null); setRunPhase('upgrade'); }}
+        <button onClick={() => { setTargetChoice(null); setPendingUpgrade(null); setRunPhase('upgrade'); }}
           style={{ padding: '7px 12px', borderRadius: 9, border: `1px solid ${LINE}`, background: PANEL, color: '#bbb', fontSize: T.small, fontWeight: 800, cursor: 'pointer', marginBottom: 10 }}>
           ← Back · pick a different upgrade
         </button>
@@ -2274,18 +2276,20 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 6, maxWidth: 340, margin: '6px auto 0' }}>{up.desc}</div>
           <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 900, marginTop: 12, letterSpacing: 0.5 }}>↓ Who gets it?</div>
         </div>
-        {/* Squad member picker */}
+        {/* Squad member picker — tap to SELECT, then CONFIRM (avoids mis-taps, esp. with
+            two of the same Type). */}
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : `repeat(${fighters.length}, 1fr)`, gap: 12 }}>
           {fighters.map((mem) => {
             const c = COMBAT_CREATURES[mem.id];
             const ti = TYPE_INFO[c.type];
+            const chosen = targetChoice === mem.id;
             return (
-              <button key={mem.id} onClick={() => pickTarget(mem.id)}
-                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 14, padding: '14px 12px', background: PANEL, border: `2.5px solid ${ti.accent}88`, boxShadow: `0 0 16px ${ti.accent}22`, transition: 'border-color .15s' }}>
+              <button key={mem.id} onClick={() => setTargetChoice(mem.id)}
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 14, padding: '14px 12px', background: chosen ? '#16202e' : PANEL, border: `2.5px solid ${chosen ? up.color : `${ti.accent}88`}`, boxShadow: chosen ? `0 0 18px ${up.color}66` : `0 0 16px ${ti.accent}22`, transition: 'border-color .15s' }}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
                   <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={68} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {c.name}</div>
+                    <div style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {c.name}{chosen && <span style={{ color: up.color }}> ✓</span>}</div>
                     <div style={{ fontSize: T.small, color: '#ccc', fontWeight: 700 }}>{ti.nick}</div>
                     <div style={{ fontSize: T.micro, color: '#888', marginTop: 2 }}>{mem.hp}/{maxHpOf(mem, runMods)} HP</div>
                   </div>
@@ -2301,11 +2305,16 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 {(mem.bends ?? []).length === 0 && (
                   <div style={{ fontSize: T.micro, color: '#555', fontStyle: 'italic' }}>No bends yet</div>
                 )}
-                <div style={{ marginTop: 8, padding: '7px 10px', background: `${up.color}18`, border: `1px solid ${up.color}55`, borderRadius: 8, textAlign: 'center', fontSize: T.small, fontWeight: 800, color: up.color }}>Give this one {up.name}</div>
+                <div style={{ marginTop: 8, padding: '7px 10px', background: chosen ? up.color : `${up.color}18`, border: `1px solid ${up.color}55`, borderRadius: 8, textAlign: 'center', fontSize: T.small, fontWeight: 800, color: chosen ? '#0a0a14' : up.color }}>{chosen ? `✓ ${c.name} selected` : `Give this one ${up.name}`}</div>
               </button>
             );
           })}
         </div>
+        {/* Confirm the selection */}
+        <button onClick={() => { if (targetChoice) { const t = targetChoice; setTargetChoice(null); pickTarget(t); } }} disabled={!targetChoice}
+          style={{ width: '100%', marginTop: 14, padding: '14px 0', borderRadius: 12, border: 'none', background: targetChoice ? up.color : '#222', color: targetChoice ? '#0a0a14' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 0.5, cursor: targetChoice ? 'pointer' : 'default' }}>
+          {targetChoice ? `CONFIRM — give ${COMBAT_CREATURES[targetChoice].name} ${up.name} →` : 'TAP A CREATURE ABOVE'}
+        </button>
       </div>
     );
   }
