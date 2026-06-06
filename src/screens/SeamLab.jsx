@@ -12,6 +12,7 @@
 // instantly. The same <FightView> + useFight() power both modes.
 
 import { useState, useRef, useEffect } from 'react';
+import * as sfx from '../sfx.js';
 import {
   createBattleState,
   runBattle,
@@ -559,12 +560,22 @@ function useFight(opts = {}) {
       (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
       setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, fire: FIRE_MOVES.has(event.skill.id), n: ++FX_NONCE });
       startHold(HOLD_MS[event.skill.kind] ?? 1300); // big payoffs land heavier than chip builders
+      // ── Sound: cast type sets the signature, then secondary effects layer on top ──
+      const kind = event.skill.kind;
+      if (kind === 'builder') sfx.chargeUp();
+      else if (kind === 'payoff') sfx.payoff();
+      else if (kind === 'wildcard') sfx.wildcard();
+      if ((event.shields || []).some((s) => s.block > 0)) sfx.shieldAbsorb();
+      if ((event.heals  || []).some((h) => h.healed > 0)) sfx.healLand();
+      if ((event.amps   || []).length)                     sfx.ampStack();
     } else if (event.type === 'burn') {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, fire: true, n: ++FX_NONCE });
       startHold(TICK_HOLD_MS);
+      sfx.burnTick();
     } else if (event.type === 'regen') {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'heal' }, n: ++FX_NONCE });
       startHold(TICK_HOLD_MS);
+      sfx.regenTick();
     }
     const adds = popupsForEvent(event).map((a) => ({ ...a, id: ++POP_ID }));
     if (adds.length) {
@@ -877,7 +888,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       setStats((s) => ({ dmg: s.dmg + fightDmg, biggest: Math.max(s.biggest, fightBig), waves: s.waves + (won ? 1 : 0) }));
       if (!won) {
         const got = lossSlag(idx); onSlag?.(got); setEarned(got); // even a wipe banks a little
-        setSquad(next); setRunPhase('lost'); return;
+        setSquad(next); sfx.squadDown(); setRunPhase('lost'); return;
       }
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
@@ -889,8 +900,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         const caught = locked.length > 0 ? locked[Math.floor(Math.random() * locked.length)] : null;
         if (caught) { const next = [...stable, caught.id]; setStable(next); saveStable(next); }
         setCaughtNow(caught);
+        sfx.ringTaken();
+        if (caught) setTimeout(() => sfx.caughtCreature(), 720);
         setRunPhase('won'); return;
       }
+      sfx.waveClear();
       setWaveIdx(idx + 1); rollOffer(); setRunPhase('upgrade');
     });
     setWaveIdx(idx);
@@ -898,12 +912,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
 
   function startRun() {
+    sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
     const base = perkBaseMods(owned); // permanent perks set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base) }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0);
     rollOffer(); setRunPhase('upgrade');
   }
   function applyUpgrade(up) {
+    sfx.upgradePick();
     const m = { ...runMods }; up.apply(m);
     let sq = squad;
     if (m.hpMult !== runMods.hpMult) {

@@ -1159,7 +1159,7 @@ function App() {
       )}
 
       {showIntro && <IntroFrame onBegin={dismissIntro} />}
-      {!showIntro && showGuide && <GuidedCoach onClose={dismissGuide} />}
+      {/* GuidedCoach suppressed — explains old game loop, SEAM's LEARN mode covers the on-ramp now */}
       {showSeamLab && <SeamLab onClose={() => setShowSeamLab(false)} slag={currencies.slag ?? 0} onSlag={addSlag} />}
     </div>
   );
