@@ -238,6 +238,9 @@ function loadTreeAlloc() { try { return JSON.parse(localStorage.getItem(TREE_KEY
 function saveTreeAlloc(m) { try { localStorage.setItem(TREE_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 function loadEquip() { try { return JSON.parse(localStorage.getItem(EQUIP_KEY) || '{}') || {}; } catch { return {}; } }
 function saveEquip(m) { try { localStorage.setItem(EQUIP_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+const AUTO_KEY = '8gents_seam_auto';
+function loadAuto() { try { return localStorage.getItem(AUTO_KEY) === '1'; } catch { return false; } }
+function saveAuto(on) { try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
 
 // Progressive Cores: a deeper wave pays more, so pushing the climb funds the tree.
 // Front-loaded so a build forms FAST early: Scouts→4, Pack→5, Warden→6, King→7+10.
@@ -846,12 +849,13 @@ function useFight(opts = {}) {
   const feedBoxRef = useRef(null);
   const onDoneRef = useRef(null);
   const holdRef = useRef(Promise.resolve()); // the current "action hold"; transitions await it
+  const speedRef = useRef(1); // hold multiplier — AUTO mode runs faster (still watchable)
 
   useEffect(() => { if (feedBoxRef.current) feedBoxRef.current.scrollTop = feedBoxRef.current.scrollHeight; }, [feed]);
 
   // Open a fresh action hold: the next actor-request (either side) awaits this, so
-  // the hit animates and input stays locked until the beat passes.
-  function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, ms)); }
+  // the hit animates and input stays locked until the beat passes. AUTO scales it down.
+  function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, Math.round(ms * speedRef.current))); }
 
   // Look up the actor's mods from the live engine state so we can detect which
   // bend (if any) fired on this turn without touching the engine event format.
@@ -991,8 +995,13 @@ function useFight(opts = {}) {
     stateRef.current = state;
     setSnap(snapshot(state));
     setPhase('idle');
+    // AUTO mode: the AI drives BOTH sides but PACED (so you watch your build fight),
+    // at ~2× speed. WATCH = instant AI-vs-AI. PLAY = you drive side A.
+    speedRef.current = mode === 'auto' ? 0.5 : 1;
     const drivers = mode === 'watch'
       ? { A: createAIDriver(), B: createAIDriver() }
+      : mode === 'auto'
+      ? { A: pacedAIDriver(holdRef), B: pacedAIDriver(holdRef) }
       : { A: createHumanDriver({ requestActor, requestDecision }), B: pacedAIDriver(holdRef) };
     runBattle(state, drivers, emit).then((res) => { setPhase('done'); if (onDoneRef.current) onDoneRef.current(res, state); });
   }
@@ -1273,6 +1282,27 @@ function RunRecap({ taken, stats, squad }) {
   );
 }
 
+// AUTO vs MANUAL toggle — pick who drives YOUR squad this wave. AUTO lets the AI
+// fight (paced, ~2× speed) so you blitz content you've mastered; flip to MANUAL for
+// the fights that actually need you. This is the auto-battler-with-spikes loop.
+function AutoToggle({ auto, setAuto }) {
+  const opt = (on, icon, label, sub) => (
+    <button onClick={() => setAuto(on)}
+      style={{ flex: 1, textAlign: 'center', cursor: 'pointer', borderRadius: 10, padding: '8px 10px',
+        background: auto === on ? (on ? '#14233a' : '#1a1410') : PANEL,
+        border: `2px solid ${auto === on ? (on ? '#5aa9ff' : ACCENT) : LINE}`, opacity: auto === on ? 1 : 0.7 }}>
+      <div style={{ fontSize: T.small, fontWeight: 900, color: auto === on ? (on ? '#9be7ff' : ACCENT) : '#9a9aaa' }}>{icon} {label}</div>
+      <div style={{ fontSize: T.micro, color: DIM, marginTop: 1 }}>{sub}</div>
+    </button>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      {opt(true, '⚡', 'AUTO', 'AI fights for you')}
+      {opt(false, '🎮', 'MANUAL', 'you drive every turn')}
+    </div>
+  );
+}
+
 // ── RUN MODE — squad pick → (upgrade → wave) ×3 → boss, HP carries, win or wipe. ──
 function RunMode({ narrow, slag = 0, onSlag }) {
   const fight = useFight();
@@ -1294,6 +1324,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [treeEquip, setTreeEquip] = useState(loadEquip); // {creatureId: [nodeId]} equipped loadout
   const [treeFor, setTreeFor] = useState(null); // creatureId whose skill tree is open (overlay)
   const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
+  const [auto, setAutoState] = useState(loadAuto); // AUTO: let the AI fight your squad
+  const setAuto = (on) => { setAutoState(on); saveAuto(on); };
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
@@ -1363,7 +1395,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
     const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip)));
-    fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, 'play', (res, finalState) => {
+    fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, auto ? 'auto' : 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
       const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
@@ -1745,6 +1777,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <div style={{ fontSize: T.body, color: '#cfcfda', marginTop: 5 }}>Pick <b style={{ color: ACCENT }}>one upgrade</b> for your squad — then face <b style={{ color: nextWave.boss ? '#ffb38a' : '#ddd' }}>{nextWave.name}</b>.</div>
           <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>{nextWave.blurb}</div>
         </div>
+        <AutoToggle auto={auto} setAuto={setAuto} />
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
           {offer.map((id) => {
             const up = UPGRADE_BY_ID[id];
@@ -1816,8 +1849,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             border: w.boss ? `1px solid ${LOSS}99` : 'none' }} />
         ))}
       </div>
-      <div style={{ fontSize: T.small, color: DIM, marginBottom: 10 }}>
-        <b style={{ color: wave.boss ? '#ffb38a' : '#ddd' }}>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVES.length} · {wave.name}</b> — {wave.blurb}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{ fontSize: T.small, color: DIM, flex: 1 }}>
+          <b style={{ color: wave.boss ? '#ffb38a' : '#ddd' }}>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVES.length} · {wave.name}</b> — {wave.blurb}
+        </div>
+        {runPhase === 'fighting' && auto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
       </div>
       <BuildStrip taken={taken} />
       <FightView fight={fight} narrow={narrow} banner={banner} bossUid={wave.boss ? 'B0' : null} />
@@ -1963,15 +1999,17 @@ export function SeamLab({ onClose, slag = 0, onSlag, version }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(6,6,12,0.98)', zIndex: 9999, overflowY: 'auto', fontFamily: 'system-ui, sans-serif' }}>
       <style>{FX_STYLE}</style>
+      {/* Version badge pinned to the viewport so it's visible everywhere — including
+          mid-battle when the header has scrolled away. */}
+      {version && <div style={{ position: 'fixed', top: 6, right: 8, zIndex: 10000, fontSize: 10, color: '#cfcfd8', background: 'rgba(26,26,34,0.92)', padding: '3px 8px', borderRadius: 4, letterSpacing: 1, fontFamily: 'monospace', border: '1px solid #444', fontWeight: 600, pointerEvents: 'none' }}>{version}</div>}
       <div style={{ maxWidth: 920, margin: '0 auto', padding: narrow ? '14px 12px 48px' : '18px 18px 56px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: T.head, fontWeight: 900, color: '#e86040', letterSpacing: 2 }}>RINGWARD</div>
             <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>Manual combat · charge, spend, build.</div>
           </div>
-          {/* Version badge (the run is the home screen now, so it lives here, not in the
-              App header behind this overlay). No "← ROSTER" exit — the run IS the game. */}
-          {version && <span style={{ fontSize: 10, color: '#ddd', background: '#1a1a22', padding: '3px 8px', borderRadius: 4, letterSpacing: 1, fontFamily: 'monospace', border: '1px solid #444', fontWeight: 600 }}>{version}</span>}
+          {/* Version shown as a fixed corner badge (above) so it survives battle scroll.
+              No "← ROSTER" exit — the run IS the game. */}
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {tabBtn('learn', '🎓 LEARN')}
