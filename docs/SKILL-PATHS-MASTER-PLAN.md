@@ -3,6 +3,28 @@
 **Date:** 2026-06-06 · **Status:** Phase 1 SHIPPING (vF-A) · decisions locked below
 **Builds on:** `COMBAT-BUILDCRAFT-VISION.md` (this is the concrete Layer B/C realization)
 
+---
+
+## Discovery, farming & recruitment (designed 2026-06-06 from Sky's ideas — NOT built yet)
+
+The roster should feel like a *place to explore*, not a random drip. The pieces:
+
+1. **Rumors / preview lore — SHIPPED (vF-J).** Each uncaught grunling has a whispered hint (`CREATURE_LORE` in SeamLab) + where it's said to roam, shown on the pick screen. Builds intrigue and seeds the systems below ("the frostbound deep, far inward").
+
+2. **Hunting grounds — areas that bias encounters (TODO).** Instead of catching one *random* locked creature per clear, let the player choose *where* to push — an area/ring biases which creatures you're likely to draw out. "Hunt the burn-scars → higher odds of Cinderpaw." Turns farming into a directed search. The auto-battler is the farm engine; the area is the filter.
+
+3. **Gather-to-unlock higher tiers (TODO).** Higher-tier / rarer creatures aren't caught by a normal clear — you **gather pieces** (a token/sigil that drops from specific areas or bosses), and enough pieces **unlock an encounter** with that creature. The encounter is a **battle you must win to recruit it** ("battle it for a chance to win it over" — Pokémon/SW catch-by-defeat). So: farm area → collect pieces → unlock the named encounter → beat it → it joins your stable. This gives long-tail goals and makes the deep roster feel earned, not granted.
+
+4. **Tiering.** Implies creatures have rarity/power tiers (common = clear-caught, rare = piece-gated, apex = multi-piece + hard encounter). Wardens and future apex types fit the top tier — the "far inward" lore already hints at this.
+
+How it composes with the loop: auto-battle clears mastered areas (farm) → pieces accrue → unlock an apex encounter → switch to MANUAL for that hard fight → win → new specialist to build. Every system already shipped feeds this.
+
+## FUTURE THOUGHT — visual evolution by build (post-release; do not build yet)
+
+Sky's idea, parked for later: **a creature's *appearance* changes as you fill its skill paths** — each node/path fulfilled visibly alters its look, so a maxed burn-Reactor looks different from a maxed blast-Reactor, and your build is legible at a glance on the sprite itself. Big art + sprite-compositing effort (layered/tinted overlays per path, or per-keystone sprite variants). Strong long-term identity/flex payoff; revisit once the sprite pipeline can support layered states. Cheap interim version: a build-colored aura / path-glyph badge on the sprite (no new art). Keeping it here so it isn't lost.
+
+---
+
 ## Respec / "everyone maxes everything" — resolved with Model B (vF-C)
 The worry: passives don't clash, so a fully-bought creature just has everything on = power creep with no choice. Fix shipped: **unlock-permanent, equip-per-run loadout (Model B).** Cores *unlock* nodes forever (accumulation never lost); each creature *equips* only `LOADOUT_SLOTS` (=4) at a time, swappable free anytime. Choice survives forever even on a maxed creature; no feel-bad respec. The loadout cap is the power-creep dial. (Classic respec = Model A, rejected: doesn't fix the flaw + refunding feels bad.) When keystones unseal, the loadout is also where clashing keystones force a pick.
 

@@ -59,6 +59,28 @@ const TYPE_INFO = {
   Warden: { glyph: '❄', accent: '#8fd8ff', nick: 'The Jailer', role: 'Freezes enemies out of their turns.' },
 };
 
+// ── Rumors of the grunlings still out there (preview/hint lore). Folk-mystery tone:
+// each is a whisper about a creature you haven't caught yet + where it's said to roam.
+// Surfaced on the pick screen so the unknown roster feels like a place to explore.
+// (Seeds the future discovery system — rings/areas raise the odds of meeting one.)
+const CREATURE_LORE = {
+  fizzpop:    { rumor: 'A spark that never settles — it hoards fire, then lets it all go at once.', where: 'the crackling outer ring' },
+  glowtail:   { rumor: 'Its tail-light pulses brighter the longer a fight drags on.', where: 'dusk-lit hollows near the edge' },
+  cinderpaw:  { rumor: 'Walks on embers; whatever it touches smolders for days.', where: 'old burn-scars on the approach' },
+  stoneward:  { rumor: 'A walking wall. They say siege engines broke against it and it never moved.', where: 'the rubble of a fallen gate' },
+  ironwall:   { rumor: 'Older than the blight. It guards, it does not attack — and it does not fall.', where: 'a sealed keep, deeper in' },
+  mossback:   { rumor: 'Where it sleeps, the wounded wake whole. Hunters leave it be.', where: 'a green seam between the rings' },
+  dewleaf:    { rumor: 'It weeps a water that knits flesh. Rare, and quick to flee.', where: 'mist-fed glades at first light' },
+  buzzline:   { rumor: 'Latches onto a stronger creature and makes its blows land twice as hard.', where: 'storm-wire thickets' },
+  tanglewing: { rumor: 'Hums a note that lifts a whole pack at once — never fights alone.', where: 'wind-tunnels between cliffs' },
+  swiftpaw:   { rumor: 'Gone before you see it move. Strikes a dozen times in a breath.', where: 'the fast, narrow trails' },
+  dartwing:   { rumor: 'Always acts first. The fastest thing anyone has lived to describe.', where: 'high ledges on the inner climb' },
+  shadefang:  { rumor: 'Hunts only the wounded. It waits for the kill, then takes it.', where: 'the deep dark past the Warden' },
+  veilclaw:   { rumor: 'A killer wrapped in shadow — the weaker you are, the harder it bites.', where: 'the lightless inner rings' },
+  frostwarden:{ rumor: 'A cold so total it stops a creature mid-step. Time seems to freeze around it.', where: 'the frostbound deep, far inward' },
+  rimecaller: { rumor: 'It calls down a stillness over a whole battlefield. Few have seen one and moved again.', where: 'the silent rings near the Drop' },
+};
+
 function useViewport() {
   const [w, setW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1024));
   useEffect(() => {
@@ -849,13 +871,15 @@ function useFight(opts = {}) {
   const feedBoxRef = useRef(null);
   const onDoneRef = useRef(null);
   const holdRef = useRef(Promise.resolve()); // the current "action hold"; transitions await it
-  const speedRef = useRef(1); // hold multiplier — AUTO mode runs faster (still watchable)
+  const autoRef = useRef(false); // is the AI driving side A right now? (live-switchable mid-fight)
+  const aiRef = useRef(createAIDriver()); // persistent AI brain for AUTO / take-over
+  const [autoLive, setAutoLive] = useState(false); // mirror of autoRef for the in-battle button
 
   useEffect(() => { if (feedBoxRef.current) feedBoxRef.current.scrollTop = feedBoxRef.current.scrollHeight; }, [feed]);
 
-  // Open a fresh action hold: the next actor-request (either side) awaits this, so
-  // the hit animates and input stays locked until the beat passes. AUTO scales it down.
-  function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, Math.round(ms * speedRef.current))); }
+  // Open a fresh action hold: the next actor-request (either side) awaits this, so the
+  // hit animates and input stays locked until the beat passes. AUTO runs ~2× faster.
+  function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, Math.round(ms * (autoRef.current ? 0.5 : 1)))); }
 
   // Look up the actor's mods from the live engine state so we can detect which
   // bend (if any) fired on this turn without touching the engine event format.
@@ -995,19 +1019,44 @@ function useFight(opts = {}) {
     stateRef.current = state;
     setSnap(snapshot(state));
     setPhase('idle');
-    // AUTO mode: the AI drives BOTH sides but PACED (so you watch your build fight),
-    // at ~2× speed. WATCH = instant AI-vs-AI. PLAY = you drive side A.
-    speedRef.current = mode === 'auto' ? 0.5 : 1;
+    // AUTO drives side A with the AI; MANUAL hands it to you. The SAME driver decides
+    // per turn by reading autoRef, so you can flip mid-battle (see setLiveAuto). Holds
+    // run ~2× faster while auto. WATCH = instant AI-vs-AI (unchanged).
+    autoRef.current = (mode === 'auto');
+    const ai = aiRef.current;
+    const switchable = {
+      async chooseNextActor(pool, st) {
+        if (autoRef.current) {
+          await holdRef.current;
+          if (autoRef.current) return ai.chooseNextActor(pool, st); // re-check: may have flipped during the hold
+        }
+        return requestActor(pool, st);
+      },
+      decide(actor, st) { return autoRef.current ? ai.decide(actor, st) : requestDecision(); },
+    };
     const drivers = mode === 'watch'
       ? { A: createAIDriver(), B: createAIDriver() }
-      : mode === 'auto'
-      ? { A: pacedAIDriver(holdRef), B: pacedAIDriver(holdRef) }
-      : { A: createHumanDriver({ requestActor, requestDecision }), B: pacedAIDriver(holdRef) };
+      : { A: switchable, B: pacedAIDriver(holdRef) };
     runBattle(state, drivers, emit).then((res) => { setPhase('done'); if (onDoneRef.current) onDoneRef.current(res, state); });
+  }
+
+  // Flip side A between AI (auto) and you (manual) MID-BATTLE. Turning auto ON while
+  // the engine is waiting for your tap resolves that pending turn with an AI move so
+  // play resumes immediately; turning it OFF just hands you the next turn.
+  function setLiveAuto(on) {
+    autoRef.current = on;
+    setAutoLive(on);
+    if (on && commitRef.current && poolRef.current && battleRef.current) {
+      const ai = aiRef.current;
+      const actor = ai.chooseNextActor(poolRef.current, battleRef.current);
+      const decision = ai.decide(actor, battleRef.current);
+      const commit = commitRef.current; commitRef.current = null;
+      commit(actor, decision);
+    }
   }
   function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setPool([]); setPreviewUid(null); setPendingSkill(null); setFx({ actor: null, cast: null, bursts: {}, n: 0 }); setPopups([]); holdRef.current = Promise.resolve(); }
 
-  return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, cancelTarget, previewMoves, begin, reset };
+  return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, cancelTarget, previewMoves, begin, reset, setLiveAuto, autoLive };
 }
 
 // The move panel that lives in the center "VS" lane — between your squad and the
@@ -1060,7 +1109,7 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
 }
 
 // ── FightView — the shared battlefield + center moves + feed for a live battle. ──
-function FightView({ fight, narrow, banner, bossUid, hintSkill }) {
+function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAuto }) {
   const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill, cancelTarget } = fight;
   if (!snap) return null;
   const selecting = phase === 'select' || phase === 'select-target';
@@ -1103,8 +1152,20 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill }) {
   const prompt = phase === 'select' ? '👆 Tap a unit (switch freely), then pick its move in the middle'
     : phase === 'select-target' ? (tgtAll ? `🎯 Tap to confirm — ${verb.toLowerCase()}s ${tgtAllies ? 'your whole team' : 'ALL enemies'}` : `🎯 Tap ${tgtAllies ? 'an ally' : 'an enemy'} to ${verb.toLowerCase()}`)
     : null;
+  const live = phase !== 'done'; // an active fight — show the in-battle auto/manual switch
   return (
     <div>
+      {/* In-battle switch: take over an auto fight, or hand it back. Flips instantly. */}
+      {onToggleAuto && live && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+          <button onClick={() => onToggleAuto(!auto)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', borderRadius: 9, padding: '6px 14px',
+              background: auto ? '#14233a' : '#1a1410', border: `2px solid ${auto ? '#5aa9ff' : ACCENT}`,
+              color: auto ? '#9be7ff' : ACCENT, fontSize: T.small, fontWeight: 900 }}>
+            {auto ? '⚡ AUTO — tap to 🎮 TAKE OVER' : '🎮 MANUAL — tap to ⚡ go AUTO'}
+          </button>
+        </div>
+      )}
       {prompt && <div style={{ textAlign: 'center', fontSize: T.body, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>{prompt}</div>}
       {/* The arena: your squad — center move lane — the enemy */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
@@ -1692,15 +1753,23 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           })}
         </div>
         {(() => {
-          const lockedCount = COMBAT_ROSTER.length - stable.length;
-          if (lockedCount === 0) return null;
+          const lockedIds = COMBAT_ROSTER.map((c) => c.id).filter((id) => !stable.includes(id));
+          if (lockedIds.length === 0) return null;
+          // Show a few rumors — a window onto who's still out there to seek out.
+          const hints = lockedIds.filter((id) => CREATURE_LORE[id]).slice(0, 3);
           return (
-            <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '10px 14px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 18, lineHeight: 1 }}>🔒</span>
-              <div>
-                <div style={{ fontSize: T.small, fontWeight: 900, color: DIM }}>{lockedCount} creature{lockedCount !== 1 ? 's' : ''} still out there</div>
-                <div style={{ fontSize: T.micro, color: '#666' }}>Clear the ring to catch one. Win runs to fill your stable.</div>
+            <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: hints.length ? 8 : 0 }}>
+                <span style={{ fontSize: 16, lineHeight: 1 }}>🔒</span>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: DIM }}>{lockedIds.length} grunling{lockedIds.length !== 1 ? 's' : ''} still out there</div>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>rumors from the rings</span>
               </div>
+              {hints.map((id) => (
+                <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
+                  <span style={{ color: '#a99' }}>“{CREATURE_LORE[id].rumor}”</span> <span style={{ color: '#666' }}>— {CREATURE_LORE[id].where}.</span>
+                </div>
+              ))}
+              <div style={{ fontSize: T.micro, color: '#666', marginTop: 8, paddingLeft: 24 }}>Clear the ring to draw one out. (Soon: seek specific creatures by where you hunt.)</div>
             </div>
           );
         })()}
@@ -1856,7 +1925,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {runPhase === 'fighting' && auto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
       </div>
       <BuildStrip taken={taken} />
-      <FightView fight={fight} narrow={narrow} banner={banner} bossUid={wave.boss ? 'B0' : null} />
+      <FightView fight={fight} narrow={narrow} banner={banner} bossUid={wave.boss ? 'B0' : null}
+        auto={auto} onToggleAuto={(n) => { setAuto(n); fight.setLiveAuto(n); }} />
     </div>
   );
 }
