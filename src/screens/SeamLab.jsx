@@ -1935,7 +1935,7 @@ function LearnMode({ narrow, onGraduate }) {
   return <FightView fight={fight} narrow={narrow} banner={banner} hintSkill={hintSkill} />;
 }
 
-export function SeamLab({ onClose, slag = 0, onSlag }) {
+export function SeamLab({ onClose, slag = 0, onSlag, version }) {
   const vw = useViewport();
   const narrow = vw < 760;
   const [tab, setTab] = useState('run'); // 'learn' | 'run' | 'sandbox'
@@ -1953,8 +1953,9 @@ export function SeamLab({ onClose, slag = 0, onSlag }) {
             <div style={{ fontSize: T.head, fontWeight: 900, color: '#e86040', letterSpacing: 2 }}>RINGWARD</div>
             <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>Manual combat · charge, spend, build.</div>
           </div>
-          {/* No "← ROSTER" exit: the run IS the game now (vE-A). The old LAB/auto-battle
-              shell is no longer a place the player should land. onClose kept for callers. */}
+          {/* Version badge (the run is the home screen now, so it lives here, not in the
+              App header behind this overlay). No "← ROSTER" exit — the run IS the game. */}
+          {version && <span style={{ fontSize: 10, color: '#ddd', background: '#1a1a22', padding: '3px 8px', borderRadius: 4, letterSpacing: 1, fontFamily: 'monospace', border: '1px solid #444', fontWeight: 600 }}>{version}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {tabBtn('learn', '🎓 LEARN')}

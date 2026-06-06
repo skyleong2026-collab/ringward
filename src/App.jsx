@@ -37,7 +37,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vF-F';
+const VERSION = 'vF-G';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -1160,7 +1160,7 @@ function App() {
 
       {showIntro && <IntroFrame onBegin={dismissIntro} />}
       {/* GuidedCoach suppressed — explains old game loop, SEAM's LEARN mode covers the on-ramp now */}
-      {showSeamLab && <SeamLab onClose={() => setShowSeamLab(false)} slag={currencies.slag ?? 0} onSlag={addSlag} />}
+      {showSeamLab && <SeamLab onClose={() => setShowSeamLab(false)} slag={currencies.slag ?? 0} onSlag={addSlag} version={VERSION} />}
     </div>
   );
 }
