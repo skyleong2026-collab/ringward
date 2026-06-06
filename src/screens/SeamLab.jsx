@@ -906,9 +906,11 @@ function SlagBanked({ earned, balance }) {
   );
 }
 
-// End-of-run recap: the build you drafted + what it actually did this run.
+// End-of-run recap: per-creature build cards + team buffs + aggregate stats.
+// The carry's bends are the story — show them front and centre.
 function RunRecap({ taken, stats, squad }) {
   const survivors = squad.filter((m) => m.hp > 0).length;
+  const teamBuffs = taken.filter((u) => !u.targetName); // squad-wide upgrades
   const cell = (label, value) => (
     <div style={{ flex: 1, minWidth: 84, background: '#0c0c14', border: `1px solid ${LINE}`, borderRadius: 8, padding: '8px 6px' }}>
       <div style={{ fontSize: T.head, fontWeight: 900, color: '#eee' }}>{value}</div>
@@ -917,7 +919,44 @@ function RunRecap({ taken, stats, squad }) {
   );
   return (
     <div style={{ marginBottom: 14 }}>
-      <BuildStrip taken={taken} />
+      {/* Per-creature build: who carried what bends across the run */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        {squad.map((mem) => {
+          const c = COMBAT_CREATURES[mem.id];
+          const ti = TYPE_INFO[c.type];
+          const dead = mem.hp <= 0;
+          return (
+            <div key={mem.id} style={{ flex: 1, minWidth: 130, background: '#0c0c14', border: `1.5px solid ${dead ? '#2a1414' : ti.accent + '44'}`, borderRadius: 10, padding: '9px 10px', opacity: dead ? 0.5 : 1 }}>
+              <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 7 }}>
+                <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={34} />
+                <div>
+                  <div style={{ fontSize: T.small, fontWeight: 900, color: ti.accent }}>{ti.glyph} {c.name}</div>
+                  <div style={{ fontSize: T.micro, fontWeight: 800, color: dead ? LOSS : WIN }}>{dead ? '✕ KO' : '✓ Survived'}</div>
+                </div>
+              </div>
+              {(mem.bends ?? []).length > 0 ? (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {(mem.bends ?? []).map((b, i) => (
+                    <span key={i} title={b.name} style={{ fontSize: T.micro, fontWeight: 800, color: b.color, background: b.color + '22', border: `1px solid ${b.color}44`, borderRadius: 6, padding: '2px 6px', whiteSpace: 'nowrap' }}>{b.icon} {b.name}</span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: T.micro, color: '#383848', fontStyle: 'italic' }}>no bends</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/* Squad-wide buffs that helped everyone */}
+      {teamBuffs.length > 0 && (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1 }}>TEAM:</span>
+          {teamBuffs.map((u, i) => (
+            <span key={i} style={{ fontSize: T.micro, fontWeight: 700, color: u.color, background: '#15151f', border: `1px solid ${u.color}55`, borderRadius: 8, padding: '2px 7px', whiteSpace: 'nowrap' }}>{u.icon} {u.name}</span>
+          ))}
+        </div>
+      )}
+      {/* Aggregate run stats */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {cell('WAVES', `${stats.waves}/${WAVES.length}`)}
         {cell('DAMAGE DEALT', stats.dmg.toLocaleString())}
