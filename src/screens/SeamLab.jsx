@@ -104,7 +104,6 @@ const HUNTING_GROUNDS = [
 ];
 const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
 const GROUND_KEY = '8gents_seam_ground';
-const BIAS_WEIGHT = 8; // a biased, still-uncaught creature is this many × likelier to be drawn
 
 // ── Tiers: ring depth IS character tier. Deeper ring = higher tier = a STRONGER
 // creature (Foundation 1-3 / Specialist 4-6 / Apex 7-8). Higher tiers are both much
@@ -113,14 +112,31 @@ const BIAS_WEIGHT = 8; // a biased, still-uncaught creature is this many × like
 // to them. The multiplier is player-only (enemies/goldens never read it).
 const GROUND_OF_CREATURE = {};
 HUNTING_GROUNDS.forEach((g) => g.biasIds.forEach((id) => { GROUND_OF_CREATURE[id] = g; }));
-const tierOfDepth = (d) => (d <= 3 ? 1 : d <= 6 ? 2 : 3);
-const tierOf = (id) => tierOfDepth((GROUND_OF_CREATURE[id] || { depth: 1 }).depth);
-const TIER_INFO = {
-  1: { name: 'Foundation', mult: 1.0,  color: '#8a8a9a', pips: '★' },
-  2: { name: 'Specialist', mult: 1.2,  color: '#9be7ff', pips: '★★' },
-  3: { name: 'Apex',       mult: 1.45, color: '#ffd166', pips: '★★★' },
+
+// ── RARITY is the ONE power/collection axis (Sky, locked): Common → Rare → Legendary →
+// Unique. It replaces the old depth-tier — a creature's grade sets BOTH how strong it is
+// (player-side mult) AND how it's acquired (pull weight, or challenge for Uniques). Rings
+// still gate ACCESS + difficulty by depth; deeper rings just hold richer creatures. The
+// mult is player-only (enemies/goldens never read it → byte-identical).
+const RARITY_OF = {
+  fizzpop: 'Common', glowtail: 'Rare', cinderpaw: 'Legendary',
+  stoneward: 'Common', ironwall: 'Rare',
+  mossback: 'Common', dewleaf: 'Rare',
+  buzzline: 'Common', tanglewing: 'Rare',
+  swiftpaw: 'Rare', dartwing: 'Legendary',
+  shadefang: 'Rare', veilclaw: 'Legendary',
+  blightcap: 'Legendary', hexmoth: 'Unique',
+  frostwarden: 'Legendary', rimecaller: 'Unique',
 };
-const tierMult = (id) => TIER_INFO[tierOf(id)].mult;
+const RARITY_INFO = {
+  Common:    { mult: 1.0,  weight: 60, color: '#9a9aae', pips: '●',   dupeCores: 15,  startCores: 0 },
+  Rare:      { mult: 1.2,  weight: 28, color: '#7ec8ff', pips: '◆',   dupeCores: 40,  startCores: 20 },
+  Legendary: { mult: 1.45, weight: 10, color: '#ffd166', pips: '★',   dupeCores: 120, startCores: 60 },
+  Unique:    { mult: 1.7,  weight: 0,  color: '#ff7ad9', pips: '✦',   dupeCores: 300, startCores: 120 },
+};
+const rarityOf = (id) => RARITY_OF[id] || 'Common';
+const rarityMult = (id) => RARITY_INFO[rarityOf(id)].mult;
+const PITY_AT = 15; // a Legendary is guaranteed by this many pulls without one
 
 // ── Strict inward progression: you start at the outer ring and earn your way in —
 // beating a ring's boss opens the next ring (and its higher tier) inward. Persist the
@@ -158,12 +174,16 @@ function saveGround(id) { try { localStorage.setItem(GROUND_KEY, id); } catch { 
 // Hunting their ring drops a SIGIL toward one of them; collect enough and you can
 // CHALLENGE it in a dedicated fight — beat it to recruit (catch-by-defeat). Commons
 // (everything else) stay clear-caught as before.
-const APEX_IDS = new Set(['frostwarden', 'rimecaller', 'blightcap', 'hexmoth']);
+// APEX = the Uniques — the rarest grade, won by CHALLENGE (sigils), never pulled.
+const APEX_IDS = new Set(Object.keys(RARITY_OF).filter((id) => RARITY_OF[id] === 'Unique'));
 const isApex = (id) => APEX_IDS.has(id);
-const APEX_SIGILS = 3; // sigils needed before an apex creature can be challenged
+const APEX_SIGILS = 3; // sigils needed before a Unique can be challenged
 const SIGILS_KEY = '8gents_seam_sigils';
 function loadSigils() { try { return JSON.parse(localStorage.getItem(SIGILS_KEY) || '{}') || {}; } catch { return {}; } }
 function saveSigils(m) { try { localStorage.setItem(SIGILS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+const PITY_KEY = '8gents_seam_pity'; // pulls since the last Legendary (drives the pity guarantee)
+function loadPity() { try { const n = parseInt(localStorage.getItem(PITY_KEY), 10); return Number.isFinite(n) ? n : 0; } catch { return 0; } }
+function savePity(n) { try { localStorage.setItem(PITY_KEY, String(n)); } catch { /* best-effort */ } }
 
 // Which apex creature a clear of this ring drops a sigil toward: an uncaught, not-yet-
 // challengeable apex in the hunted ring, fewest sigils first (focus one at a time), then
@@ -177,21 +197,25 @@ function sigilTarget(ground, stableIds, sigils) {
   return pool.slice().sort((a, b) => (sigils[a] || 0) - (sigils[b] || 0))[0];
 }
 
-// Weighted catch: the chosen ground's uncaught creatures are far likelier, but the draw
-// is never hard-locked — any uncaught creature can still surface (the ring steers, it
-// doesn't dictate). Returns the caught creature def, or null when the stable is full.
-function drawCatch(stableIds, groundId, accessDepth = 8, rand = Math.random) {
-  // Apex creatures are gathered + challenged, never drawn from a clear — exclude them.
-  // Strict tiering: you can only draw creatures from rings you've actually reached, so a
-  // higher-tier creature never strays out into an outer-ring catch.
-  const reachable = (id) => (GROUND_OF_CREATURE[id]?.depth ?? 1) <= accessDepth;
-  const locked = COMBAT_ROSTER.filter((c) => !stableIds.includes(c.id) && !isApex(c.id) && reachable(c.id));
-  if (locked.length === 0) return null;
-  const biased = new Set((GROUND_BY_ID[groundId] || {}).biasIds || []);
-  const weights = locked.map((c) => (biased.has(c.id) ? BIAS_WEIGHT : 1));
-  let roll = rand() * weights.reduce((s, w) => s + w, 0);
-  for (let i = 0; i < locked.length; i++) { roll -= weights[i]; if (roll < 0) return locked[i]; }
-  return locked[locked.length - 1];
+// A weighted PULL from the ring you raided — the "Summoners-War scroll." The pool is the
+// ring's own locals (reachable, non-Unique — Uniques are challenge-won), weighted by
+// rarity: Commons fall often, Legendaries rarely. OWNED creatures stay in the pool, so a
+// repeat is a dupe (which melts to Cores, never wasted). `pity` = pulls since the last
+// Legendary; at PITY_AT the Legendary is guaranteed. Returns { id, rarity, isDupe } | null.
+function pullFrom(ground, stableIds, accessDepth, pity = 0, rand = Math.random) {
+  if (!ground) return null;
+  const pool = ground.biasIds.filter((id) => !isApex(id) && (GROUND_OF_CREATURE[id]?.depth ?? 1) <= accessDepth);
+  if (pool.length === 0) return null;
+  const leg = pool.find((x) => rarityOf(x) === 'Legendary');
+  let id;
+  if (leg && pity >= PITY_AT) id = leg; // pity: guarantee the Legendary
+  else {
+    const w = pool.map((x) => RARITY_INFO[rarityOf(x)].weight || 1);
+    let roll = rand() * w.reduce((s, x) => s + x, 0);
+    id = pool[pool.length - 1];
+    for (let i = 0; i < pool.length; i++) { roll -= w[i]; if (roll < 0) { id = pool[i]; break; } }
+  }
+  return { id, rarity: rarityOf(id), isDupe: stableIds.includes(id) };
 }
 
 function useViewport() {
@@ -360,7 +384,7 @@ const lossSlag = (wavesCleared) => Math.max(5, wavesCleared * 15);
 const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
 // Player creature max HP — scaled by the run's mods AND its TIER (deeper-ring creatures
 // are simply tankier; that's the pull to chase them). Tier mult is player-side only.
-const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1) * tierMult(member.id));
+const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1) * rarityMult(member.id));
 
 // ── PERMANENT SKILL TREES (§ progression) — the long game. ─────────────────────
 // Each creature carves its OWN tree with Cores (⬡) earned from runs. Per-creature,
@@ -709,7 +733,7 @@ function playerDef(member, squadMods, perm) {
   const p = perm ?? emptyTreeMods(); // permanent skill-tree mods for THIS creature
   return {
     ...base, temperament: 'Balanced', maxHp, hp: Math.min(member.hp, maxHp),
-    atk: Math.round(base.atk * tierMult(member.id)), // higher-tier creatures also hit harder
+    atk: Math.round(base.atk * rarityMult(member.id)), // higher-tier creatures also hit harder
     charge: Math.min(base.maxCharge ?? 6, (squadMods?.chargeStart ?? 0) + (p.chargeStart ?? 0)),
     mods: {
       // squad-wide flat buffs × permanent tree:
@@ -1674,7 +1698,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const accessDepth = beta ? 8 : unlocked; // the deepest ring you may enter right now
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
-  const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
+  const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
+  const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
   const [targetChoice, setTargetChoice] = useState(null); // who's tentatively selected on the target-pick screen (confirm to commit)
@@ -1821,23 +1846,31 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         if (!beta && hunted.depth === unlocked && unlocked < 8) {
           const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); setUnlockedNow(nd);
         } else setUnlockedNow(null);
-        // A deep ring drops a SIGIL toward one of its apex creatures instead of a catch.
+        // PULL — a weighted draw from the ring (new creature, or a dupe → Cores).
+        const pull = pullFrom(hunted, stable, accessDepth, pity);
+        if (pull) {
+          const info = RARITY_INFO[pull.rarity];
+          if (pull.isDupe) {
+            awardCores([pull.id], info.dupeCores); // dupe melts to that creature's Cores
+            setPullNow({ ...pull, gainedCores: info.dupeCores });
+          } else {
+            const ns = [...stable, pull.id]; setStable(ns); saveStable(ns);
+            if (info.startCores > 0) awardCores([pull.id], info.startCores); // rarity head-start
+            setPullNow({ ...pull, gainedCores: info.startCores });
+            setTimeout(() => sfx.caughtCreature(), 720);
+          }
+          const np = pull.rarity === 'Legendary' ? 0 : pity + 1; // pity: reset on a Legendary
+          setPity(np); savePity(np);
+        } else setPullNow(null);
+        // Deep rings ALSO drip a SIGIL toward their uncaught Unique (won by challenge).
         const apexId = sigilTarget(hunted, stable, sigils);
         if (apexId) {
           const count = Math.min(APEX_SIGILS, (sigils[apexId] || 0) + 1);
           const nextSig = { ...sigils, [apexId]: count };
           setSigils(nextSig); saveSigils(nextSig);
           setSigilGain({ id: apexId, count, ready: count >= APEX_SIGILS });
-          setCaughtNow(null);
-          sfx.ringTaken();
-        } else {
-          // Otherwise draw a common out of the ring — biased by the ring, gated by tier.
-          const caught = drawCatch(stable, hunted.id, accessDepth);
-          if (caught) { const ns = [...stable, caught.id]; setStable(ns); saveStable(ns); }
-          setCaughtNow(caught); setSigilGain(null);
-          sfx.ringTaken();
-          if (caught) setTimeout(() => sfx.caughtCreature(), 720);
-        }
+        } else setSigilGain(null);
+        sfx.ringTaken();
         setRunPhase('won'); return;
       }
       const aliveTypes = new Set(patched.filter((m) => m.hp > 0).map((m) => COMBAT_CREATURES[m.id].type));
@@ -1873,7 +1906,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     fight.begin(aDefs, [enemy], 808, auto ? 'auto' : 'play', (res, finalState) => {
       const won = finalState.units.A.some((u) => u.hp > 0) && res.winner !== 'B';
       if (won) {
-        if (!stable.includes(apexId)) { const ns = [...stable, apexId]; setStable(ns); saveStable(ns); }
+        if (!stable.includes(apexId)) {
+          const ns = [...stable, apexId]; setStable(ns); saveStable(ns);
+          awardCores([apexId], RARITY_INFO.Unique.startCores); // a Unique arrives with a Core bank
+        }
         const nextSig = { ...sigils }; delete nextSig[apexId]; setSigils(nextSig); saveSigils(nextSig);
         sfx.ringTaken(); setTimeout(() => sfx.caughtCreature(), 720);
         setRunPhase('challenge-won');
@@ -1916,7 +1952,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2138,6 +2174,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     setStable(st); saveStable(st);
                     setClears({}); saveClears({});
                     setSigils({}); saveSigils({});
+                    setPity(0); savePity(0);
                     setCores({}); saveCores({});                 // wipe the OP trees — Cores,
                     setTreeAlloc({}); saveTreeAlloc({});          // unlocked nodes,
                     setTreeEquip({}); saveEquip({});              // equipped loadout,
@@ -2186,7 +2223,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
           {COMBAT_ROSTER.filter((c) => stable.includes(c.id)).map((c) => {
             const ti = TYPE_INFO[c.type];
-            const tnf = TIER_INFO[tierOf(c.id)]; const tm = tnf.mult; // tier power
+            const rar = rarityOf(c.id); const tnf = RARITY_INFO[rar]; const tm = tnf.mult; // rarity power
             const on = picked.includes(c.id);
             const full = !on && picked.length >= 3;
             const cBal = cores[c.id] || 0;
@@ -2202,11 +2239,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
-                        <span style={{ fontSize: 9, fontWeight: 900, color: tnf.color, letterSpacing: 0.3 }} title={`Tier ${tierOf(c.id)} · ${tnf.name}`}>{tnf.pips}</span>
+                        <span style={{ fontSize: 9, fontWeight: 900, color: tnf.color, letterSpacing: 0.3 }} title={`${rar}`}>{tnf.pips}</span>
                         {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
                       </div>
-                      <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: tnf.color, fontWeight: 700 }}>· {tnf.name}</span></div>
-                      <div style={{ fontSize: T.micro, color: DIM }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: tnf.color, fontWeight: 800 }}> · ×{tm.toFixed(2)} tier</span>}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''}</span>}</div>
+                      <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: tnf.color, fontWeight: 700 }}>· {rar}</span></div>
+                      <div style={{ fontSize: T.micro, color: DIM }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: tnf.color, fontWeight: 800 }}> · ×{tm.toFixed(2)}</span>}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''}</span>}</div>
                     </div>
                   </div>
                   <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
@@ -2244,18 +2281,19 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 onSelect={(id) => { setGround(id); saveGround(id); }} />
               {/* The selected ring, spelled out (the map shows state by colour; this is the detail). */}
               {(() => {
-                const ti = TIER_INFO[tierOfDepth(sel.depth)]; const diff = diffOf(sel.depth);
-                const cleared = selTargets.length === 0; const n = clears[sel.id] || 0; const m = repeatMult(n);
+                const diff = diffOf(sel.depth);
+                const n = clears[sel.id] || 0; const m = repeatMult(n);
+                const ringRars = [...new Set(sel.biasIds.map(rarityOf))].sort((a, b) => RARITY_INFO[b].mult - RARITY_INFO[a].mult);
                 return (
                   <div style={{ background: '#10131c', border: `1px solid ${SEL}33`, borderRadius: 10, padding: '9px 11px', marginBottom: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: T.small, fontWeight: 900, color: '#eaf2ff' }}>{sel.name}</span>
-                      <span style={{ fontSize: 9, fontWeight: 900, color: ti.color }}>{ti.pips} {ti.name}</span>
+                      <span style={{ fontSize: 10 }}>{ringRars.map((r) => <span key={r} title={r} style={{ color: RARITY_INFO[r].color, fontWeight: 900, marginRight: 1 }}>{RARITY_INFO[r].pips}</span>)}</span>
                       <span style={{ fontSize: T.micro, fontWeight: 800, color: diff.color }}>· {diff.label}</span>
                       <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `farmed ×${n} — Cores ×${m.toFixed(2)}`}</span>
                     </div>
                     <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
-                      Raiding {sel.tag} — {cleared ? <span style={{ color: WIN }}>all caught here; run it for Cores</span> : `likely draw: ${selTargets.map((id) => COMBAT_CREATURES[id].name).join(', ')}`}
+                      Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
                     </div>
                   </div>
                 );
@@ -2474,27 +2512,30 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const wave = runWaves[waveIdx];
   const banner = (() => {
     if (runPhase === 'won') {
-      const ti = caughtNow ? TYPE_INFO[caughtNow.type] : null;
       return (
         <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
           <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
-          <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You broke <b>The Hollow King</b> and cleared the approach.</div>
-          {caughtNow && ti && (
-            <div style={{ margin: '14px 0', background: '#091a12', border: `2px solid ${ti.accent}`, borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6 }}>CAUGHT</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-                <Sprite spriteId={caughtNow.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={64} />
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: T.sub, fontWeight: 900, color: ti.accent }}>{ti.glyph} {caughtNow.name}</div>
-                  <div style={{ fontSize: T.small, color: '#cdd', fontWeight: 700 }}>{ti.nick}</div>
-                  <div style={{ fontSize: T.micro, color: DIM, marginTop: 2 }}>{ti.role}</div>
-                  {caughtFrom && <div style={{ fontSize: T.micro, color: '#9be7ff', marginTop: 3 }}>Drawn out of {caughtFrom.name}.</div>}
-                  <div style={{ fontSize: T.micro, color: '#888', marginTop: 3 }}>Now in your stable — {stable.length}/{COMBAT_ROSTER.length} caught.</div>
+          <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You cleared <b>{caughtFrom ? caughtFrom.name : 'the ring'}</b> to its heart.</div>
+          {pullNow && (() => {
+            const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
+            return (
+              <div style={{ margin: '14px 0', background: '#091a12', border: `2px solid ${ri.color}`, borderRadius: 12, padding: '14px 16px', boxShadow: `0 0 16px ${ri.color}33` }}>
+                <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, marginBottom: 6, color: ri.color }}>{ri.pips} {pullNow.rarity.toUpperCase()} {pullNow.isDupe ? 'DUPE' : 'PULL'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                  <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={64} />
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: T.sub, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name} <span style={{ fontSize: T.small, color: ri.color }}>{ri.pips}</span></div>
+                    <div style={{ fontSize: T.small, color: '#cdd', fontWeight: 700 }}>{ati.nick}</div>
+                    {pullNow.isDupe
+                      ? <div style={{ fontSize: T.small, color: WIN, fontWeight: 800, marginTop: 3 }}>Already yours → melted to <b>+{pullNow.gainedCores} ⬡</b> for {ac.name}</div>
+                      : <div style={{ fontSize: T.micro, color: '#9be7ff', marginTop: 3 }}>NEW! Joins your stable{pullNow.gainedCores > 0 ? ` with +${pullNow.gainedCores} ⬡` : ''} — {stable.length}/{COMBAT_ROSTER.length} caught.</div>}
+                    {caughtFrom && <div style={{ fontSize: T.micro, color: '#888', marginTop: 2 }}>from {caughtFrom.name}</div>}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {!caughtNow && sigilGain && (() => {
+            );
+          })()}
+          {sigilGain && (() => {
             const ac = COMBAT_CREATURES[sigilGain.id]; const ati = TYPE_INFO[ac.type];
             return (
               <div style={{ margin: '14px 0', background: '#0b1426', border: `2px solid ${ati.accent}`, borderRadius: 12, padding: '14px 16px' }}>
@@ -2512,16 +2553,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               </div>
             );
           })()}
-          {!caughtNow && !sigilGain && stable.length >= COMBAT_ROSTER.length && (
-            <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>Your stable is full — all {COMBAT_ROSTER.length} creatures caught.</div>
+          {!pullNow && !sigilGain && (
+            <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>Nothing new stirred from this ring.</div>
           )}
-          {!caughtNow && !sigilGain && stable.length < COMBAT_ROSTER.length && (
-            <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>The commons here are all yours — hunt a deep ring (the Witherfen, the Frostbound Deep) for apex sigils.</div>
-          )}
-          {unlockedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === unlockedNow); const ti = TIER_INFO[tierOfDepth(unlockedNow)]; return (
+          {unlockedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === unlockedNow); return (
             <div style={{ margin: '12px 0', padding: '12px 14px', borderRadius: 12, background: '#1a1407', border: `2px solid ${ACCENT}` }}>
               <div style={{ fontSize: T.small, fontWeight: 900, color: ACCENT, letterSpacing: 0.5 }}>🔓 THE WAY INWARD OPENS</div>
-              <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open{tierOfDepth(unlockedNow) > tierOfDepth(unlockedNow - 1) ? <> · <span style={{ color: ti.color, fontWeight: 800 }}>{ti.pips} {ti.name}-tier creatures</span> within</> : ''}.</div>
+              <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open, with rarer creatures to pull within.</div>
             </div>
           ); })()}
           {runRepeat < 1 && (
