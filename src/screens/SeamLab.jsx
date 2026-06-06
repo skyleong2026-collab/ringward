@@ -204,32 +204,99 @@ const lossSlag = (wavesCleared) => Math.max(5, wavesCleared * 15);
 const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
 const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1));
 
+// ── PERMANENT SKILL TREES (§ progression) — the long game. ─────────────────────
+// Each creature carves its OWN tree with Cores (⬡) earned from runs. Per-creature,
+// persisted, never resets — this is the accumulation a run leaves behind. Two paths
+// are anchored by the shipped bends (now permanent capstones); deeper tiers are
+// SEALED and revealed by play, so there's always a goal ahead. Node effects are
+// opt-in actor.mods (the same frozen-engine-safe path the run bends use).
+const CORES_KEY = '8gents_creature_cores';
+const TREE_KEY = '8gents_creature_tree';
+function loadCores() { try { return JSON.parse(localStorage.getItem(CORES_KEY) || '{}') || {}; } catch { return {}; } }
+function saveCores(m) { try { localStorage.setItem(CORES_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+function loadTreeAlloc() { try { return JSON.parse(localStorage.getItem(TREE_KEY) || '{}') || {}; } catch { return {}; } }
+function saveTreeAlloc(m) { try { localStorage.setItem(TREE_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+
+// Progressive Cores: a deeper wave pays more, so pushing the climb funds the tree.
+// Scouts→2, Pack→3, Warden→4, Hollow King→5+8. A full clear ≈ 22 ⬡ per survivor.
+const coresForWave = (idx, isBoss) => (2 + idx) + (isBoss ? 8 : 0);
+
+function emptyTreeMods() {
+  return { dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0,
+    overloadMult: 1, overloadBurn: 0, overloadAOE: false,
+    extraHits: 0, executeWindow: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0 };
+}
+
+// Trees keyed by Type — every creature of a Type shares the tree SHAPE; allocation is
+// per-creature. Reactor is fully authored (Fizzpop's prototype); other Types come next.
+const TYPE_TREES = {
+  Reactor: {
+    blurb: 'Charge and fire. Burn them down over time, blow them up all at once, or learn to outlast the heat.',
+    paths: [
+      { id: 'pyre', name: 'PYRE', tag: 'burn over time', icon: '🔥', color: BURN, nodes: [
+        { id: 'pyre1', tier: 1, cost: 4,  name: 'Kindling',     desc: 'Every burn you apply lands +1 extra stack.',                       apply: (m) => { m.burnBonus += 1; } },
+        { id: 'pyre2', tier: 2, cost: 8,  name: 'Heat',         desc: '+20% damage from all your attacks.',                               apply: (m) => { m.dmgMult *= 1.2; } },
+        { id: 'pyre3', tier: 3, cost: 14, capstone: true, name: 'Ember Trail', desc: 'Overload also sets the target ablaze (+2 burn).',         apply: (m) => { m.overloadBurn += 2; } },
+        { id: 'pyre4', tier: 4, cost: 22, sealed: true, name: 'Conflagration', desc: 'When a burning enemy dies, its burn leaps to the whole enemy line.' },
+        { id: 'pyre5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Wildfire Heart', desc: 'Your burns never burn out — but Overload no longer doubles against burning targets.' },
+      ] },
+      { id: 'deto', name: 'DETONATOR', tag: 'big single blast', icon: '💥', color: '#ff8a4a', nodes: [
+        { id: 'deto1', tier: 1, cost: 4,  name: 'Focus',      desc: '+15% Overload damage.',                                              apply: (m) => { m.overloadMult *= 1.15; } },
+        { id: 'deto2', tier: 2, cost: 8,  name: 'Capacitor',  desc: 'Start every fight with +1 charge already banked.',                   apply: (m) => { m.chargeStart += 1; } },
+        { id: 'deto3', tier: 3, cost: 14, capstone: true, name: 'Combustion', desc: 'Overload erupts across the whole enemy line.',           apply: (m) => { m.overloadAOE = true; } },
+        { id: 'deto4', tier: 4, cost: 22, sealed: true, name: 'Chain Reaction', desc: 'Overload refunds 2 charge whenever it lands a kill.' },
+        { id: 'deto5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Singularity', desc: 'Overload costs double charge but detonates for triple damage.' },
+      ] },
+      { id: 'cinder', name: 'CINDER', tag: 'survive the heat', icon: '🜂', color: WIN, hiddenUntilCapstone: true, nodes: [
+        { id: 'cinder1', tier: 1, cost: 4,  sealed: true, name: 'Cinderskin',     desc: 'Charge Up heals you for the chip damage it deals.' },
+        { id: 'cinder2', tier: 2, cost: 8,  sealed: true, name: 'Backdraft Ward', desc: 'Backdraft also throws a shield onto you.' },
+        { id: 'cinder3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Smolder', desc: 'Begin every fight with the enemy line already burning.' },
+        { id: 'cinder4', tier: 4, cost: 22, sealed: true, name: 'Heat Exchange', desc: 'Convert leftover shield into charge at the end of each round.' },
+        { id: 'cinder5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Phoenix', desc: 'The first time you would die, revive at 30% HP and dump your full charge.' },
+      ] },
+    ],
+  },
+};
+
+// Flat node lookup + per-creature helpers.
+const NODE_BY_ID = {};
+Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => p.nodes.forEach((n) => { NODE_BY_ID[n.id] = { ...n, pathId: p.id }; })));
+const treeForCreature = (id) => TYPE_TREES[COMBAT_CREATURES[id]?.type] ?? null;
+function treeModsFor(id, alloc) {
+  const owned = (alloc?.[id]) ?? [];
+  const m = emptyTreeMods();
+  owned.forEach((nid) => { const n = NODE_BY_ID[nid]; if (n?.apply) n.apply(m); });
+  return m;
+}
+
 // A player creature carried through a run: wounds persist (separate maxHp), and the
 // run's upgrade mods + Primed starting charge are baked onto the unit def.
 // Squad-wide flat buffs come from `squadMods`; move-bends come from `member.unitMods`
 // so each creature can have its own signature build.
-function playerDef(member, squadMods) {
+function playerDef(member, squadMods, perm) {
   const base = COMBAT_CREATURES[member.id];
   const maxHp = maxHpOf(member, squadMods);
   const u = member.unitMods ?? EMPTY_UNIT_MODS;
+  const p = perm ?? emptyTreeMods(); // permanent skill-tree mods for THIS creature
   return {
     ...base, temperament: 'Balanced', maxHp, hp: Math.min(member.hp, maxHp),
-    charge: Math.min(base.maxCharge ?? 6, squadMods?.chargeStart ?? 0),
+    charge: Math.min(base.maxCharge ?? 6, (squadMods?.chargeStart ?? 0) + (p.chargeStart ?? 0)),
     mods: {
-      // squad-wide flat buffs:
-      dmgMult:   squadMods?.dmgMult   ?? 1,
-      healMult:  squadMods?.healMult  ?? 1,
-      blockMult: squadMods?.blockMult ?? 1,
-      burnBonus: squadMods?.burnBonus ?? 0,
-      ampBonus:  squadMods?.ampBonus  ?? 0,
-      // per-creature bends (only the designated creature has non-zero values):
-      extraHits:     u.extraHits     ?? 0,
-      executeWindow: u.executeWindow ?? 0,
-      overloadBurn:  u.overloadBurn  ?? 0,
-      braceTeam:     u.braceTeam     ?? 0,
-      mendRegen:     u.mendRegen     ?? 0,
-      primeTeam:     u.primeTeam     ?? 0,
-      overloadAOE:   u.overloadAOE   ?? false,
+      // squad-wide flat buffs × permanent tree:
+      dmgMult:   (squadMods?.dmgMult   ?? 1) * (p.dmgMult   ?? 1),
+      healMult:  (squadMods?.healMult  ?? 1) * (p.healMult  ?? 1),
+      blockMult: (squadMods?.blockMult ?? 1) * (p.blockMult ?? 1),
+      burnBonus: (squadMods?.burnBonus ?? 0) + (p.burnBonus ?? 0),
+      ampBonus:  (squadMods?.ampBonus  ?? 0) + (p.ampBonus  ?? 0),
+      overloadMult: (p.overloadMult ?? 1), // tree-only for now
+      // per-creature bends (run-scoped) + permanent tree, combined:
+      extraHits:     (u.extraHits     ?? 0) + (p.extraHits     ?? 0),
+      executeWindow: (u.executeWindow ?? 0) + (p.executeWindow ?? 0),
+      overloadBurn:  (u.overloadBurn  ?? 0) + (p.overloadBurn  ?? 0),
+      mendRegen:     (u.mendRegen     ?? 0) + (p.mendRegen     ?? 0),
+      braceTeam:     u.braceTeam   || p.braceTeam   || 0,
+      primeTeam:     u.primeTeam   || p.primeTeam   || 0,
+      overloadAOE:   u.overloadAOE || p.overloadAOE || false,
       blitzMulti:    u.blitzMulti    ?? false,
       executeHunt:   u.executeHunt   ?? false,
       braceRegen:    u.braceRegen    ?? false,
@@ -920,6 +987,28 @@ function SlagBanked({ earned, balance }) {
   );
 }
 
+// Per-creature Cores earned this run — the permanent progress a run leaves on each
+// creature. Spend it on their skill tree from the squad-pick screen.
+function CoresBanked({ coresRun }) {
+  const ids = Object.keys(coresRun || {}).filter((id) => coresRun[id] > 0);
+  if (ids.length === 0) return null;
+  return (
+    <div style={{ background: '#0c1620', border: `1px solid #2a4a5a`, borderRadius: 10, padding: '9px 12px', marginBottom: 12 }}>
+      <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 900, letterSpacing: 1, marginBottom: 6 }}>⬡ CORES EARNED — spend on skill paths</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, justifyContent: 'center' }}>
+        {ids.map((id) => {
+          const c = COMBAT_CREATURES[id]; const ti = TYPE_INFO[c.type];
+          return (
+            <span key={id} style={{ fontSize: T.small, fontWeight: 800, color: '#cfe6f2', background: '#0a0f16', border: `1px solid ${ti.accent}44`, borderRadius: 8, padding: '3px 9px' }}>
+              {ti.glyph} {c.name} <b style={{ color: '#9be7ff' }}>+{coresRun[id]} ⬡</b>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // End-of-run recap: per-creature build cards + team buffs + aggregate stats.
 // The carry's bends are the story — show them front and centre.
 function RunRecap({ taken, stats, squad }) {
@@ -997,6 +1086,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [stable, setStable] = useState(loadStable); // creature IDs you've caught
   const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
+  const [cores, setCores] = useState(loadCores); // {creatureId: unspent Cores ⬡} — permanent
+  const [treeAlloc, setTreeAlloc] = useState(loadTreeAlloc); // {creatureId: [nodeId]} — permanent
+  const [treeFor, setTreeFor] = useState(null); // creatureId whose skill tree is open (overlay)
+  const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
@@ -1007,6 +1100,21 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     onSlag(-p.cost);
     const next = [...owned, p.id];
     setOwned(next); savePerks(next);
+  }
+
+  // Award Cores to each listed creature (banked permanently + tracked for the recap).
+  function awardCores(ids, amt) {
+    if (!ids.length || amt <= 0) return;
+    setCores((c) => { const n = { ...c }; ids.forEach((id) => { n[id] = (n[id] || 0) + amt; }); saveCores(n); return n; });
+    setCoresRun((c) => { const n = { ...c }; ids.forEach((id) => { n[id] = (n[id] || 0) + amt; }); return n; });
+  }
+  // Spend Cores to permanently allocate a tree node onto one creature.
+  function buyNode(creatureId, node) {
+    if ((treeAlloc[creatureId] || []).includes(node.id)) return;
+    if ((cores[creatureId] || 0) < node.cost) return;
+    setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) - node.cost }; saveCores(n); return n; });
+    setTreeAlloc((a) => { const n = { ...a, [creatureId]: [...(a[creatureId] || []), node.id] }; saveTreeAlloc(n); return n; });
+    sfx.upgradePick();
   }
 
   function toggle(id) {
@@ -1031,7 +1139,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
-    const aDefs = fielded.map((i) => playerDef(sq[i], mods));
+    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeAlloc)));
     fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
@@ -1045,6 +1153,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         const got = lossSlag(idx); onSlag?.(got); setEarned(got); // even a wipe banks a little
         setSquad(next); sfx.squadDown(); setRunPhase('lost'); return;
       }
+      // Progressive Cores: each surviving fielded creature banks ⬡ for clearing this wave.
+      const clearedIds = fielded.filter((mi) => next[mi].hp > 0).map((mi) => next[mi].id);
+      awardCores(clearedIds, coresForWave(idx, !!WAVES[idx].boss));
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
       setSquad(patched);
@@ -1071,7 +1182,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
     const base = perkBaseMods(owned); // permanent perks set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
-    setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0);
+    setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
     rollOffer(); setRunPhase('upgrade');
   }
   function applyUpgrade(up) {
@@ -1108,7 +1219,109 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setPendingUpgrade(null); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
+
+  // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
+  if (treeFor) {
+    const c = COMBAT_CREATURES[treeFor];
+    const ti = TYPE_INFO[c.type];
+    const tree = treeForCreature(treeFor);
+    const owned = treeAlloc[treeFor] || [];
+    const bal = cores[treeFor] || 0;
+    const isOwned = (id) => owned.includes(id);
+    // A path locked "until a capstone" opens once you've taken ANY tier-3 capstone.
+    const hasCapstone = tree ? tree.paths.some((p) => p.nodes.some((n) => n.capstone && isOwned(n.id))) : false;
+
+    if (!tree) {
+      return (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <div style={{ fontSize: T.body, color: DIM, marginBottom: 16 }}>{ti.glyph} {c.name}'s paths are still being charted.</div>
+          <button onClick={() => setTreeFor(null)} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${LINE}`, background: PANEL, color: '#ddd', fontWeight: 800, cursor: 'pointer' }}>← BACK</button>
+        </div>
+      );
+    }
+    return (
+      <div>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+          <button onClick={() => setTreeFor(null)} style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${LINE}`, background: PANEL, color: '#ddd', fontWeight: 800, fontSize: T.small, cursor: 'pointer' }}>←</button>
+          <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={48} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: T.head, fontWeight: 900, color: ti.accent, lineHeight: 1.1 }}>{ti.glyph} {c.name}</div>
+            <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>{c.type} · {ti.nick}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: T.head, fontWeight: 900, color: '#9be7ff' }}>{bal} ⬡</div>
+            <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>cores to spend</div>
+          </div>
+        </div>
+        <div style={{ fontSize: T.small, color: '#cdb6ff', background: '#0c0c16', border: `1px solid ${LINE}`, borderRadius: 10, padding: '9px 12px', marginBottom: 14, lineHeight: 1.45 }}>
+          {tree.blurb} <span style={{ color: DIM }}>Cores are earned per creature, every run. Pick one way to go deep — you can't afford everything.</span>
+        </div>
+        {/* Paths */}
+        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
+          {tree.paths.map((path) => {
+            const locked = path.hiddenUntilCapstone && !hasCapstone;
+            if (locked) {
+              return (
+                <div key={path.id} style={{ background: '#0a0a12', border: `1.5px dashed ${LINE}`, borderRadius: 14, padding: '22px 14px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 180 }}>
+                  <div style={{ fontSize: 30, opacity: 0.5 }}>🜂</div>
+                  <div style={{ fontSize: T.label, fontWeight: 900, color: '#5a5a6a', marginTop: 8, letterSpacing: 1 }}>??? </div>
+                  <div style={{ fontSize: T.small, color: DIM, marginTop: 8, lineHeight: 1.4 }}>A third path, still hidden. Master <b style={{ color: '#bfae8a' }}>Pyre</b> or <b style={{ color: '#ff8a4a' }}>Detonator</b> to a capstone to reveal it.</div>
+                </div>
+              );
+            }
+            return (
+              <div key={path.id} style={{ background: PANEL, border: `1.5px solid ${path.color}44`, borderRadius: 14, padding: '12px 11px' }}>
+                <div style={{ textAlign: 'center', marginBottom: 10 }}>
+                  <div style={{ fontSize: 22 }}>{path.icon}</div>
+                  <div style={{ fontSize: T.label, fontWeight: 900, color: path.color, letterSpacing: 1 }}>{path.name}</div>
+                  <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>{path.tag}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {path.nodes.map((node, i) => {
+                    const ownedNode = isOwned(node.id);
+                    const prevOwned = i === 0 ? true : isOwned(path.nodes[i - 1].id);
+                    const revealed = prevOwned; // desc unlocks a tier at a time (fog-of-war)
+                    const afford = bal >= node.cost;
+                    const buyable = revealed && !node.sealed && !ownedNode && afford;
+                    // visual state
+                    const border = ownedNode ? WIN : node.keystone ? '#ffd166' : node.sealed ? LINE : revealed ? `${path.color}66` : LINE;
+                    const bg = ownedNode ? '#10231a' : '#0c0c14';
+                    const op = (!revealed && !ownedNode) ? 0.6 : node.sealed && !ownedNode ? 0.78 : 1;
+                    return (
+                      <div key={node.id}>
+                        {i > 0 && <div style={{ width: 2, height: 6, background: prevOwned ? WIN : LINE, margin: '0 auto' }} />}
+                        <button
+                          onClick={() => buyable && buyNode(treeFor, node)}
+                          disabled={!buyable}
+                          style={{ width: '100%', textAlign: 'left', borderRadius: 10, padding: '8px 9px', cursor: buyable ? 'pointer' : 'default',
+                            background: bg, border: `1.5px solid ${border}`, opacity: op }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            {node.keystone && <span style={{ fontSize: T.small }}>★</span>}
+                            {node.capstone && !node.keystone && <span style={{ fontSize: T.small }}>◆</span>}
+                            <span style={{ fontSize: T.small, fontWeight: 900, color: ownedNode ? WIN : node.keystone ? '#ffd166' : revealed ? '#e8e8f0' : '#7a7a8a' }}>{node.name}</span>
+                            <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: ownedNode ? WIN : node.sealed ? DIM : afford ? '#9be7ff' : '#6a6a7a' }}>
+                              {ownedNode ? '✓' : node.sealed ? '✦ SEALED' : `${node.cost} ⬡`}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: T.micro, color: ownedNode ? '#bfe8cf' : revealed ? '#9a9aaa' : '#5a5a6a', lineHeight: 1.35, marginTop: 3 }}>
+                            {revealed ? node.desc : `🔒 Reach ${path.nodes[i - 1].name} to uncover this.`}
+                            {node.sealed && revealed && <span style={{ color: '#7a7a8a', fontStyle: 'italic' }}> — opens in a coming trial.</span>}
+                          </div>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={() => setTreeFor(null)} style={{ width: '100%', marginTop: 16, padding: '13px 0', borderRadius: 12, border: `1px solid ${LINE}`, background: PANEL, color: '#ddd', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>← BACK TO SQUAD</button>
+      </div>
+    );
+  }
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
@@ -1155,23 +1368,34 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             const ti = TYPE_INFO[c.type];
             const on = picked.includes(c.id);
             const full = !on && picked.length >= 3;
+            const cBal = cores[c.id] || 0;
+            const nodeCount = (treeAlloc[c.id] || []).length;
+            const hasTree = !!treeForCreature(c.id);
             return (
-              <button key={c.id} onClick={() => toggle(c.id)} disabled={full}
-                style={{ textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
-                  background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
-                <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
-                  <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
-                      {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
+              <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button onClick={() => toggle(c.id)} disabled={full}
+                  style={{ flex: 1, textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
+                    background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+                  <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+                    <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
+                        {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
+                      </div>
+                      <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {c.type}</span></div>
+                      <div style={{ fontSize: T.micro, color: DIM }}>HP {c.hp} · ATK {c.atk} · SPD {c.speed}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''} learned</span>}</div>
                     </div>
-                    <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {c.type}</span></div>
-                    <div style={{ fontSize: T.micro, color: DIM }}>HP {c.hp} · ATK {c.atk} · SPD {c.speed}</div>
                   </div>
-                </div>
-                <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
-              </button>
+                  <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
+                </button>
+                <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
+                    background: cBal > 0 ? '#101a22' : '#0c0c14', border: `1px solid ${cBal > 0 ? '#2a4a5a' : LINE}`, opacity: hasTree ? 1 : 0.4 }}>
+                  <span style={{ fontSize: T.small, fontWeight: 900, color: hasTree ? '#9be7ff' : DIM }}>🌳 PATHS</span>
+                  {hasTree && <span style={{ fontSize: T.micro, fontWeight: 800, color: cBal > 0 ? '#9be7ff' : DIM }}>{cBal} ⬡{cBal > 0 ? ' to spend' : ''}</span>}
+                </button>
+              </div>
             );
           })}
         </div>
@@ -1304,6 +1528,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>Your stable is full — all {COMBAT_ROSTER.length} creatures caught.</div>
           )}
           <SlagBanked earned={earned} balance={slag} />
+          <CoresBanked coresRun={coresRun} />
           <RunRecap taken={taken} stats={stats} squad={squad} />
           <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
         </div>
@@ -1314,6 +1539,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
         <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVES.length}.</div>
         <SlagBanked earned={earned} balance={slag} />
+        <CoresBanked coresRun={coresRun} />
         <RunRecap taken={taken} stats={stats} squad={squad} />
         <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
       </div>

@@ -42,6 +42,8 @@ export const REACTOR_SKILLS = {
       const spent = actor.charge;
       let mult = REACTOR.overload.base + REACTOR.overload.perCharge * spent;
       if (isBurning(target)) mult *= REACTOR.overload.burningBonus;
+      // "Focus" tree node scales Overload. Opt-in — default 1 → goldens byte-identical.
+      mult *= (actor.mods?.overloadMult ?? 1);
       actor.charge = 0;
       const emberBurn = actor.mods?.overloadBurn ?? 0;
       // "Combustion" upgrade: Overload erupts across the whole enemy line.
