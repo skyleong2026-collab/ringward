@@ -108,6 +108,30 @@ function loadGround() {
 }
 function saveGround(id) { try { localStorage.setItem(GROUND_KEY, id); } catch { /* best-effort */ } }
 
+// ── Tiering & gather-to-recruit (§ master-plan items 3+4). ──
+// The deepest rings hold APEX creatures — they are NOT drawn from a normal clear.
+// Hunting their ring drops a SIGIL toward one of them; collect enough and you can
+// CHALLENGE it in a dedicated fight — beat it to recruit (catch-by-defeat). Commons
+// (everything else) stay clear-caught as before.
+const APEX_IDS = new Set(['frostwarden', 'rimecaller', 'blightcap', 'hexmoth']);
+const isApex = (id) => APEX_IDS.has(id);
+const APEX_SIGILS = 3; // sigils needed before an apex creature can be challenged
+const SIGILS_KEY = '8gents_seam_sigils';
+function loadSigils() { try { return JSON.parse(localStorage.getItem(SIGILS_KEY) || '{}') || {}; } catch { return {}; } }
+function saveSigils(m) { try { localStorage.setItem(SIGILS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+
+// Which apex creature a clear of this ring drops a sigil toward: an uncaught, not-yet-
+// challengeable apex in the hunted ring, fewest sigils first (focus one at a time), then
+// ring order. Returns its id, or null if the ring has no apex still being gathered.
+function sigilTarget(ground, stableIds, sigils) {
+  if (!ground) return null;
+  const pool = ground.biasIds.filter(
+    (id) => isApex(id) && !stableIds.includes(id) && (sigils[id] || 0) < APEX_SIGILS
+  );
+  if (pool.length === 0) return null;
+  return pool.slice().sort((a, b) => (sigils[a] || 0) - (sigils[b] || 0))[0];
+}
+
 // The ground you'll actually hunt: the stored choice if it still has uncaught creatures,
 // otherwise the first ring that does. Keeps the displayed ring and the catch in lockstep
 // once a ground has been cleared out, without mutating state during render.
@@ -123,7 +147,8 @@ function effectiveGround(stableIds, groundId) {
 // is never hard-locked — any uncaught creature can still surface (the ring steers, it
 // doesn't dictate). Returns the caught creature def, or null when the stable is full.
 function drawCatch(stableIds, groundId, rand = Math.random) {
-  const locked = COMBAT_ROSTER.filter((c) => !stableIds.includes(c.id));
+  // Apex creatures are gathered + challenged, never drawn from a clear — exclude them.
+  const locked = COMBAT_ROSTER.filter((c) => !stableIds.includes(c.id) && !isApex(c.id));
   if (locked.length === 0) return null;
   const biased = new Set(effectiveGround(stableIds, groundId).biasIds || []);
   const weights = locked.map((c) => (biased.has(c.id) ? BIAS_WEIGHT : 1));
@@ -1504,6 +1529,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [earned, setEarned] = useState(0); // slag this run banked (for the recap)
   const [stable, setStable] = useState(loadStable); // creature IDs you've caught
   const [ground, setGround] = useState(loadGround); // hunting ground — biases who you catch
+  const [sigils, setSigils] = useState(loadSigils); // {apexId: count} — gathered toward a challenge
+  const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
+  const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
@@ -1625,13 +1653,25 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       setSquad(patched);
       if (idx === WAVES.length - 1) {
         onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
-        // Draw a creature out of the ring — biased by the hunting ground you chose.
-        const caught = drawCatch(stable, ground);
-        if (caught) { const next = [...stable, caught.id]; setStable(next); saveStable(next); }
-        setCaughtNow(caught);
-        setCaughtFrom(effectiveGround(stable, ground));
-        sfx.ringTaken();
-        if (caught) setTimeout(() => sfx.caughtCreature(), 720);
+        const hunted = effectiveGround(stable, ground);
+        setCaughtFrom(hunted);
+        // A deep ring drops a SIGIL toward one of its apex creatures instead of a catch.
+        const apexId = sigilTarget(hunted, stable, sigils);
+        if (apexId) {
+          const count = Math.min(APEX_SIGILS, (sigils[apexId] || 0) + 1);
+          const nextSig = { ...sigils, [apexId]: count };
+          setSigils(nextSig); saveSigils(nextSig);
+          setSigilGain({ id: apexId, count, ready: count >= APEX_SIGILS });
+          setCaughtNow(null);
+          sfx.ringTaken();
+        } else {
+          // Otherwise draw a common out of the ring — biased by the ground you chose.
+          const caught = drawCatch(stable, ground);
+          if (caught) { const ns = [...stable, caught.id]; setStable(ns); saveStable(ns); }
+          setCaughtNow(caught); setSigilGain(null);
+          sfx.ringTaken();
+          if (caught) setTimeout(() => sfx.caughtCreature(), 720);
+        }
         setRunPhase('won'); return;
       }
       const aliveTypes = new Set(patched.filter((m) => m.hp > 0).map((m) => COMBAT_CREATURES[m.id].type));
@@ -1648,6 +1688,29 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
     rollOffer(); setRunPhase('upgrade');
+  }
+  // ── Apex challenge: a one-off fight against a gathered apex creature. Win → recruit. ──
+  function startChallenge(apexId) {
+    sfx.resume();
+    const base = perkBaseMods(owned);
+    const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
+    const aDefs = sq.map((m) => playerDef(m, base, treeModsFor(m.id, treeEquip, treeRanks)));
+    const apex = COMBAT_CREATURES[apexId];
+    setChallenge(apex);
+    setSquad(sq); setRunMods(base);
+    // The apex stands alone but hits like a boss — a genuine wall (first-pass dials).
+    const enemy = { ...makeUnitDef(apexId, 'Greedy'), name: apex.name,
+      hp: Math.round(apex.hp * 2.4), maxHp: Math.round(apex.hp * 2.4), atk: Math.round(apex.atk * 1.5) };
+    fight.begin(aDefs, [enemy], 808, auto ? 'auto' : 'play', (res, finalState) => {
+      const won = finalState.units.A.some((u) => u.hp > 0) && res.winner !== 'B';
+      if (won) {
+        if (!stable.includes(apexId)) { const ns = [...stable, apexId]; setStable(ns); saveStable(ns); }
+        const nextSig = { ...sigils }; delete nextSig[apexId]; setSigils(nextSig); saveSigils(nextSig);
+        sfx.ringTaken(); setTimeout(() => sfx.caughtCreature(), 720);
+        setRunPhase('challenge-won');
+      } else { sfx.squadDown(); setRunPhase('challenge-lost'); }
+    });
+    setRunPhase('challenge-fighting');
   }
   function applyUpgrade(up) {
     sfx.upgradePick();
@@ -1683,7 +1746,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setChallenge(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -1994,6 +2057,48 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             </div>
           );
         })()}
+        {(() => {
+          // Apex quarry — creatures you're gathering sigils toward. Full bar → challenge.
+          const gathering = [...APEX_IDS].filter((id) => !stable.includes(id) && (sigils[id] || 0) > 0);
+          if (gathering.length === 0) return null;
+          const ringOf = (id) => HUNTING_GROUNDS.find((g) => g.biasIds.includes(id));
+          return (
+            <div style={{ borderRadius: 10, border: `1px solid #2a3a5a`, background: '#0a1018', padding: '12px 14px', marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 16, lineHeight: 1 }}>★</span>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>APEX QUARRY</div>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>gather sigils, then win it over</span>
+              </div>
+              {gathering.map((id) => {
+                const ac = COMBAT_CREATURES[id]; const ati = TYPE_INFO[ac.type];
+                const have = Math.min(APEX_SIGILS, sigils[id] || 0);
+                const ready = have >= APEX_SIGILS;
+                const ring = ringOf(id);
+                return (
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: `1px solid #18203044` }}>
+                    <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={40} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: T.small, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {ac.type}</span></div>
+                      <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800 }}>{'✦'.repeat(have)}{'·'.repeat(APEX_SIGILS - have)} <span style={{ color: DIM, fontWeight: 600 }}>{have}/{APEX_SIGILS}{!ready && ring ? ` — hunt ${ring.name}` : ''}</span></div>
+                    </div>
+                    {ready && (
+                      <button onClick={() => picked.length >= 2 && startChallenge(id)} disabled={picked.length < 2}
+                        title={picked.length < 2 ? 'Pick at least 2 creatures first' : `Challenge ${ac.name}`}
+                        style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 9, border: `1.5px solid ${picked.length >= 2 ? ati.accent : LINE}`,
+                          background: picked.length >= 2 ? `${ati.accent}22` : '#111', color: picked.length >= 2 ? ati.accent : DIM,
+                          fontSize: T.small, fontWeight: 900, cursor: picked.length >= 2 ? 'pointer' : 'default', letterSpacing: 0.5 }}>
+                        ⚔ CHALLENGE
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {gathering.some((id) => (sigils[id] || 0) >= APEX_SIGILS) && picked.length < 2 && (
+                <div style={{ fontSize: T.micro, color: ACCENT, marginTop: 8, fontWeight: 700 }}>Pick a squad above, then call out your challenge.</div>
+              )}
+            </div>
+          );
+        })()}
         <div style={{ marginBottom: 18 }} />
         <button onClick={startRun} disabled={picked.length < 2}
           style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
@@ -2084,6 +2189,53 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     );
   }
 
+  // ── Apex challenge: the gathered-creature fight + its win/lose screens. ──
+  if (challenge && (runPhase === 'challenge-fighting' || runPhase === 'challenge-won' || runPhase === 'challenge-lost')) {
+    const cti = TYPE_INFO[challenge.type];
+    if (runPhase === 'challenge-won') {
+      return (
+        <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>WON OVER</div>
+          <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You bested <b>{challenge.name}</b> — it joins your stable.</div>
+          <div style={{ margin: '14px 0', background: '#091a12', border: `2px solid ${cti.accent}`, borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6 }}>★ APEX RECRUITED</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+              <Sprite spriteId={challenge.spriteId} color={cti.accent} glyph={cti.glyph} anim="idle" size={64} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: T.sub, fontWeight: 900, color: cti.accent }}>{cti.glyph} {challenge.name}</div>
+                <div style={{ fontSize: T.small, color: '#cdd', fontWeight: 700 }}>{cti.nick}</div>
+                <div style={{ fontSize: T.micro, color: DIM, marginTop: 2 }}>{cti.role}</div>
+                <div style={{ fontSize: T.micro, color: '#888', marginTop: 3 }}>Now in your stable — {stable.length}/{COMBAT_ROSTER.length} caught.</div>
+              </div>
+            </div>
+          </div>
+          <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>BACK →</button>
+        </div>
+      );
+    }
+    if (runPhase === 'challenge-lost') {
+      return (
+        <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>IT SLIPPED AWAY</div>
+          <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>{challenge.name} broke off and vanished — your sigils keep. Build up and try again.</div>
+          <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>BACK →</button>
+        </div>
+      );
+    }
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: T.small, color: DIM, flex: 1 }}>
+            <b style={{ color: cti.accent }}>★ APEX CHALLENGE · {cti.glyph} {challenge.name}</b> — beat it to win it over. It stands alone, but it hits like a wall.
+          </div>
+          {auto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
+        </div>
+        <FightView fight={fight} narrow={narrow} banner={null} bossUid={'B0'}
+          auto={auto} onToggleAuto={(n) => { setAuto(n); fight.setLiveAuto(n); }} />
+      </div>
+    );
+  }
+
   // ── In a run: progress bar + the fight (+ result banner). ──
   const wave = WAVES[waveIdx];
   const banner = (() => {
@@ -2108,8 +2260,29 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               </div>
             </div>
           )}
-          {!caughtNow && (
+          {!caughtNow && sigilGain && (() => {
+            const ac = COMBAT_CREATURES[sigilGain.id]; const ati = TYPE_INFO[ac.type];
+            return (
+              <div style={{ margin: '14px 0', background: '#0b1426', border: `2px solid ${ati.accent}`, borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6 }}>✦ SIGIL FOUND</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                  <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={56} />
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: T.body, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name}'s sigil</div>
+                    <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800, marginTop: 2 }}>{'✦'.repeat(sigilGain.count)}{'·'.repeat(APEX_SIGILS - sigilGain.count)} {sigilGain.count}/{APEX_SIGILS}</div>
+                    <div style={{ fontSize: T.micro, color: sigilGain.ready ? WIN : DIM, marginTop: 3, fontWeight: sigilGain.ready ? 800 : 400 }}>
+                      {sigilGain.ready ? '★ Ready to challenge — pick a squad and call it out.' : `Keep hunting ${caughtFrom ? caughtFrom.name : 'the ring'} for more.`}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          {!caughtNow && !sigilGain && stable.length >= COMBAT_ROSTER.length && (
             <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>Your stable is full — all {COMBAT_ROSTER.length} creatures caught.</div>
+          )}
+          {!caughtNow && !sigilGain && stable.length < COMBAT_ROSTER.length && (
+            <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>The commons here are all yours — hunt a deep ring (the Witherfen, the Frostbound Deep) for apex sigils.</div>
           )}
           <SlagBanked earned={earned} balance={slag} />
           <CoresBanked coresRun={coresRun} />
