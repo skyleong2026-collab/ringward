@@ -1585,6 +1585,59 @@ function AutoToggle({ auto, setAuto }) {
   );
 }
 
+// ── RingMap — the 8 hunting grounds as concentric rings closing on the Drop. Cleared
+// rings glow in their home-Type color; the frontier (deepest unlocked, uncleared) pulses;
+// locked rings are dark + dashed. A spiral of Type glyphs marks each ring's identity.
+// Tap a reachable ring to select it. Makes the "march inward" something you can see. ──
+function RingMap({ accessDepth, selectedId, clears, onSelect }) {
+  const C = 160, maxR = 150, minR = 36;
+  const step = (maxR - minR) / 7;
+  const rings = HUNTING_GROUNDS.map((g) => {
+    const r = maxR - (g.depth - 1) * step;
+    const locked = g.depth > accessDepth;
+    const cleared = !locked && (clears[g.id] || 0) > 0;
+    const frontier = !locked && !cleared && g.depth === accessDepth;
+    const sel = g.id === selectedId;
+    const ti = TYPE_INFO[COMBAT_CREATURES[g.biasIds[0]].type];
+    const color = locked ? '#2c2c3a' : cleared ? ti.accent : frontier ? ACCENT : '#5a5a6e';
+    const a = (-90 + (g.depth - 1) * 40) * Math.PI / 180;
+    return { g, r, locked, cleared, frontier, sel, glyph: ti.glyph, color, gx: C + r * Math.cos(a), gy: C + r * Math.sin(a) };
+  });
+  return (
+    <svg viewBox="0 0 320 320" style={{ width: '100%', maxWidth: 320, display: 'block', margin: '0 auto 8px' }}>
+      <circle cx={C} cy={C} r={maxR + 8} fill="#08080e" stroke="#17171f" />
+      {/* the Drop at the heart */}
+      <circle cx={C} cy={C} r={17} fill="#150e22" stroke="#6a4a9a" strokeWidth="1.2" />
+      <circle cx={C} cy={C} r={6} fill="#b06bff">
+        <animate attributeName="opacity" values="1;0.4;1" dur="2.4s" repeatCount="indefinite" />
+      </circle>
+      <text x={C} y={C + 4} fontSize="7" fill="#d9c2ff" textAnchor="middle" opacity="0.0">·</text>
+      {rings.map(({ g, r, locked, cleared, frontier, sel, glyph, color, gx, gy }) => (
+        <g key={g.id}>
+          <circle cx={C} cy={C} r={r} fill="none" stroke={color} strokeWidth={sel ? 6 : cleared ? 4 : 3}
+            strokeDasharray={locked ? '2 6' : undefined} opacity={locked ? 0.55 : 1} strokeLinecap="round" />
+          {sel && <circle cx={C} cy={C} r={r} fill="none" stroke={SEL} strokeWidth="1.4" opacity="0.85" />}
+          {/* transparent fat band = easy tap target */}
+          <circle cx={C} cy={C} r={r} fill="none" stroke="transparent" strokeWidth={Math.max(13, step)}
+            style={{ cursor: locked ? 'default' : 'pointer' }} onClick={() => !locked && onSelect(g.id)} />
+          {/* identity badge */}
+          <circle cx={gx} cy={gy} r={sel ? 11 : 9} fill="#0b0b14" stroke={sel ? SEL : color} strokeWidth={sel ? 2 : 1.2} opacity={locked ? 0.6 : 1}
+            style={{ cursor: locked ? 'default' : 'pointer' }} onClick={() => !locked && onSelect(g.id)} />
+          <text x={gx} y={gy} fontSize="10" textAnchor="middle" dominantBaseline="central" opacity={locked ? 0.7 : 1}
+            style={{ pointerEvents: 'none' }}>{locked ? '🔒' : glyph}</text>
+          {frontier && (
+            <circle cx={gx} cy={gy} r="11" fill="none" stroke={ACCENT} strokeWidth="1.5" style={{ pointerEvents: 'none' }}>
+              <animate attributeName="r" values="9;16;9" dur="1.7s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.9;0;0.9" dur="1.7s" repeatCount="indefinite" />
+            </circle>
+          )}
+        </g>
+      ))}
+      <text x={C} y={313} fontSize="8.5" fill="#5a5a70" textAnchor="middle" letterSpacing="1.5">OUTER RING → THE DROP</text>
+    </svg>
+  );
+}
+
 // ── RUN MODE — squad pick → (upgrade → wave) ×3 → boss, HP carries, win or wipe. ──
 function RunMode({ narrow, slag = 0, onSlag }) {
   const fight = useFight();
@@ -2161,40 +2214,27 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO RAID</div>
                 <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length > 0 ? `${lockedIds.length} grunling${lockedIds.length !== 1 ? 's' : ''} still out there` : 'all grunlings caught'}</span>
               </div>
-              {/* Ring picker — choose where to push; it biases who you draw out on a clear. */}
-              <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 7, marginBottom: 10 }}>
-                {HUNTING_GROUNDS.map((g) => {
-                  const ti = TIER_INFO[tierOfDepth(g.depth)];
-                  const locked = g.depth > accessDepth; // strict inward: not yet earned
-                  const targets = targetsOf(g);
-                  const cleared = !locked && targets.length === 0;
-                  const on = !locked && g.id === sel.id;
-                  const glyphs = [...new Set(g.biasIds.map((id) => TYPE_INFO[COMBAT_CREATURES[id].type].glyph))].join('');
-                  return (
-                    <button key={g.id} onClick={() => { if (!locked) { setGround(g.id); saveGround(g.id); } }} disabled={locked}
-                      style={{ textAlign: 'left', cursor: locked ? 'default' : 'pointer', borderRadius: 10, padding: '8px 9px',
-                        background: on ? '#16202e' : PANEL, border: `1.5px solid ${on ? SEL : locked ? '#23232e' : LINE}`, opacity: locked ? 0.5 : 1,
-                        boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ fontSize: T.small }}>{locked ? '🔒' : glyphs}</span>
-                        <span style={{ fontSize: T.micro, fontWeight: 900, color: on ? '#eaf2ff' : '#cfcfda', lineHeight: 1.15 }}>{g.name}</span>
-                        <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 9, fontWeight: 900, color: ti.color, letterSpacing: 0.3 }} title={`Tier ${tierOfDepth(g.depth)} · ${ti.name}`}>{ti.pips}</span>
-                      </div>
-                      <div style={{ fontSize: T.micro, color: locked ? '#6a6a7a' : on ? '#9be7ff' : DIM, fontWeight: 700, marginTop: 3 }}>
-                        {locked ? `🔒 ${ti.name} · fight deeper to reach`
-                          : <><span style={{ color: diffOf(g.depth).color }}>{diffOf(g.depth).label}</span> · {cleared ? <span style={{ color: WIN }}>✓ all caught — run for Cores</span> : `likely: ${targets.map((id) => COMBAT_CREATURES[id].name).join(', ')}`}</>}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Rumors of who you're hunting in the selected ring. */}
-              <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 800, marginBottom: 4 }}>
-                Hunting {sel.tag} — clear the ring to draw one out.
-                {(() => { const n = clears[sel.id] || 0; const m = repeatMult(n); return (
-                  <span style={{ color: n === 0 ? WIN : '#b58a3a', fontWeight: 700 }}> {n === 0 ? '· ✦ fresh: full Cores' : `· farmed ×${n} — Cores ×${m.toFixed(2)} (a fresh ring pays more)`}</span>
-                ); })()}
-              </div>
+              {/* The map — tap a ring to select where you raid. */}
+              <RingMap accessDepth={accessDepth} selectedId={sel.id} clears={clears}
+                onSelect={(id) => { setGround(id); saveGround(id); }} />
+              {/* The selected ring, spelled out (the map shows state by colour; this is the detail). */}
+              {(() => {
+                const ti = TIER_INFO[tierOfDepth(sel.depth)]; const diff = diffOf(sel.depth);
+                const cleared = selTargets.length === 0; const n = clears[sel.id] || 0; const m = repeatMult(n);
+                return (
+                  <div style={{ background: '#10131c', border: `1px solid ${SEL}33`, borderRadius: 10, padding: '9px 11px', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: '#eaf2ff' }}>{sel.name}</span>
+                      <span style={{ fontSize: 9, fontWeight: 900, color: ti.color }}>{ti.pips} {ti.name}</span>
+                      <span style={{ fontSize: T.micro, fontWeight: 800, color: diff.color }}>· {diff.label}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `farmed ×${n} — Cores ×${m.toFixed(2)}`}</span>
+                    </div>
+                    <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
+                      Raiding {sel.tag} — {cleared ? <span style={{ color: WIN }}>all caught here; run it for Cores</span> : `likely draw: ${selTargets.map((id) => COMBAT_CREATURES[id].name).join(', ')}`}
+                    </div>
+                  </div>
+                );
+              })()}
               {selTargets.map((id) => CREATURE_LORE[id] && (
                 <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
                   <span style={{ color: '#cdd', fontWeight: 700 }}>{COMBAT_CREATURES[id].name}:</span>{' '}
