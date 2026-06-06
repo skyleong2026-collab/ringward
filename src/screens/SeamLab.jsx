@@ -389,6 +389,14 @@ const coresForWave = (idx, isBoss) => (4 + idx) + (isBoss ? 10 : 0);
 // Deeper rings pay more Cores; the gentle outer ring pays LESS than before, so easy
 // auto-farming no longer floods you (depth 1 → ×0.7, depth 8 → ×2.1).
 const depthCoreMult = (depth) => 0.7 + 0.2 * ((depth || 1) - 1);
+// Diminishing returns on RE-farming a ring you've already cleared — the first clear pays
+// full; repeats taper to a floor, so pushing into a fresh ring always pays more than
+// grinding a mastered one. `n` = times this ring was cleared BEFORE this run.
+const REPEAT_MULT = [1.0, 0.6, 0.45, 0.35]; // 1st clear, 2nd, 3rd, 4th+
+const repeatMult = (n) => REPEAT_MULT[Math.min(n, REPEAT_MULT.length - 1)];
+const CLEARS_KEY = '8gents_seam_clears';
+function loadClears() { try { return JSON.parse(localStorage.getItem(CLEARS_KEY) || '{}') || {}; } catch { return {}; } }
+function saveClears(m) { try { localStorage.setItem(CLEARS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 // A legible difficulty read for a ring's depth — lead with what the player can SEE.
 const diffOf = (depth) => depth <= 2 ? { label: 'easy', color: '#7ed321' }
   : depth <= 4 ? { label: 'fair', color: '#9be7ff' }
@@ -1587,6 +1595,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [ground, setGround] = useState(loadGround); // hunting ground — biases who you catch
   const [runWaves, setRunWaves] = useState(() => wavesForGround(GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0])); // the ring's run
   const [runDepth, setRunDepth] = useState(() => (GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0]).depth); // scales Cores
+  const [clears, setClears] = useState(loadClears); // {ringId: times cleared} — diminishing core farm
+  const [runRepeat, setRunRepeat] = useState(1); // this run's repeat-clear core multiplier (fixed at start)
   const [sigils, setSigils] = useState(loadSigils); // {apexId: count} — gathered toward a challenge
   const [unlocked, setUnlocked] = useState(loadUnlocked); // deepest ring earned (strict inward)
   const [unlockedNow, setUnlockedNow] = useState(null); // ring depth just opened (won-screen beat)
@@ -1709,7 +1719,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       }
       // Progressive Cores: each surviving fielded creature banks ⬡ for clearing this wave.
       const clearedIds = fielded.filter((mi) => next[mi].hp > 0).map((mi) => next[mi].id);
-      awardCores(clearedIds, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth)));
+      awardCores(clearedIds, Math.max(1, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth) * runRepeat)));
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
       setSquad(patched);
@@ -1717,6 +1727,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
         const hunted = accessibleGround(ground, accessDepth); // the ring you actually raided
         setCaughtFrom(hunted);
+        // Record the clear — repeats of this ring pay diminishing Cores from here on.
+        setClears((c) => { const n = { ...c, [hunted.id]: (c[hunted.id] || 0) + 1 }; saveClears(n); return n; });
         // Strict inward: beating a ring's boss at your current frontier opens the next ring
         // (and its higher tier). Beta mode skips the gate, so it never re-unlocks.
         if (!beta && hunted.depth === unlocked && unlocked < 8) {
@@ -1753,6 +1765,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
     const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
     setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
+    setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
     const base = perkBaseMods(owned); // permanent perks set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
@@ -2026,7 +2039,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
                   ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
                   ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
-                  ['Reset progress', () => { setUnlocked(1); saveUnlocked(1); const st = [...STARTER_IDS]; setStable(st); saveStable(st); }],
+                  ['Reset progress', () => { setUnlocked(1); saveUnlocked(1); const st = [...STARTER_IDS]; setStable(st); saveStable(st); setClears({}); saveClears({}); }],
                 ].map(([label, fn]) => (
                   <button key={label} onClick={fn} style={{ fontSize: T.micro, fontWeight: 800, padding: '5px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #5a3a5a', background: '#1f0f1d', color: '#ff9cf5' }}>{label}</button>
                 ))}
@@ -2149,6 +2162,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               {/* Rumors of who you're hunting in the selected ring. */}
               <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 800, marginBottom: 4 }}>
                 Hunting {sel.tag} — clear the ring to draw one out.
+                {(() => { const n = clears[sel.id] || 0; const m = repeatMult(n); return (
+                  <span style={{ color: n === 0 ? WIN : '#b58a3a', fontWeight: 700 }}> {n === 0 ? '· ✦ fresh: full Cores' : `· farmed ×${n} — Cores ×${m.toFixed(2)} (a fresh ring pays more)`}</span>
+                ); })()}
               </div>
               {selTargets.map((id) => CREATURE_LORE[id] && (
                 <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
@@ -2394,6 +2410,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open{tierOfDepth(unlockedNow) > tierOfDepth(unlockedNow - 1) ? <> · <span style={{ color: ti.color, fontWeight: 800 }}>{ti.pips} {ti.name}-tier creatures</span> within</> : ''}.</div>
             </div>
           ); })()}
+          {runRepeat < 1 && (
+            <div style={{ fontSize: T.micro, color: '#b58a3a', margin: '8px 0', fontWeight: 700 }}>↻ Repeat clear — Cores paid at ×{runRepeat.toFixed(2)}. Push a fresh ring inward for full ⬡.</div>
+          )}
           <SlagBanked earned={earned} balance={slag} />
           <CoresBanked coresRun={coresRun} />
           <RunRecap taken={taken} stats={stats} squad={squad} />
