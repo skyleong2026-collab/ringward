@@ -1220,7 +1220,7 @@ function LearnMode({ narrow, onGraduate }) {
 export function SeamLab({ onClose, slag = 0, onSlag }) {
   const vw = useViewport();
   const narrow = vw < 760;
-  const [tab, setTab] = useState('learn'); // 'learn' | 'run' | 'sandbox'
+  const [tab, setTab] = useState('run'); // 'learn' | 'run' | 'sandbox'
 
   const tabBtn = (key, label) => (
     <button onClick={() => setTab(key)} style={{ background: tab === key ? '#16202e' : PANEL, color: tab === key ? '#eaf2ff' : '#999', border: `2px solid ${tab === key ? SEL : LINE}`, borderRadius: 9, padding: '8px 16px', cursor: 'pointer', fontSize: T.body, fontWeight: 800 }}>{label}</button>
@@ -1232,10 +1232,10 @@ export function SeamLab({ onClose, slag = 0, onSlag }) {
       <div style={{ maxWidth: 920, margin: '0 auto', padding: narrow ? '14px 12px 48px' : '18px 18px 56px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: T.head, fontWeight: 800, color: ACCENT, letterSpacing: 0.5 }}>⚙ ENGINE SEAM · §26</div>
-            <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>Manual turn-by-turn — one engine, two drivers. Additive; resolveBattle untouched.</div>
+            <div style={{ fontSize: T.head, fontWeight: 900, color: '#e86040', letterSpacing: 2 }}>RINGWARD</div>
+            <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>Manual combat · charge, spend, build.</div>
           </div>
-          <button onClick={onClose} style={{ background: PANEL, border: `1px solid ${LINE}`, color: '#ccc', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', fontSize: T.body, fontWeight: 700 }}>✕ Close</button>
+          <button onClick={onClose} style={{ background: PANEL, border: `1px solid ${LINE}`, color: '#9a9aaa', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', fontSize: T.small, fontWeight: 700 }}>← ROSTER</button>
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {tabBtn('learn', '🎓 LEARN')}

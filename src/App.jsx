@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import CollectionScreen from './screens/CollectionScreen.jsx';
 import { IntroFrame } from './screens/IntroFrame.jsx';
 import { GuidedCoach } from './screens/GuidedCoach.jsx';
-import { ReactorSandbox } from './screens/ReactorSandbox.jsx';
 import { SeamLab } from './screens/SeamLab.jsx';
 import EncounterScreen from './screens/EncounterScreen.jsx';
 import PreBattle from './screens/PreBattle.jsx';
@@ -38,7 +37,7 @@ import { recordContractWin, extractFiredSynergies, loadIntel, revealIntelAxis, c
 import { animationStyles } from './ui/animations.js';
 import { MAX_SQUAD } from './config.js';
 
-const VERSION = 'vD-Z';
+const VERSION = 'vE-A';
 
 // Migrate stale archetype names from pre-vG-A builds
 const ARCHETYPE_MIGRATION = { Anchor: 'Guardian', Relay: 'Echo', Predator: 'Swift', Ember: 'Spark' };
@@ -284,8 +283,7 @@ function App() {
   }
   // ⚗ Reactor Lab — manual-combat prototype (2026-06-01 pivot). Isolated overlay,
   // does not touch the frozen engine; entry is a header button.
-  const [showLab, setShowLab] = useState(false);
-  const [showSeamLab, setShowSeamLab] = useState(false);
+  const [showSeamLab, setShowSeamLab] = useState(true);
 
   function persist(newCollection, newSquadIds, newEncounterHistory = encounterHistory) {
     localStorage.setItem('8gents_collection', JSON.stringify(newCollection));
@@ -907,22 +905,6 @@ function App() {
           }}>
             ◼ BRIEFING
           </button>
-          <button onClick={() => setShowLab(true)} title="Reactor Lab — manual combat prototype" style={{
-            fontSize: 9, color: '#e8a040', background: '#1a1408',
-            padding: '4px 9px', borderRadius: 4, letterSpacing: 1,
-            fontFamily: 'monospace', border: '1px solid #e8a04044', fontWeight: 600,
-            cursor: 'pointer',
-          }}>
-            ⚗ LAB
-          </button>
-          <button onClick={() => setShowSeamLab(true)} title="Engine Seam — §26 manual combat (new engine)" style={{
-            fontSize: 9, color: '#9cd', background: '#0c1420',
-            padding: '4px 9px', borderRadius: 4, letterSpacing: 1,
-            fontFamily: 'monospace', border: '1px solid #9cd44', fontWeight: 600,
-            cursor: 'pointer',
-          }}>
-            ⚙ SEAM
-          </button>
           <span style={{
             fontSize: 10,
             color: '#ddd',
@@ -1178,7 +1160,6 @@ function App() {
 
       {showIntro && <IntroFrame onBegin={dismissIntro} />}
       {!showIntro && showGuide && <GuidedCoach onClose={dismissGuide} />}
-      {showLab && <ReactorSandbox onClose={() => setShowLab(false)} />}
       {showSeamLab && <SeamLab onClose={() => setShowSeamLab(false)} slag={currencies.slag ?? 0} onSlag={addSlag} />}
     </div>
   );
