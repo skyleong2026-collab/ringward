@@ -212,8 +212,11 @@ function useViewport() {
 // warm-up; the Frostbound Deep (depth 8) is a real wall auto can't faceroll. Stats are
 // per-wave ROLE values × depth — NOT the roster base — so fights stay short and punchy
 // and the curve is controllable. SeamLab-only; the goldens use untouched roster stats.
-const D_HP = (d) => 1 + 0.16 * (d - 1);   // depth 1 → ×1.0, depth 8 → ×2.12
-const D_ATK = (d) => 1 + 0.10 * (d - 1);  // depth 1 → ×1.0, depth 8 → ×1.70
+// Difficulty dials (vF-S pass — the starter trio was smashing everything). ATK is the
+// lever that actually threatens the squad (low enemy ATK = nobody dies = trivial), so
+// it's bumped hardest, with a steeper depth curve. All one-line, feel-check freely.
+const D_HP = (d) => 1 + 0.18 * (d - 1);   // depth 1 → ×1.0, depth 8 → ×2.26
+const D_ATK = (d) => 1 + 0.14 * (d - 1);  // depth 1 → ×1.0, depth 8 → ×1.98
 function foe(id, temperament, roleHp, roleAtk, depth, extra = {}) {
   const hp = Math.round(roleHp * D_HP(depth));
   return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth)), ...extra };
@@ -224,14 +227,14 @@ function wavesForGround(g) {
   const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
   return [
     { name: 'Scouts', seed: 101, blurb: `The edge of ${g.name} — a jumpy pair. Warm up, hit fast.`,
-      enemies: () => [ foe(at(0), 'Cautious', 90, 15, d), foe(at(1), 'Cautious', 85, 15, d) ] },
-    { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back.',
-      enemies: () => [ foe(at(0), 'Balanced', 130, 24, d), foe(at(1), 'Balanced', 130, 22, d), foe(at(2), 'Balanced', 120, 24, d) ] },
+      enemies: () => [ foe(at(0), 'Cautious', 95, 20, d), foe(at(1), 'Cautious', 90, 20, d) ] },
+    { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back hard.',
+      enemies: () => [ foe(at(0), 'Balanced', 145, 32, d), foe(at(1), 'Balanced', 145, 30, d), foe(at(2), 'Balanced', 135, 32, d) ] },
     { name: 'The Pack-Lord', seed: 303, blurb: 'The two meanest things in here, paired up. Break through.',
-      enemies: () => [ foe(at(0), 'Greedy', 220, 30, d), foe(at(1), 'Greedy', 160, 38, d) ] },
+      enemies: () => [ foe(at(0), 'Greedy', 250, 42, d), foe(at(1), 'Greedy', 185, 52, d) ] },
     { name: g.boss, boss: true, seed: 404,
       blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
-      enemies: () => [ foe(at(0), 'Greedy', 360, 40, d, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 170, 16, d, { name: 'Tender' }) ] },
+      enemies: () => [ foe(at(0), 'Greedy', 450, 58, d, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 200, 20, d, { name: 'Tender' }) ] },
   ];
 }
 const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
@@ -2259,6 +2262,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const fighters = eligible.length > 0 ? eligible : squad.filter((m) => m.hp > 0);
     return (
       <div>
+        <button onClick={() => { setPendingUpgrade(null); setRunPhase('upgrade'); }}
+          style={{ padding: '7px 12px', borderRadius: 9, border: `1px solid ${LINE}`, background: PANEL, color: '#bbb', fontSize: T.small, fontWeight: 800, cursor: 'pointer', marginBottom: 10 }}>
+          ← Back · pick a different upgrade
+        </button>
         <BuildStrip taken={taken} />
         {/* The bend card — what you just picked */}
         <div style={{ textAlign: 'center', background: PANEL, border: `2px solid ${up.color}`, borderRadius: 14, padding: '18px 16px', marginBottom: 18, boxShadow: `0 0 18px ${up.color}33` }}>
