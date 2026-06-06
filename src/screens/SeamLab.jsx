@@ -289,6 +289,8 @@ const FX_STYLE = `
 @keyframes seam-aura { 0%,100%{opacity:.35} 50%{opacity:.8} }
 @keyframes seam-point { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-7px)} }
 @keyframes seam-hintglow { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,.15)} 50%{box-shadow:0 0 16px 3px rgba(232,160,64,.85)} }
+/* bend proc callout — pill that floats up off the actor, distinct from damage numbers */
+@keyframes seam-procfloat { 0%{transform:translate(-50%,6px) scale(.75);opacity:0} 20%{opacity:1;transform:translate(-50%,-4px) scale(1)} 100%{transform:translate(-50%,-52px) scale(.9);opacity:0} }
 `;
 
 // Horizontal focal point (0–1) to crop ONE clear pose out of each wide turnaround
@@ -444,9 +446,10 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       {isTarget && targetMark && <div style={{ position: 'absolute', top: size * 0.16, left: '50%', fontSize: size * 0.42, animation: 'seam-alert .8s ease-in-out infinite', pointerEvents: 'none', zIndex: 7, filter: 'drop-shadow(0 1px 3px #000)' }}>{targetMark}</div>}
       {/* floating damage/heal numbers */}
       <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 0, pointerEvents: 'none', zIndex: 6 }}>
-        {popups.map((p) => (
-          <div key={p.id} style={{ position: 'absolute', left: '50%', fontSize: T.label, fontWeight: 900, color: p.color, textShadow: '0 1px 4px #000, 0 0 2px #000', animation: 'seam-float .95s ease-out forwards', whiteSpace: 'nowrap' }}>{p.text}</div>
-        ))}
+        {popups.map((p) => p.isProc
+          ? <div key={p.id} style={{ position: 'absolute', left: '50%', fontSize: T.micro, fontWeight: 900, color: '#fff', background: p.color + 'dd', border: `1px solid ${p.color}`, borderRadius: 10, padding: '2px 7px', textShadow: '0 1px 3px #000', animation: 'seam-procfloat 1.3s ease-out forwards', whiteSpace: 'nowrap' }}>{p.text}</div>
+          : <div key={p.id} style={{ position: 'absolute', left: '50%', fontSize: T.label, fontWeight: 900, color: p.color, textShadow: '0 1px 4px #000, 0 0 2px #000', animation: 'seam-float .95s ease-out forwards', whiteSpace: 'nowrap' }}>{p.text}</div>
+        )}
       </div>
       <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
         {castEf && <div key={`c${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.15, height: size * 1.15, borderRadius: '50%', background: `radial-gradient(circle, ${castEf.color}cc 0%, transparent 70%)`, animation: 'seam-castglow .55s ease-out forwards', pointerEvents: 'none', zIndex: 3 }} />}
@@ -566,6 +569,33 @@ function useFight(opts = {}) {
   // the hit animates and input stays locked until the beat passes.
   function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, ms)); }
 
+  // Look up the actor's mods from the live engine state so we can detect which
+  // bend (if any) fired on this turn without touching the engine event format.
+  function detectProcs(event) {
+    if (event.type !== 'turn') return [];
+    const st = stateRef.current;
+    const actorUnit = st ? (st.units.A.find((u) => u.uid === event.actor.uid) || st.units.B.find((u) => u.uid === event.actor.uid)) : null;
+    const mods = actorUnit?.mods ?? {};
+    const sid = event.skill.id;
+    const hitCounts = {};
+    (event.hits || []).forEach((h) => { if (h.dmg > 0 || h.killed) hitCounts[h.uid] = (hitCounts[h.uid] || 0) + 1; });
+    const anyHit = Object.keys(hitCounts).length > 0;
+    const procs = [];
+    if (mods.extraHits > 0 && (sid === 'jab' || sid === 'flurry') && anyHit)
+      procs.push({ text: '⚔ TWIN STRIKE', color: '#ffd166' });
+    if (mods.overloadBurn > 0 && sid === 'overload')
+      procs.push({ text: '🔥 EMBER TRAIL', color: BURN });
+    if (mods.executeWindow > 0 && sid === 'execute' && anyHit)
+      procs.push({ text: '🗡 MARK', color: '#ff7a9c' });
+    if (mods.braceTeam > 0 && sid === 'brace')
+      procs.push({ text: '🛡 AEGIS REFLEX', color: '#7fd6ff' });
+    if (mods.mendRegen > 0 && sid === 'mend')
+      procs.push({ text: '🌿 LIFEBLOOM', color: WIN });
+    if (mods.primeTeam > 0 && sid === 'prime')
+      procs.push({ text: '✦ POWER CHORD', color: AMP });
+    return procs;
+  }
+
   function emit(event) {
     feedRef.current = [...feedRef.current, feedLine(event)];
     setFeed(feedRef.current);
@@ -597,10 +627,13 @@ function useFight(opts = {}) {
       startHold(TICK_HOLD_MS);
       sfx.regenTick();
     }
-    const adds = popupsForEvent(event).map((a) => ({ ...a, id: ++POP_ID }));
+    const adds = [
+      ...popupsForEvent(event).map((a) => ({ ...a, id: ++POP_ID })),
+      ...detectProcs(event).map((a) => ({ ...a, uid: event.actor.uid, id: ++POP_ID, isProc: true })),
+    ];
     if (adds.length) {
       setPopups((p) => [...p, ...adds].slice(-50));
-      adds.forEach((a) => setTimeout(() => setPopups((p) => p.filter((x) => x.id !== a.id)), 1100));
+      adds.forEach((a) => setTimeout(() => setPopups((p) => p.filter((x) => x.id !== a.id)), a.isProc ? 1400 : 1100));
     }
     if (stateRef.current) setSnap(snapshot(stateRef.current));
   }
