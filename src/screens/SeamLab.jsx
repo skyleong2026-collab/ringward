@@ -400,6 +400,12 @@ const repeatMult = (n) => REPEAT_MULT[Math.min(n, REPEAT_MULT.length - 1)];
 const CLEARS_KEY = '8gents_seam_clears';
 function loadClears() { try { return JSON.parse(localStorage.getItem(CLEARS_KEY) || '{}') || {}; } catch { return {}; } }
 function saveClears(m) { try { localStorage.setItem(CLEARS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+// Your last squad — remembered so it's pre-selected every run (no re-picking each time).
+const SQUAD_KEY = '8gents_seam_squad';
+function loadSquad() { try { const s = JSON.parse(localStorage.getItem(SQUAD_KEY) || '[]'); return Array.isArray(s) ? s.slice(0, 3) : []; } catch { return []; } }
+function saveSquad(ids) { try { localStorage.setItem(SQUAD_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
+// The saved squad, kept to creatures you still own (a reset/uncatch can't leave a ghost).
+function savedSquadIn(stableIds) { return loadSquad().filter((id) => stableIds.includes(id)); }
 // A legible difficulty read for a ring's depth — lead with what the player can SEE.
 const diffOf = (depth) => depth <= 2 ? { label: 'easy', color: '#7ed321' }
   : depth <= 4 ? { label: 'fair', color: '#9be7ff' }
@@ -1642,7 +1648,7 @@ function RingMap({ accessDepth, selectedId, clears, onSelect }) {
 function RunMode({ narrow, slag = 0, onSlag }) {
   const fight = useFight();
   const [runPhase, setRunPhase] = useState('pick'); // pick | upgrade | fighting | won | lost
-  const [picked, setPicked] = useState([]); // creature ids (2–3)
+  const [picked, setPicked] = useState(() => savedSquadIn(loadStable())); // creature ids (2–3) — defaults to last squad
   const [squad, setSquad] = useState([]); // [{id, hp}] persistent across waves
   const [waveIdx, setWaveIdx] = useState(0); // the wave about to be fought
   const [runMods, setRunMods] = useState({ ...EMPTY_MODS });
@@ -1759,7 +1765,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   function toggle(id) {
     if (!stable.includes(id)) return; // can't pick locked creatures
-    setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
+    setPicked((p) => { const next = p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p; saveSquad(next); return next; });
   }
   // Only offer a move-bend when the matching Type is still alive — pass aliveTypes
   // after each wave so a dead creature's bend can't appear in the next offer.
@@ -1904,7 +1910,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2120,7 +2126,20 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
                   ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
                   ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
-                  ['Reset progress', () => { setUnlocked(1); saveUnlocked(1); const st = [...STARTER_IDS]; setStable(st); saveStable(st); setClears({}); saveClears({}); }],
+                  ['Reset ALL progress', () => {
+                    const st = [...STARTER_IDS];
+                    setUnlocked(1); saveUnlocked(1);
+                    setStable(st); saveStable(st);
+                    setClears({}); saveClears({});
+                    setSigils({}); saveSigils({});
+                    setCores({}); saveCores({});                 // wipe the OP trees — Cores,
+                    setTreeAlloc({}); saveTreeAlloc({});          // unlocked nodes,
+                    setTreeEquip({}); saveEquip({});              // equipped loadout,
+                    setTreeRanks({}); saveRanks({});              // and node ranks.
+                    setOwned([]); savePerks([]);                 // Forge perks too.
+                    setGround('outer-ring'); saveGround('outer-ring');
+                    setPicked([]); saveSquad([]);
+                  }],
                 ].map(([label, fn]) => (
                   <button key={label} onClick={fn} style={{ fontSize: T.micro, fontWeight: 800, padding: '5px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #5a3a5a', background: '#1f0f1d', color: '#ff9cf5' }}>{label}</button>
                 ))}
