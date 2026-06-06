@@ -858,6 +858,43 @@ function BuildStrip({ taken }) {
   );
 }
 
+// Between-wave squad condition — see who's hurt and what bends each creature has
+// stacked before you pick the next upgrade. Makes the decision legible: "Swiftpaw
+// is at 60% HP with Twin Strike — give her Thick Hide or a second bend?"
+function SquadState({ squad, runMods }) {
+  if (!squad || !squad.length) return null;
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+      {squad.map((mem) => {
+        const c = COMBAT_CREATURES[mem.id];
+        const ti = TYPE_INFO[c.type];
+        const maxHp = maxHpOf(mem, runMods);
+        const pct = maxHp > 0 ? Math.max(0, mem.hp / maxHp) : 0;
+        const dead = mem.hp <= 0;
+        const hpColor = dead ? '#3a1a1a' : pct < 0.3 ? LOSS : pct < 0.6 ? ACCENT : '#3ec9a0';
+        return (
+          <div key={mem.id} style={{ flex: 1, minWidth: 120, background: PANEL, border: `1.5px solid ${dead ? '#2a1414' : ti.accent + '55'}`, borderRadius: 10, padding: '8px 10px', opacity: dead ? 0.45 : 1 }}>
+            <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 5 }}>
+              <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={36} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: ti.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aaa', fontWeight: 700 }}>{dead ? 'KO' : `${mem.hp}/${maxHp} HP`}</div>
+              </div>
+            </div>
+            <Bar value={dead ? 0 : mem.hp} max={maxHp} color={hpColor} h={5} />
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6, minHeight: 16 }}>
+              {(mem.bends ?? []).map((b, i) => (
+                <span key={i} title={b.name} style={{ fontSize: 10, fontWeight: 800, color: b.color, background: b.color + '22', border: `1px solid ${b.color}44`, borderRadius: 6, padding: '1px 5px' }}>{b.icon}</span>
+              ))}
+              {!(mem.bends ?? []).length && <span style={{ fontSize: T.micro, color: '#3a3a4a', fontStyle: 'italic' }}>no bends</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // The slag a run banked — the thing it left behind. Shown big on win/loss so the
 // reward reads, with the new wallet total beside it.
 function SlagBanked({ earned, balance }) {
@@ -1158,6 +1195,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     return (
       <div>
         <BuildStrip taken={taken} />
+        <SquadState squad={squad} runMods={runMods} />
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: T.head, fontWeight: 900, color: ACCENT }}>{waveIdx === 0 ? '⛰ Gear up for the approach' : `✓ Wave ${waveIdx} cleared — patched up (+${Math.round(patchup * 100)}% HP)`}</div>
           {nextWave.boss && <div style={{ fontSize: T.sub, fontWeight: 900, color: LOSS, marginTop: 6 }}>💀 FINAL STAND — choose your last upgrade well.</div>}
