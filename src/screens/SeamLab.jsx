@@ -105,6 +105,48 @@ const HUNTING_GROUNDS = [
 const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
 const GROUND_KEY = '8gents_seam_ground';
 const BIAS_WEIGHT = 8; // a biased, still-uncaught creature is this many × likelier to be drawn
+
+// ── Tiers: ring depth IS character tier. Deeper ring = higher tier = a STRONGER
+// creature (Foundation 1-3 / Specialist 4-6 / Apex 7-8). Higher tiers are both much
+// harder to reach (strict inward unlock + steep depth scaling) AND straight-up better
+// (a player-side power multiplier), so there's a real pull to fight inward and switch
+// to them. The multiplier is player-only (enemies/goldens never read it).
+const GROUND_OF_CREATURE = {};
+HUNTING_GROUNDS.forEach((g) => g.biasIds.forEach((id) => { GROUND_OF_CREATURE[id] = g; }));
+const tierOfDepth = (d) => (d <= 3 ? 1 : d <= 6 ? 2 : 3);
+const tierOf = (id) => tierOfDepth((GROUND_OF_CREATURE[id] || { depth: 1 }).depth);
+const TIER_INFO = {
+  1: { name: 'Foundation', mult: 1.0,  color: '#8a8a9a', pips: '★' },
+  2: { name: 'Specialist', mult: 1.2,  color: '#9be7ff', pips: '★★' },
+  3: { name: 'Apex',       mult: 1.45, color: '#ffd166', pips: '★★★' },
+};
+const tierMult = (id) => TIER_INFO[tierOf(id)].mult;
+
+// ── Strict inward progression: you start at the outer ring and earn your way in —
+// beating a ring's boss opens the next ring (and its higher tier) inward. Persist the
+// deepest ring unlocked (1..8). The beta switch can fast-forward this for testing.
+const UNLOCKED_KEY = '8gents_seam_unlocked';
+function loadUnlocked() {
+  try { const n = parseInt(localStorage.getItem(UNLOCKED_KEY), 10); return Number.isFinite(n) ? Math.min(8, Math.max(1, n)) : 1; }
+  catch { return 1; }
+}
+function saveUnlocked(n) { try { localStorage.setItem(UNLOCKED_KEY, String(n)); } catch { /* best-effort */ } }
+
+// ── Beta / test switch. Fast-forwards content (unlocks every ring + grant buttons) so
+// the deep game can be tested from the start; toggle it OFF to play the real gated build.
+// Flip BETA_AVAILABLE to false to strip the panel entirely from a public deploy.
+const BETA_AVAILABLE = true;
+const BETA_KEY = '8gents_seam_beta';
+function loadBeta() { try { return localStorage.getItem(BETA_KEY) === '1'; } catch { return false; } }
+function saveBeta(b) { try { localStorage.setItem(BETA_KEY, b ? '1' : '0'); } catch { /* best-effort */ } }
+
+// The ground you can actually run: the chosen ring if it's unlocked, else the deepest
+// ring you've earned. Keeps a stale/locked selection from sending you somewhere barred.
+function accessibleGround(groundId, accessDepth) {
+  const g = GROUND_BY_ID[groundId];
+  if (g && g.depth <= accessDepth) return g;
+  return HUNTING_GROUNDS.filter((x) => x.depth <= accessDepth).sort((a, b) => b.depth - a.depth)[0] || HUNTING_GROUNDS[0];
+}
 function loadGround() {
   try { const id = localStorage.getItem(GROUND_KEY); return GROUND_BY_ID[id] ? id : HUNTING_GROUNDS[0].id; }
   catch { return HUNTING_GROUNDS[0].id; }
@@ -135,25 +177,17 @@ function sigilTarget(ground, stableIds, sigils) {
   return pool.slice().sort((a, b) => (sigils[a] || 0) - (sigils[b] || 0))[0];
 }
 
-// The ground you'll actually hunt: the stored choice if it still has uncaught creatures,
-// otherwise the first ring that does. Keeps the displayed ring and the catch in lockstep
-// once a ground has been cleared out, without mutating state during render.
-function effectiveGround(stableIds, groundId) {
-  const lockedSet = new Set(COMBAT_ROSTER.map((c) => c.id).filter((id) => !stableIds.includes(id)));
-  const has = (g) => g && g.biasIds.some((id) => lockedSet.has(id));
-  const stored = GROUND_BY_ID[groundId];
-  if (has(stored)) return stored;
-  return HUNTING_GROUNDS.find(has) || stored || HUNTING_GROUNDS[0];
-}
-
 // Weighted catch: the chosen ground's uncaught creatures are far likelier, but the draw
 // is never hard-locked — any uncaught creature can still surface (the ring steers, it
 // doesn't dictate). Returns the caught creature def, or null when the stable is full.
-function drawCatch(stableIds, groundId, rand = Math.random) {
+function drawCatch(stableIds, groundId, accessDepth = 8, rand = Math.random) {
   // Apex creatures are gathered + challenged, never drawn from a clear — exclude them.
-  const locked = COMBAT_ROSTER.filter((c) => !stableIds.includes(c.id) && !isApex(c.id));
+  // Strict tiering: you can only draw creatures from rings you've actually reached, so a
+  // higher-tier creature never strays out into an outer-ring catch.
+  const reachable = (id) => (GROUND_OF_CREATURE[id]?.depth ?? 1) <= accessDepth;
+  const locked = COMBAT_ROSTER.filter((c) => !stableIds.includes(c.id) && !isApex(c.id) && reachable(c.id));
   if (locked.length === 0) return null;
-  const biased = new Set(effectiveGround(stableIds, groundId).biasIds || []);
+  const biased = new Set((GROUND_BY_ID[groundId] || {}).biasIds || []);
   const weights = locked.map((c) => (biased.has(c.id) ? BIAS_WEIGHT : 1));
   let roll = rand() * weights.reduce((s, w) => s + w, 0);
   for (let i = 0; i < locked.length; i++) { roll -= weights[i]; if (roll < 0) return locked[i]; }
@@ -317,7 +351,9 @@ function perkBaseMods(owned) {
 const WIN_SLAG = 100;
 const lossSlag = (wavesCleared) => Math.max(5, wavesCleared * 15);
 const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
-const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1));
+// Player creature max HP — scaled by the run's mods AND its TIER (deeper-ring creatures
+// are simply tankier; that's the pull to chase them). Tier mult is player-side only.
+const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1) * tierMult(member.id));
 
 // ── PERMANENT SKILL TREES (§ progression) — the long game. ─────────────────────
 // Each creature carves its OWN tree with Cores (⬡) earned from runs. Per-creature,
@@ -648,6 +684,7 @@ function playerDef(member, squadMods, perm) {
   const p = perm ?? emptyTreeMods(); // permanent skill-tree mods for THIS creature
   return {
     ...base, temperament: 'Balanced', maxHp, hp: Math.min(member.hp, maxHp),
+    atk: Math.round(base.atk * tierMult(member.id)), // higher-tier creatures also hit harder
     charge: Math.min(base.maxCharge ?? 6, (squadMods?.chargeStart ?? 0) + (p.chargeStart ?? 0)),
     mods: {
       // squad-wide flat buffs × permanent tree:
@@ -1551,6 +1588,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [runWaves, setRunWaves] = useState(() => wavesForGround(GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0])); // the ring's run
   const [runDepth, setRunDepth] = useState(() => (GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0]).depth); // scales Cores
   const [sigils, setSigils] = useState(loadSigils); // {apexId: count} — gathered toward a challenge
+  const [unlocked, setUnlocked] = useState(loadUnlocked); // deepest ring earned (strict inward)
+  const [unlockedNow, setUnlockedNow] = useState(null); // ring depth just opened (won-screen beat)
+  const [beta, setBeta] = useState(loadBeta); // test switch — fast-forwards the gate
+  const accessDepth = beta ? 8 : unlocked; // the deepest ring you may enter right now
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
@@ -1674,8 +1715,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       setSquad(patched);
       if (idx === WAVE_COUNT - 1) {
         onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
-        const hunted = effectiveGround(stable, ground);
+        const hunted = accessibleGround(ground, accessDepth); // the ring you actually raided
         setCaughtFrom(hunted);
+        // Strict inward: beating a ring's boss at your current frontier opens the next ring
+        // (and its higher tier). Beta mode skips the gate, so it never re-unlocks.
+        if (!beta && hunted.depth === unlocked && unlocked < 8) {
+          const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); setUnlockedNow(nd);
+        } else setUnlockedNow(null);
         // A deep ring drops a SIGIL toward one of its apex creatures instead of a catch.
         const apexId = sigilTarget(hunted, stable, sigils);
         if (apexId) {
@@ -1686,8 +1732,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           setCaughtNow(null);
           sfx.ringTaken();
         } else {
-          // Otherwise draw a common out of the ring — biased by the ground you chose.
-          const caught = drawCatch(stable, ground);
+          // Otherwise draw a common out of the ring — biased by the ring, gated by tier.
+          const caught = drawCatch(stable, hunted.id, accessDepth);
           if (caught) { const ns = [...stable, caught.id]; setStable(ns); saveStable(ns); }
           setCaughtNow(caught); setSigilGain(null);
           sfx.ringTaken();
@@ -1705,7 +1751,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   function startRun() {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
-    const g = effectiveGround(stable, ground); // the ring you'll actually hunt builds the run
+    const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
     setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
     const base = perkBaseMods(owned); // permanent perks set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
@@ -1769,7 +1815,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setChallenge(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -1958,9 +2004,36 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
           <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
           <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
-            Three packs guard the edge of the ring — Scouts, the Pack, the Warden — and behind them waits the <b style={{ color: '#ffb38a' }}>Hollow King</b>. Clear all four in one push and the approach is yours. Wounds carry between fights; you only patch up a little. Choose who goes in.
+            Four trials guard each ring — clear them in one push and the approach is yours. Beat a ring's boss and the next ring <b style={{ color: '#9be7ff' }}>inward</b> opens, with stronger, higher-tier creatures to win over. Wounds carry between fights; you only patch up a little. Choose who goes in.
           </div>
         </div>
+        {/* ── β BETA: a removable dev switch — fast-forward the gate for content testing. ── */}
+        {BETA_AVAILABLE && (
+          <div style={{ border: `1px dashed ${beta ? '#ff5cf0' : '#33333f'}`, background: beta ? '#190a17' : '#0b0b11', borderRadius: 10, padding: '9px 12px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => { const b = !beta; setBeta(b); saveBeta(b); }}
+                style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 7, cursor: 'pointer',
+                  border: `1.5px solid ${beta ? '#ff5cf0' : '#444'}`, background: beta ? '#ff5cf022' : 'transparent', color: beta ? '#ff9cf5' : '#888' }}>
+                β BETA · {beta ? 'ON' : 'OFF'}
+              </button>
+              <span style={{ fontSize: T.micro, color: beta ? '#ff9cf5' : '#777', fontWeight: 700 }}>
+                {beta ? '⚠ TEST MODE — every ring open. Turn off to play the real gated build.' : 'Dev fast-forward — unlock all rings + grants for content testing.'}
+              </span>
+            </div>
+            {beta && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                {[
+                  ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
+                  ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
+                  ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
+                  ['Reset progress', () => { setUnlocked(1); saveUnlocked(1); const st = [...STARTER_IDS]; setStable(st); saveStable(st); }],
+                ].map(([label, fn]) => (
+                  <button key={label} onClick={fn} style={{ fontSize: T.micro, fontWeight: 800, padding: '5px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #5a3a5a', background: '#1f0f1d', color: '#ff9cf5' }}>{label}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {/* ── THE FORGE: spend slag banked from past runs on a permanent edge ── */}
         <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -1994,6 +2067,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
           {COMBAT_ROSTER.filter((c) => stable.includes(c.id)).map((c) => {
             const ti = TYPE_INFO[c.type];
+            const tnf = TIER_INFO[tierOf(c.id)]; const tm = tnf.mult; // tier power
             const on = picked.includes(c.id);
             const full = !on && picked.length >= 3;
             const cBal = cores[c.id] || 0;
@@ -2009,10 +2083,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
+                        <span style={{ fontSize: 9, fontWeight: 900, color: tnf.color, letterSpacing: 0.3 }} title={`Tier ${tierOf(c.id)} · ${tnf.name}`}>{tnf.pips}</span>
                         {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
                       </div>
-                      <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {c.type}</span></div>
-                      <div style={{ fontSize: T.micro, color: DIM }}>HP {c.hp} · ATK {c.atk} · SPD {c.speed}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''} learned</span>}</div>
+                      <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: tnf.color, fontWeight: 700 }}>· {tnf.name}</span></div>
+                      <div style={{ fontSize: T.micro, color: DIM }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: tnf.color, fontWeight: 800 }}> · ×{tm.toFixed(2)} tier</span>}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''}</span>}</div>
                     </div>
                   </div>
                   <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
@@ -2033,9 +2108,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           const lockedSet = new Set(lockedIds);
           // Uncaught creatures this ground leans toward — what you're hunting for.
           const targetsOf = (g) => g.biasIds.filter((id) => lockedSet.has(id));
-          // The ring you'll actually hunt (auto-advances past cleared-out rings) — same
-          // helper the catch uses, so the display and the draw never disagree.
-          const sel = effectiveGround(stable, ground);
+          // The ring you'll actually hunt — clamped to what you've unlocked (strict inward).
+          const sel = accessibleGround(ground, accessDepth);
           const selTargets = targetsOf(sel);
           return (
             <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
@@ -2047,22 +2121,26 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               {/* Ring picker — choose where to push; it biases who you draw out on a clear. */}
               <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 7, marginBottom: 10 }}>
                 {HUNTING_GROUNDS.map((g) => {
+                  const ti = TIER_INFO[tierOfDepth(g.depth)];
+                  const locked = g.depth > accessDepth; // strict inward: not yet earned
                   const targets = targetsOf(g);
-                  const cleared = targets.length === 0;
-                  const on = g.id === sel.id;
+                  const cleared = !locked && targets.length === 0;
+                  const on = !locked && g.id === sel.id;
                   const glyphs = [...new Set(g.biasIds.map((id) => TYPE_INFO[COMBAT_CREATURES[id].type].glyph))].join('');
                   return (
-                    <button key={g.id} onClick={() => { setGround(g.id); saveGround(g.id); }} disabled={cleared}
-                      style={{ textAlign: 'left', cursor: cleared ? 'default' : 'pointer', borderRadius: 10, padding: '8px 9px',
-                        background: on ? '#16202e' : PANEL, border: `1.5px solid ${on ? SEL : LINE}`, opacity: cleared ? 0.4 : 1,
+                    <button key={g.id} onClick={() => { if (!locked) { setGround(g.id); saveGround(g.id); } }} disabled={locked || cleared}
+                      style={{ textAlign: 'left', cursor: locked || cleared ? 'default' : 'pointer', borderRadius: 10, padding: '8px 9px',
+                        background: on ? '#16202e' : PANEL, border: `1.5px solid ${on ? SEL : locked ? '#23232e' : LINE}`, opacity: locked ? 0.5 : cleared ? 0.4 : 1,
                         boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ fontSize: T.small }}>{glyphs}</span>
+                        <span style={{ fontSize: T.small }}>{locked ? '🔒' : glyphs}</span>
                         <span style={{ fontSize: T.micro, fontWeight: 900, color: on ? '#eaf2ff' : '#cfcfda', lineHeight: 1.15 }}>{g.name}</span>
-                        <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 9, fontWeight: 900, color: diffOf(g.depth).color, letterSpacing: 0.3 }}>{'▰'.repeat(Math.ceil(g.depth / 2))}<span style={{ color: DIM }}>{'▱'.repeat(4 - Math.ceil(g.depth / 2))}</span> {diffOf(g.depth).label}</span>
+                        <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 9, fontWeight: 900, color: ti.color, letterSpacing: 0.3 }} title={`Tier ${tierOfDepth(g.depth)} · ${ti.name}`}>{ti.pips}</span>
                       </div>
-                      <div style={{ fontSize: T.micro, color: cleared ? WIN : on ? '#9be7ff' : DIM, fontWeight: 700, marginTop: 3 }}>
-                        {cleared ? '✓ cleared out' : `likely: ${targets.map((id) => COMBAT_CREATURES[id].name).join(', ')}`}
+                      <div style={{ fontSize: T.micro, color: locked ? '#6a6a7a' : cleared ? WIN : on ? '#9be7ff' : DIM, fontWeight: 700, marginTop: 3 }}>
+                        {locked ? `🔒 ${ti.name} · fight deeper to reach`
+                          : cleared ? '✓ cleared out'
+                          : <><span style={{ color: diffOf(g.depth).color }}>{diffOf(g.depth).label}</span> · likely: {targets.map((id) => COMBAT_CREATURES[id].name).join(', ')}</>}
                       </div>
                     </button>
                   );
@@ -2124,7 +2202,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           );
         })()}
         <div style={{ marginBottom: 18 }} />
-        {(() => { const g = effectiveGround(stable, ground); const diff = diffOf(g.depth); return (
+        {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth); return (
         <button onClick={startRun} disabled={picked.length < 2}
           style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
           {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
@@ -2310,6 +2388,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           {!caughtNow && !sigilGain && stable.length < COMBAT_ROSTER.length && (
             <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>The commons here are all yours — hunt a deep ring (the Witherfen, the Frostbound Deep) for apex sigils.</div>
           )}
+          {unlockedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === unlockedNow); const ti = TIER_INFO[tierOfDepth(unlockedNow)]; return (
+            <div style={{ margin: '12px 0', padding: '12px 14px', borderRadius: 12, background: '#1a1407', border: `2px solid ${ACCENT}` }}>
+              <div style={{ fontSize: T.small, fontWeight: 900, color: ACCENT, letterSpacing: 0.5 }}>🔓 THE WAY INWARD OPENS</div>
+              <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open{tierOfDepth(unlockedNow) > tierOfDepth(unlockedNow - 1) ? <> · <span style={{ color: ti.color, fontWeight: 800 }}>{ti.pips} {ti.name}-tier creatures</span> within</> : ''}.</div>
+            </div>
+          ); })()}
           <SlagBanked earned={earned} balance={slag} />
           <CoresBanked coresRun={coresRun} />
           <RunRecap taken={taken} stats={stats} squad={squad} />
