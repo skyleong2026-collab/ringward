@@ -122,24 +122,32 @@ const EMPTY_MODS = {
   // move-bend mods (read directly by the matching skill; 0 = move behaves normally)
   extraHits: 0, executeWindow: 0, overloadBurn: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
 };
+// Per-creature bend defaults. Squad members each carry their own copy so bends
+// can be applied to ONE named creature rather than the whole squad.
+const EMPTY_UNIT_MODS = {
+  extraHits: 0, executeWindow: 0, overloadBurn: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
+};
 
 // The upgrade pool — pick 1 of 3 between fights; they compound into a build.
+// scope:'squad' = applies to every creature in your run; scope:'unit' = you pick
+// ONE creature to receive it, so you build a named carry instead of a flat buff.
 const UPGRADES = [
-  { id: 'sharpen', icon: '⚔️', color: '#ff8a4a', name: 'Sharpened Edge', desc: '+30% damage from every attack.', apply: (m) => { m.dmgMult *= 1.3; } },
-  { id: 'wellspring', icon: '💚', color: WIN, name: 'Wellspring', desc: 'Heals are 40% stronger.', apply: (m) => { m.healMult *= 1.4; } },
-  { id: 'bastion', icon: '🛡️', color: '#7fd6ff', name: 'Bastion', desc: 'Shields hold 40% more.', apply: (m) => { m.blockMult *= 1.4; } },
-  { id: 'primed', icon: '⚡', color: CHG, name: 'Primed', desc: 'Start every fight with +2 charge.', apply: (m) => { m.chargeStart += 2; } },
-  { id: 'thickhide', icon: '❤️', color: '#ff6b6b', name: 'Thick Hide', desc: '+20% max HP for the whole squad.', apply: (m) => { m.hpMult *= 1.2; } },
-  { id: 'wildfire', icon: '🔥', color: BURN, name: 'Wildfire', desc: 'Your Burns land +1 extra stack.', apply: (m) => { m.burnBonus += 1; } },
-  { id: 'overhype', icon: '✦', color: AMP, name: 'Overhype', desc: 'Your Amp lands +1 extra stack.', apply: (m) => { m.ampBonus += 1; } },
-  // ── Move-bend upgrades: these CHANGE how a move works, and only appear when you
-  // brought the matching Type (see rollOffer), so you never draft a dead card. ──
-  { id: 'embertrail', icon: '🔥', color: BURN, name: 'Ember Trail', needsType: 'Reactor', desc: 'Overload now ALSO sets the target ablaze (+2 Burn).', apply: (m) => { m.overloadBurn += 2; } },
-  { id: 'twinstrike', icon: '⚔', color: '#ffd166', name: 'Twin Strike', needsType: 'Striker', desc: 'Jab and Flurry each throw +1 extra hit.', apply: (m) => { m.extraHits += 1; } },
-  { id: 'huntersmark', icon: '🗡', color: '#ff7a9c', name: "Hunter's Mark", needsType: 'Assassin', desc: "Execute's kill-zone widens — it triggers below 60% HP, not 45%.", apply: (m) => { m.executeWindow += 0.15; } },
-  { id: 'aegisreflex', icon: '🛡', color: '#7fd6ff', name: 'Aegis Reflex', needsType: 'Bulwark', desc: 'Brace shields your WHOLE team, not just itself.', apply: (m) => { m.braceTeam = 1; } },
-  { id: 'lifebloom', icon: '🌿', color: WIN, name: 'Lifebloom', needsType: 'Mender', desc: 'Mend leaves a regen ward on whoever it heals.', apply: (m) => { m.mendRegen += 1; } },
-  { id: 'powerchord', icon: '✦', color: AMP, name: 'Power Chord', needsType: 'Booster', desc: 'Prime amps your WHOLE team, not just the strongest.', apply: (m) => { m.primeTeam = 1; } },
+  { id: 'sharpen',    scope: 'squad', icon: '⚔️', color: '#ff8a4a', name: 'Sharpened Edge', desc: '+30% damage from every attack.',            apply: (m) => { m.dmgMult   *= 1.3; } },
+  { id: 'wellspring', scope: 'squad', icon: '💚', color: WIN,        name: 'Wellspring',     desc: 'Heals are 40% stronger.',                    apply: (m) => { m.healMult  *= 1.4; } },
+  { id: 'bastion',    scope: 'squad', icon: '🛡️', color: '#7fd6ff',  name: 'Bastion',        desc: 'Shields hold 40% more.',                     apply: (m) => { m.blockMult *= 1.4; } },
+  { id: 'primed',     scope: 'squad', icon: '⚡', color: CHG,        name: 'Primed',         desc: 'Start every fight with +2 charge.',          apply: (m) => { m.chargeStart += 2; } },
+  { id: 'thickhide',  scope: 'squad', icon: '❤️', color: '#ff6b6b',  name: 'Thick Hide',     desc: '+20% max HP for the whole squad.',           apply: (m) => { m.hpMult    *= 1.2; } },
+  { id: 'wildfire',   scope: 'squad', icon: '🔥', color: BURN,       name: 'Wildfire',       desc: 'Your Burns land +1 extra stack.',            apply: (m) => { m.burnBonus += 1; } },
+  { id: 'overhype',   scope: 'squad', icon: '✦',  color: AMP,        name: 'Overhype',       desc: 'Your Amp lands +1 extra stack.',             apply: (m) => { m.ampBonus  += 1; } },
+  // ── Move-bend upgrades: scope:'unit' — you PICK which creature gets this, so
+  // bends define your carry rather than spreading thin across the squad. Only
+  // offered when you brought the matching Type (no dead drafts). ──
+  { id: 'embertrail', scope: 'unit', icon: '🔥', color: BURN,       name: 'Ember Trail',  needsType: 'Reactor',  desc: "ONE creature: Overload also sets the target ablaze (+2 Burn).",    apply: (m) => { m.overloadBurn  += 2; } },
+  { id: 'twinstrike', scope: 'unit', icon: '⚔',  color: '#ffd166',  name: 'Twin Strike',  needsType: 'Striker',  desc: "ONE creature: Jab and Flurry each throw +1 extra hit.",            apply: (m) => { m.extraHits     += 1; } },
+  { id: 'huntersmark',scope: 'unit', icon: '🗡',  color: '#ff7a9c',  name: "Hunter's Mark",needsType: 'Assassin', desc: "ONE creature: Execute triggers below 60% HP, not 45%.",           apply: (m) => { m.executeWindow += 0.15; } },
+  { id: 'aegisreflex',scope: 'unit', icon: '🛡',  color: '#7fd6ff',  name: 'Aegis Reflex', needsType: 'Bulwark',  desc: "ONE creature: Brace shields your WHOLE team, not just itself.",   apply: (m) => { m.braceTeam     = 1; } },
+  { id: 'lifebloom',  scope: 'unit', icon: '🌿', color: WIN,        name: 'Lifebloom',    needsType: 'Mender',   desc: "ONE creature: Mend leaves a regen ward on whoever it heals.",     apply: (m) => { m.mendRegen     += 1; } },
+  { id: 'powerchord', scope: 'unit', icon: '✦',  color: AMP,        name: 'Power Chord',  needsType: 'Booster',  desc: "ONE creature: Prime amps your WHOLE team, not just the strongest.",apply: (m) => { m.primeTeam     = 1; } },
 ];
 
 // ── Permanent PERKS (§ meta) — bought once with slag, they persist across runs and
@@ -190,17 +198,29 @@ const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (m
 
 // A player creature carried through a run: wounds persist (separate maxHp), and the
 // run's upgrade mods + Primed starting charge are baked onto the unit def.
-function playerDef(member, mods) {
+// Squad-wide flat buffs come from `squadMods`; move-bends come from `member.unitMods`
+// so each creature can have its own signature build.
+function playerDef(member, squadMods) {
   const base = COMBAT_CREATURES[member.id];
-  const maxHp = maxHpOf(member, mods);
+  const maxHp = maxHpOf(member, squadMods);
+  const u = member.unitMods ?? EMPTY_UNIT_MODS;
   return {
     ...base, temperament: 'Balanced', maxHp, hp: Math.min(member.hp, maxHp),
-    charge: Math.min(base.maxCharge ?? 6, mods?.chargeStart ?? 0),
+    charge: Math.min(base.maxCharge ?? 6, squadMods?.chargeStart ?? 0),
     mods: {
-      dmgMult: mods?.dmgMult ?? 1, healMult: mods?.healMult ?? 1, blockMult: mods?.blockMult ?? 1,
-      burnBonus: mods?.burnBonus ?? 0, ampBonus: mods?.ampBonus ?? 0,
-      extraHits: mods?.extraHits ?? 0, executeWindow: mods?.executeWindow ?? 0, overloadBurn: mods?.overloadBurn ?? 0,
-      braceTeam: mods?.braceTeam ?? 0, mendRegen: mods?.mendRegen ?? 0, primeTeam: mods?.primeTeam ?? 0,
+      // squad-wide flat buffs:
+      dmgMult:   squadMods?.dmgMult   ?? 1,
+      healMult:  squadMods?.healMult  ?? 1,
+      blockMult: squadMods?.blockMult ?? 1,
+      burnBonus: squadMods?.burnBonus ?? 0,
+      ampBonus:  squadMods?.ampBonus  ?? 0,
+      // per-creature bends (only the designated creature has non-zero values):
+      extraHits:     u.extraHits     ?? 0,
+      executeWindow: u.executeWindow ?? 0,
+      overloadBurn:  u.overloadBurn  ?? 0,
+      braceTeam:     u.braceTeam     ?? 0,
+      mendRegen:     u.mendRegen     ?? 0,
+      primeTeam:     u.primeTeam     ?? 0,
     },
   };
 }
@@ -789,13 +809,17 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill }) {
 }
 
 // The accumulated build, shown as chips so you SEE your run getting stronger.
+// Squad upgrades show as flat chips; unit bends show "Icon Name → CreatureName"
+// so you can read your carry's build at a glance.
 function BuildStrip({ taken }) {
   if (!taken.length) return null;
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
       <span style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1 }}>YOUR BUILD:</span>
       {taken.map((u, i) => (
-        <span key={i} title={u.desc} style={{ fontSize: T.small, fontWeight: 700, color: u.color, background: '#15151f', border: `1px solid ${u.color}66`, borderRadius: 20, padding: '3px 9px' }}>{u.icon} {u.name}</span>
+        <span key={i} title={u.desc} style={{ fontSize: T.small, fontWeight: 700, color: u.color, background: '#15151f', border: `1px solid ${u.color}66`, borderRadius: 20, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+          {u.icon} {u.name}{u.targetName ? <span style={{ color: '#9a9aaa', fontWeight: 600, fontSize: T.micro }}> → {u.targetName}</span> : null}
+        </span>
       ))}
     </div>
   );
@@ -849,6 +873,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [earned, setEarned] = useState(0); // slag this run banked (for the recap)
   const [stable, setStable] = useState(loadStable); // creature IDs you've caught
   const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
+  const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
@@ -865,9 +890,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     if (!stable.includes(id)) return; // can't pick locked creatures
     setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
   }
-  function rollOffer() {
-    // Only offer a move-bend if you actually brought that Type — no dead drafts.
-    const types = new Set(picked.map((id) => COMBAT_CREATURES[id].type));
+  // Only offer a move-bend when the matching Type is still alive — pass aliveTypes
+  // after each wave so a dead creature's bend can't appear in the next offer.
+  function rollOffer(aliveTypes) {
+    const types = aliveTypes ?? new Set(picked.map((id) => COMBAT_CREATURES[id].type));
     const pool = UPGRADES.filter((u) => !u.needsType || types.has(u.needsType));
     const out = [];
     for (let k = 0; k < offerCount && pool.length; k++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
@@ -904,8 +930,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         if (caught) setTimeout(() => sfx.caughtCreature(), 720);
         setRunPhase('won'); return;
       }
+      const aliveTypes = new Set(patched.filter((m) => m.hp > 0).map((m) => COMBAT_CREATURES[m.id].type));
       sfx.waveClear();
-      setWaveIdx(idx + 1); rollOffer(); setRunPhase('upgrade');
+      setWaveIdx(idx + 1); rollOffer(aliveTypes); setRunPhase('upgrade');
     });
     setWaveIdx(idx);
     setRunPhase('fighting');
@@ -914,12 +941,19 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startRun() {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
     const base = perkBaseMods(owned); // permanent perks set the run's opening mods
-    const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base) }));
+    const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0);
     rollOffer(); setRunPhase('upgrade');
   }
   function applyUpgrade(up) {
     sfx.upgradePick();
+    if (up.scope === 'unit') {
+      // Unit-scope: pause and ask the player to pick which creature gets this bend.
+      setPendingUpgrade(up);
+      setRunPhase('pick-target');
+      return;
+    }
+    // Squad-scope: apply to the shared runMods, then start the wave.
     const m = { ...runMods }; up.apply(m);
     let sq = squad;
     if (m.hpMult !== runMods.hpMult) {
@@ -928,7 +962,24 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setRunMods(m); setSquad(sq); setTaken((t) => [...t, up]);
     startWave(waveIdx, sq, m);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); }
+  // Apply a unit-scope bend to exactly one creature, then start the wave.
+  function pickTarget(memberId) {
+    if (!pendingUpgrade) return;
+    const up = pendingUpgrade;
+    const sq = squad.map((mem) => {
+      if (mem.id !== memberId) return mem;
+      const unitMods = { ...(mem.unitMods ?? EMPTY_UNIT_MODS) };
+      up.apply(unitMods); // mutates the copy; original is unaffected
+      const targetName = COMBAT_CREATURES[memberId].name;
+      return { ...mem, unitMods, bends: [...(mem.bends ?? []), { id: up.id, icon: up.icon, name: up.name, color: up.color }] };
+    });
+    const targetName = COMBAT_CREATURES[memberId].name;
+    setSquad(sq);
+    setTaken((t) => [...t, { ...up, targetName }]);
+    setPendingUpgrade(null);
+    startWave(waveIdx, sq, runMods);
+  }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setPendingUpgrade(null); }
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
@@ -1013,6 +1064,57 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
           {picked.length < 2 ? 'PICK AT LEAST 2' : `START RUN — ${picked.length} creatures →`}
         </button>
+      </div>
+    );
+  }
+
+  // ── Pick-target: a unit-scope bend was chosen — now pick which creature gets it. ──
+  if (runPhase === 'pick-target' && pendingUpgrade) {
+    const up = pendingUpgrade;
+    const eligible = squad.filter((m) => m.hp > 0 && (!up.needsType || COMBAT_CREATURES[m.id].type === up.needsType));
+    const fighters = eligible.length > 0 ? eligible : squad.filter((m) => m.hp > 0);
+    return (
+      <div>
+        <BuildStrip taken={taken} />
+        {/* The bend card — what you just picked */}
+        <div style={{ textAlign: 'center', background: PANEL, border: `2px solid ${up.color}`, borderRadius: 14, padding: '18px 16px', marginBottom: 18, boxShadow: `0 0 18px ${up.color}33` }}>
+          <div style={{ fontSize: 40, lineHeight: 1 }}>{up.icon}</div>
+          <div style={{ fontSize: T.sub, fontWeight: 900, color: up.color, marginTop: 6 }}>{up.name}</div>
+          <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 6, maxWidth: 340, margin: '6px auto 0' }}>{up.desc}</div>
+          <div style={{ fontSize: T.body, color: ACCENT, fontWeight: 900, marginTop: 12, letterSpacing: 0.5 }}>↓ Who gets it?</div>
+        </div>
+        {/* Squad member picker */}
+        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : `repeat(${fighters.length}, 1fr)`, gap: 12 }}>
+          {fighters.map((mem) => {
+            const c = COMBAT_CREATURES[mem.id];
+            const ti = TYPE_INFO[c.type];
+            return (
+              <button key={mem.id} onClick={() => pickTarget(mem.id)}
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 14, padding: '14px 12px', background: PANEL, border: `2.5px solid ${ti.accent}88`, boxShadow: `0 0 16px ${ti.accent}22`, transition: 'border-color .15s' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
+                  <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={68} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {c.name}</div>
+                    <div style={{ fontSize: T.small, color: '#ccc', fontWeight: 700 }}>{ti.nick}</div>
+                    <div style={{ fontSize: T.micro, color: '#888', marginTop: 2 }}>{mem.hp}/{maxHpOf(mem, runMods)} HP</div>
+                  </div>
+                </div>
+                {/* Bends already on this creature */}
+                {(mem.bends ?? []).length > 0 && (
+                  <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 7, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {(mem.bends ?? []).map((b, i) => (
+                      <span key={i} style={{ fontSize: T.micro, color: b.color, background: '#0a0a14', border: `1px solid ${b.color}55`, borderRadius: 8, padding: '2px 6px', fontWeight: 700 }}>{b.icon} {b.name}</span>
+                    ))}
+                  </div>
+                )}
+                {(mem.bends ?? []).length === 0 && (
+                  <div style={{ fontSize: T.micro, color: '#555', fontStyle: 'italic' }}>No bends yet</div>
+                )}
+                <div style={{ marginTop: 8, padding: '7px 10px', background: `${up.color}18`, border: `1px solid ${up.color}55`, borderRadius: 8, textAlign: 'center', fontSize: T.small, fontWeight: 800, color: up.color }}>Give this one {up.name}</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }
