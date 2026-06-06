@@ -89,15 +89,18 @@ const CREATURE_LORE = {
 // ground leans toward one Type-cluster's creatures; clearing the ring while hunting it
 // makes those creatures far likelier to be the one you catch — but never hard-locks, so
 // any uncaught grunling can still appear. Ordered outer (gentle) → inner (the deep).
+// `depth` (1 = outer/gentle → 8 = the deep) scales the run the ring sends you on:
+// enemies are the ring's own locals, stat-scaled by depth (see wavesForGround). Outer
+// rings are an auto-able warm-up for little slag/Cores; the deep is a real wall worth more.
 const HUNTING_GROUNDS = [
-  { id: 'outer-ring',  name: 'The Crackling Outer Ring', tag: 'outer ring',     biasIds: ['fizzpop', 'glowtail', 'cinderpaw'] },
-  { id: 'fallen-gate', name: 'The Fallen Gate',          tag: 'the ruined gate', biasIds: ['stoneward', 'ironwall'] },
-  { id: 'green-seam',  name: 'The Green Seam',           tag: 'between the rings', biasIds: ['mossback', 'dewleaf'] },
-  { id: 'storm-wire',  name: 'Storm-Wire Thickets',      tag: 'the storm-wire',  biasIds: ['buzzline', 'tanglewing'] },
-  { id: 'fast-trails', name: 'The Fast Trails',          tag: 'the narrow trails', biasIds: ['swiftpaw', 'dartwing'] },
-  { id: 'lightless',   name: 'The Lightless Deep',       tag: 'past the Warden', biasIds: ['shadefang', 'veilclaw'] },
-  { id: 'witherfen',   name: 'The Witherfen',            tag: 'where the blight pools', biasIds: ['blightcap', 'hexmoth'] },
-  { id: 'frostbound',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', biasIds: ['frostwarden', 'rimecaller'] },
+  { id: 'outer-ring',  name: 'The Crackling Outer Ring', tag: 'outer ring',     depth: 1, boss: 'The Cinder Maw',  biasIds: ['fizzpop', 'glowtail', 'cinderpaw'] },
+  { id: 'fallen-gate', name: 'The Fallen Gate',          tag: 'the ruined gate', depth: 2, boss: 'The Gatebreaker', biasIds: ['stoneward', 'ironwall'] },
+  { id: 'green-seam',  name: 'The Green Seam',           tag: 'between the rings', depth: 3, boss: 'The Old Grove',  biasIds: ['mossback', 'dewleaf'] },
+  { id: 'storm-wire',  name: 'Storm-Wire Thickets',      tag: 'the storm-wire',  depth: 4, boss: 'The Live Wire',   biasIds: ['buzzline', 'tanglewing'] },
+  { id: 'fast-trails', name: 'The Fast Trails',          tag: 'the narrow trails', depth: 5, boss: 'The Blur',       biasIds: ['swiftpaw', 'dartwing'] },
+  { id: 'lightless',   name: 'The Lightless Deep',       tag: 'past the Warden', depth: 6, boss: 'The Throat-Cutter', biasIds: ['shadefang', 'veilclaw'] },
+  { id: 'witherfen',   name: 'The Witherfen',            tag: 'where the blight pools', depth: 7, boss: 'The Blight-Heart', biasIds: ['blightcap', 'hexmoth'] },
+  { id: 'frostbound',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', depth: 8, boss: 'The Stillness', biasIds: ['frostwarden', 'rimecaller'] },
 ];
 const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
 const GROUND_KEY = '8gents_seam_ground';
@@ -168,38 +171,36 @@ function useViewport() {
   return w;
 }
 
-// ── The climb inward: a fast easy→hard ramp, then the boss. Enemy stats are tuned
-// HERE (overrides on the roster base) so fights stay SHORT and punchy and the
-// difficulty curve is steep — outer rings die in 2–3 rounds, the King is the test.
-// (SeamLab-only — the goldens use the untouched roster base stats.) ──
-const WAVES = [
-  // Ring 1 — a blitz. Low HP, Cautious (they chip, never threaten). Feel strong.
-  { name: 'Scouts', blurb: 'A jumpy pair on the outer ring. Warm up — hit fast.', seed: 101,
-    enemies: () => [
-      { ...makeUnitDef('glowtail', 'Cautious'), hp: 105, maxHp: 105, atk: 16 },
-      { ...makeUnitDef('fizzpop', 'Cautious'), hp: 95, maxHp: 95, atk: 16 },
-    ] },
-  // Ring 2 — medium. A Striker pokes while a Mender sustains; kill the healer first.
-  { name: 'The Pack', blurb: 'A Striker and a Mender, deeper in. Cut the healer first.', seed: 202,
-    enemies: () => [
-      { ...makeUnitDef('swiftpaw', 'Balanced'), hp: 150, maxHp: 150, atk: 28 },
-      { ...makeUnitDef('mossback', 'Balanced'), hp: 150, maxHp: 150 },
-    ] },
-  // Ring 3 — hard. A wall guarding a glass-cannon killer. Real threat now.
-  { name: 'The Warden', blurb: 'A wall guarding a killer. This one bites — break through.', seed: 303,
-    enemies: () => [
-      { ...makeUnitDef('stoneward', 'Greedy'), hp: 240, maxHp: 240 },
-      { ...makeUnitDef('veilclaw', 'Greedy'), hp: 150, maxHp: 150, atk: 42 },
-    ] },
-  // The peak — the test. Trimmed HP so it's not a slog, but it hits HARDER and a
-  // tender keeps it standing. Race it down or cut the healer. AOE + keystones shine.
-  { name: 'The Hollow King', boss: true, seed: 404,
-    blurb: 'The thing the others were guarding. It hoards fire for one ruinous blast — and a tender keeps it standing. Burn it down, or cut the healer first.',
-    enemies: () => [
-      { ...makeUnitDef('cinderpaw', 'Greedy'), name: 'The Hollow King', hp: 560, maxHp: 560, atk: 46, speed: 7 },
-      { ...makeUnitDef('mossback', 'Balanced'), name: 'Ashen Tender', hp: 180, maxHp: 180 },
-    ] },
-];
+// ── The climb inward (vF-O): the RING you hunt builds the run. Four waves — a fast
+// easy→hard ramp, then the ring's boss — fielding the ring's own LOCALS (its biasIds,
+// so a Warden ring fights Wardens that freeze you, a Hexer ring fights curses), with
+// HP/ATK scaled by the ring's depth. Outer rings (depth 1) are a gentle, auto-able
+// warm-up; the Frostbound Deep (depth 8) is a real wall auto can't faceroll. Stats are
+// per-wave ROLE values × depth — NOT the roster base — so fights stay short and punchy
+// and the curve is controllable. SeamLab-only; the goldens use untouched roster stats.
+const D_HP = (d) => 1 + 0.16 * (d - 1);   // depth 1 → ×1.0, depth 8 → ×2.12
+const D_ATK = (d) => 1 + 0.10 * (d - 1);  // depth 1 → ×1.0, depth 8 → ×1.70
+function foe(id, temperament, roleHp, roleAtk, depth, extra = {}) {
+  const hp = Math.round(roleHp * D_HP(depth));
+  return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth)), ...extra };
+}
+// Generate a run's four waves from the chosen ring. Enemy IDENTITY (kit/behavior) comes
+// from the ring's locals; HP/ATK come from the wave role scaled by depth.
+function wavesForGround(g) {
+  const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
+  return [
+    { name: 'Scouts', seed: 101, blurb: `The edge of ${g.name} — a jumpy pair. Warm up, hit fast.`,
+      enemies: () => [ foe(at(0), 'Cautious', 90, 15, d), foe(at(1), 'Cautious', 85, 15, d) ] },
+    { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back.',
+      enemies: () => [ foe(at(0), 'Balanced', 130, 24, d), foe(at(1), 'Balanced', 130, 22, d), foe(at(2), 'Balanced', 120, 24, d) ] },
+    { name: 'The Pack-Lord', seed: 303, blurb: 'The two meanest things in here, paired up. Break through.',
+      enemies: () => [ foe(at(0), 'Greedy', 220, 30, d), foe(at(1), 'Greedy', 160, 38, d) ] },
+    { name: g.boss, boss: true, seed: 404,
+      blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
+      enemies: () => [ foe(at(0), 'Greedy', 360, 40, d, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 170, 16, d, { name: 'Tender' }) ] },
+  ];
+}
+const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
 const MATCHUPS = {
@@ -349,6 +350,14 @@ function saveAuto(on) { try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } 
 // Front-loaded so a build forms FAST early: Scouts→4, Pack→5, Warden→6, King→7+10.
 // A full clear ≈ 32 ⬡ per survivor — run one already buys a couple of nodes.
 const coresForWave = (idx, isBoss) => (4 + idx) + (isBoss ? 10 : 0);
+// Deeper rings pay more Cores; the gentle outer ring pays LESS than before, so easy
+// auto-farming no longer floods you (depth 1 → ×0.7, depth 8 → ×2.1).
+const depthCoreMult = (depth) => 0.7 + 0.2 * ((depth || 1) - 1);
+// A legible difficulty read for a ring's depth — lead with what the player can SEE.
+const diffOf = (depth) => depth <= 2 ? { label: 'easy', color: '#7ed321' }
+  : depth <= 4 ? { label: 'fair', color: '#9be7ff' }
+  : depth <= 6 ? { label: 'hard', color: '#e8a040' }
+  : { label: 'brutal', color: '#ff6b6b' };
 
 function emptyTreeMods() {
   return { dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0,
@@ -1494,7 +1503,7 @@ function RunRecap({ taken, stats, squad }) {
       )}
       {/* Aggregate run stats */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {cell('WAVES', `${stats.waves}/${WAVES.length}`)}
+        {cell('WAVES', `${stats.waves}/${WAVE_COUNT}`)}
         {cell('DAMAGE DEALT', stats.dmg.toLocaleString())}
         {cell('BIGGEST HIT', stats.biggest)}
         {cell('SURVIVORS', `${survivors}/${squad.length}`)}
@@ -1539,6 +1548,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [earned, setEarned] = useState(0); // slag this run banked (for the recap)
   const [stable, setStable] = useState(loadStable); // creature IDs you've caught
   const [ground, setGround] = useState(loadGround); // hunting ground — biases who you catch
+  const [runWaves, setRunWaves] = useState(() => wavesForGround(GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0])); // the ring's run
+  const [runDepth, setRunDepth] = useState(() => (GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0]).depth); // scales Cores
   const [sigils, setSigils] = useState(loadSigils); // {apexId: count} — gathered toward a challenge
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
@@ -1642,7 +1653,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
     const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
-    fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, auto ? 'auto' : 'play', (res, finalState) => {
+    fight.begin(aDefs, runWaves[idx].enemies(), runWaves[idx].seed, auto ? 'auto' : 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
       const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
@@ -1657,11 +1668,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       }
       // Progressive Cores: each surviving fielded creature banks ⬡ for clearing this wave.
       const clearedIds = fielded.filter((mi) => next[mi].hp > 0).map((mi) => next[mi].id);
-      awardCores(clearedIds, coresForWave(idx, !!WAVES[idx].boss));
+      awardCores(clearedIds, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth)));
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
       setSquad(patched);
-      if (idx === WAVES.length - 1) {
+      if (idx === WAVE_COUNT - 1) {
         onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
         const hunted = effectiveGround(stable, ground);
         setCaughtFrom(hunted);
@@ -1694,6 +1705,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   function startRun() {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
+    const g = effectiveGround(stable, ground); // the ring you'll actually hunt builds the run
+    setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
     const base = perkBaseMods(owned); // permanent perks set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
@@ -2046,6 +2059,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ fontSize: T.small }}>{glyphs}</span>
                         <span style={{ fontSize: T.micro, fontWeight: 900, color: on ? '#eaf2ff' : '#cfcfda', lineHeight: 1.15 }}>{g.name}</span>
+                        <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 9, fontWeight: 900, color: diffOf(g.depth).color, letterSpacing: 0.3 }}>{'▰'.repeat(Math.ceil(g.depth / 2))}<span style={{ color: DIM }}>{'▱'.repeat(4 - Math.ceil(g.depth / 2))}</span> {diffOf(g.depth).label}</span>
                       </div>
                       <div style={{ fontSize: T.micro, color: cleared ? WIN : on ? '#9be7ff' : DIM, fontWeight: 700, marginTop: 3 }}>
                         {cleared ? '✓ cleared out' : `likely: ${targets.map((id) => COMBAT_CREATURES[id].name).join(', ')}`}
@@ -2110,10 +2124,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           );
         })()}
         <div style={{ marginBottom: 18 }} />
+        {(() => { const g = effectiveGround(stable, ground); const diff = diffOf(g.depth); return (
         <button onClick={startRun} disabled={picked.length < 2}
           style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
-          {picked.length < 2 ? 'PICK AT LEAST 2' : `START RUN — ${picked.length} creatures →`}
+          {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
         </button>
+        ); })()}
       </div>
     );
   }
@@ -2171,7 +2187,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   // ── Upgrade choice: pick 1 of 3 before each wave. ──
   if (runPhase === 'upgrade') {
-    const nextWave = WAVES[waveIdx];
+    const nextWave = runWaves[waveIdx];
     return (
       <div>
         <BuildStrip taken={taken} />
@@ -2247,7 +2263,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
 
   // ── In a run: progress bar + the fight (+ result banner). ──
-  const wave = WAVES[waveIdx];
+  const wave = runWaves[waveIdx];
   const banner = (() => {
     if (runPhase === 'won') {
       const ti = caughtNow ? TYPE_INFO[caughtNow.type] : null;
@@ -2304,7 +2320,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     if (runPhase === 'lost') return (
       <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
-        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVES.length}.</div>
+        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVE_COUNT}.</div>
         <SlagBanked earned={earned} balance={slag} />
         <CoresBanked coresRun={coresRun} />
         <RunRecap taken={taken} stats={stats} squad={squad} />
@@ -2317,7 +2333,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-        {WAVES.map((w, i) => (
+        {runWaves.map((w, i) => (
           <div key={i} title={w.name} style={{ flex: w.boss ? 1.4 : 1, height: 8, borderRadius: 3,
             background: i < waveIdx || runPhase === 'won' ? WIN : i === waveIdx ? (w.boss ? LOSS : ACCENT) : '#26263a',
             border: w.boss ? `1px solid ${LOSS}99` : 'none' }} />
@@ -2325,7 +2341,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ fontSize: T.small, color: DIM, flex: 1 }}>
-          <b style={{ color: wave.boss ? '#ffb38a' : '#ddd' }}>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVES.length} · {wave.name}</b> — {wave.blurb}
+          <b style={{ color: wave.boss ? '#ffb38a' : '#ddd' }}>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVE_COUNT} · {wave.name}</b> — {wave.blurb}
         </div>
         {runPhase === 'fighting' && auto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
       </div>
