@@ -224,7 +224,8 @@ const coresForWave = (idx, isBoss) => (2 + idx) + (isBoss ? 8 : 0);
 function emptyTreeMods() {
   return { dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0,
     overloadMult: 1, overloadBurn: 0, overloadAOE: false,
-    extraHits: 0, executeWindow: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0 };
+    extraHits: 0, executeWindow: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
+    braceRegen: false, bloomAll: false, overdriveAll: false, blitzMulti: false, executeHunt: false };
 }
 
 // Trees keyed by Type — every creature of a Type shares the tree SHAPE; allocation is
@@ -253,6 +254,141 @@ const TYPE_TREES = {
         { id: 'cinder3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Smolder', desc: 'Begin every fight with the enemy line already burning.' },
         { id: 'cinder4', tier: 4, cost: 22, sealed: true, name: 'Heat Exchange', desc: 'Convert leftover shield into charge at the end of each round.' },
         { id: 'cinder5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Phoenix', desc: 'The first time you would die, revive at 30% HP and dump your full charge.' },
+      ] },
+    ],
+  },
+
+  Bulwark: {
+    blurb: 'A wall that charges into shields, not damage. Guard the whole line, knit the team back up, or turn enemy blows against them.',
+    paths: [
+      { id: 'aegis', name: 'AEGIS', tag: 'shield the team', icon: '🛡', color: '#7fd6ff', nodes: [
+        { id: 'aegis1', tier: 1, cost: 4,  name: 'Reinforce', desc: '+20% to every shield you raise.',                          apply: (m) => { m.blockMult *= 1.2; } },
+        { id: 'aegis2', tier: 2, cost: 8,  name: 'Hold Fast', desc: 'Start every fight with +1 charge banked.',                  apply: (m) => { m.chargeStart += 1; } },
+        { id: 'aegis3', tier: 3, cost: 14, capstone: true, name: 'Aegis Reflex', desc: 'Brace shields your WHOLE team, not just yourself.', apply: (m) => { m.braceTeam = 1; } },
+        { id: 'aegis4', tier: 4, cost: 22, sealed: true, name: 'Overbank', desc: 'Excess shield banks into a stored barrier.' },
+        { id: 'aegis5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Bastion Wall', desc: 'Release the bank as a team barrier; shielded allies take 0 from chip damage.' },
+      ] },
+      { id: 'guard', name: 'GUARDIAN', tag: 'protect the hurt', icon: '🤲', color: '#9ec5ff', nodes: [
+        { id: 'guard1', tier: 1, cost: 4,  name: 'Bracing Chip', desc: '+20% damage from your attacks.',                        apply: (m) => { m.dmgMult *= 1.2; } },
+        { id: 'guard2', tier: 2, cost: 8,  name: 'Steadfast', desc: 'Start every fight with +1 charge banked.',                  apply: (m) => { m.chargeStart += 1; } },
+        { id: 'guard3', tier: 3, cost: 14, capstone: true, name: 'Iron Bastion', desc: 'Brace seeds regen on everyone it shields.', apply: (m) => { m.braceRegen = true; } },
+        { id: 'guard4', tier: 4, cost: 22, sealed: true, name: 'Intercept', desc: 'Once per round, take a hit meant for a low-HP ally.' },
+        { id: 'guard5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Unbreakable', desc: 'Allies cannot drop below 1 HP while you live.' },
+      ] },
+      { id: 'retri', name: 'RETRIBUTION', tag: 'turn blows back', icon: '⚡', color: '#7fd6ff', hiddenUntilCapstone: true, nodes: [
+        { id: 'retri1', tier: 1, cost: 4,  sealed: true, name: 'Spikes', desc: 'Shielded allies reflect 15% of damage they block.' },
+        { id: 'retri2', tier: 2, cost: 8,  sealed: true, name: 'Heavy Hold', desc: 'Brace chips harder the more block you hold.' },
+        { id: 'retri3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Riposte', desc: 'When a shield fully absorbs a hit, counterattack.' },
+        { id: 'retri4', tier: 4, cost: 22, sealed: true, name: 'Spite', desc: 'Reflected damage ignores enemy shields.' },
+        { id: 'retri5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Iron Maiden', desc: 'You deal no direct damage, but reflect 100% of all damage the team blocks.' },
+      ] },
+    ],
+  },
+
+  Mender: {
+    blurb: 'Wins by outlasting, not out-damaging. Burst-heal the team, lay down endless regen, or bind your life to a carry.',
+    paths: [
+      { id: 'bloom', name: 'BLOOM', tag: 'burst heal', icon: '🌸', color: WIN, nodes: [
+        { id: 'bloom1', tier: 1, cost: 4,  name: 'Greenheart', desc: '+25% to all your healing.',                               apply: (m) => { m.healMult *= 1.25; } },
+        { id: 'bloom2', tier: 2, cost: 8,  name: 'Deep Roots', desc: 'Start every fight with +1 charge banked.',                 apply: (m) => { m.chargeStart += 1; } },
+        { id: 'bloom3', tier: 3, cost: 14, capstone: true, name: 'Full Bloom', desc: 'Bloom heals your WHOLE team at once.',       apply: (m) => { m.bloomAll = true; } },
+        { id: 'bloom4', tier: 4, cost: 22, sealed: true, name: 'Overgrowth', desc: 'Overheal becomes a shield.' },
+        { id: 'bloom5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Lifesurge', desc: 'Bloom can revive a fallen ally (once per fight).' },
+      ] },
+      { id: 'verdant', name: 'VERDANT', tag: 'heal over time', icon: '🌿', color: '#a6e05a', nodes: [
+        { id: 'verdant1', tier: 1, cost: 4,  name: 'Thornroot', desc: '+20% damage from your attacks.',                          apply: (m) => { m.dmgMult *= 1.2; } },
+        { id: 'verdant2', tier: 2, cost: 8,  name: 'Patient', desc: 'Start every fight with +1 charge banked.',                   apply: (m) => { m.chargeStart += 1; } },
+        { id: 'verdant3', tier: 3, cost: 14, capstone: true, name: 'Lifebloom', desc: 'Mend leaves a regen ward on whoever it heals.', apply: (m) => { m.mendRegen += 1; } },
+        { id: 'verdant4', tier: 4, cost: 22, sealed: true, name: 'Symbiosis', desc: 'Your regens also chip the enemy line.' },
+        { id: 'verdant5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Evergreen', desc: 'Regen never expires — the team is always healing.' },
+      ] },
+      { id: 'lifebond', name: 'LIFEBOND', tag: 'fuel a carry', icon: '🔗', color: WIN, hiddenUntilCapstone: true, nodes: [
+        { id: 'lifebond1', tier: 1, cost: 4,  sealed: true, name: 'Wellspring', desc: "Mend also gifts 1 charge to the ally it heals." },
+        { id: 'lifebond2', tier: 2, cost: 8,  sealed: true, name: 'Cleansing Touch', desc: 'Healing also strips one debuff.' },
+        { id: 'lifebond3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Sanctuary', desc: 'Allies above 80% HP gain amp.' },
+        { id: 'lifebond4', tier: 4, cost: 22, sealed: true, name: 'Channel', desc: "Transfer your charge into an ally's payoff." },
+        { id: 'lifebond5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Lifebond', desc: 'Link to one ally; you split all damage they take.' },
+      ] },
+    ],
+  },
+
+  Booster: {
+    blurb: 'Makes someone else hit like a truck. Spread amp across the team, load a single carry, or steal the enemy tempo.',
+    paths: [
+      { id: 'reso', name: 'RESONANCE', tag: 'amp the team', icon: '✦', color: AMP, nodes: [
+        { id: 'reso1', tier: 1, cost: 4,  name: 'Harmonize', desc: 'Your Amp lands +1 extra stack.',                            apply: (m) => { m.ampBonus += 1; } },
+        { id: 'reso2', tier: 2, cost: 8,  name: 'Tuning', desc: 'Start every fight with +1 charge banked.',                      apply: (m) => { m.chargeStart += 1; } },
+        { id: 'reso3', tier: 3, cost: 14, capstone: true, name: 'Power Chord', desc: 'Prime amps your WHOLE team, not just the carry.', apply: (m) => { m.primeTeam = 1; } },
+        { id: 'reso4', tier: 4, cost: 22, sealed: true, name: 'Full Harmony', desc: 'Amp also boosts healing and shields.' },
+        { id: 'reso5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Crescendo', desc: 'Amp never caps — every round the team hits harder.' },
+      ] },
+      { id: 'odrive', name: 'OVERDRIVE', tag: 'load a carry', icon: '⬆️', color: '#c89bff', nodes: [
+        { id: 'odrive1', tier: 1, cost: 4,  name: 'Live Current', desc: '+20% damage from your attacks.',                        apply: (m) => { m.dmgMult *= 1.2; } },
+        { id: 'odrive2', tier: 2, cost: 8,  name: 'Capacitor', desc: 'Start every fight with +1 charge banked.',                 apply: (m) => { m.chargeStart += 1; } },
+        { id: 'odrive3', tier: 3, cost: 14, capstone: true, name: 'Surge', desc: 'Overdrive floods ALL allies with Amp, not just one.', apply: (m) => { m.overdriveAll = true; } },
+        { id: 'odrive4', tier: 4, cost: 22, sealed: true, name: 'Power Spike', desc: 'The first payoff each fight always crits.' },
+        { id: 'odrive5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Critical Mass', desc: 'Amp converts to guaranteed crits at ×2.5 — feast or famine.' },
+      ] },
+      { id: 'cond', name: 'CONDUCTOR', tag: 'steal the tempo', icon: '🎼', color: AMP, hiddenUntilCapstone: true, nodes: [
+        { id: 'cond1', tier: 1, cost: 4,  sealed: true, name: 'Pull', desc: "Resonate pulls an ally's strike forward." },
+        { id: 'cond2', tier: 2, cost: 8,  sealed: true, name: 'Quicken', desc: 'Prime sometimes grants the carry +1 action.' },
+        { id: 'cond3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Tempo Theft', desc: "Overdrive steals an enemy's turn — they skip, your carry acts." },
+        { id: 'cond4', tier: 4, cost: 22, sealed: true, name: 'Double Time', desc: 'A heavily-amped carry can act twice.' },
+        { id: 'cond5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Maestro', desc: 'Every round, grant one ally a full extra turn.' },
+      ] },
+    ],
+  },
+
+  Striker: {
+    blurb: 'Tempo and a thousand small cuts. Pile on extra hits, weaponize moving first, or funnel everything into one target.',
+    paths: [
+      { id: 'barrage', name: 'BARRAGE', tag: 'extra hits', icon: '⚔', color: '#ffd166', nodes: [
+        { id: 'barrage1', tier: 1, cost: 4,  name: 'Quick Hands', desc: '+15% damage from your attacks.',                        apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'barrage2', tier: 2, cost: 8,  name: 'Footwork', desc: 'Start every fight with +1 charge banked.',                 apply: (m) => { m.chargeStart += 1; } },
+        { id: 'barrage3', tier: 3, cost: 14, capstone: true, name: 'Twin Strike', desc: 'Jab and Flurry each throw +1 extra hit.', apply: (m) => { m.extraHits += 1; } },
+        { id: 'barrage4', tier: 4, cost: 22, sealed: true, name: 'Momentum', desc: 'Each consecutive hit on the same target hits +5% harder.' },
+        { id: 'barrage5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Thousand Cuts', desc: 'Every hit applies a stacking bleed — single targets melt.' },
+      ] },
+      { id: 'tempo', name: 'TEMPO', tag: 'move first', icon: '⚡', color: '#ffe08a', nodes: [
+        { id: 'tempo1', tier: 1, cost: 4,  name: 'Edge', desc: '+15% damage from your attacks.',                                 apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'tempo2', tier: 2, cost: 8,  name: 'Sprint', desc: 'Start every fight with +1 charge banked.',                     apply: (m) => { m.chargeStart += 1; } },
+        { id: 'tempo3', tier: 3, cost: 14, capstone: true, name: 'Blitz Storm', desc: 'Blitz becomes a 3-hit barrage instead of one strike.', apply: (m) => { m.blitzMulti = true; } },
+        { id: 'tempo4', tier: 4, cost: 22, sealed: true, name: 'Quickstep', desc: 'After a kill, act again.' },
+        { id: 'tempo5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Blur', desc: "You always act first, and your opening hit can't be blocked." },
+      ] },
+      { id: 'duel', name: 'DUELIST', tag: 'one target, dead', icon: '🗡', color: '#ffd166', hiddenUntilCapstone: true, nodes: [
+        { id: 'duel1', tier: 1, cost: 4,  sealed: true, name: 'Opener', desc: '+damage against full-HP targets.' },
+        { id: 'duel2', tier: 2, cost: 8,  sealed: true, name: 'Mark', desc: 'Jab marks the target to take more damage.' },
+        { id: 'duel3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Riposte', desc: 'Counter whenever you are attacked.' },
+        { id: 'duel4', tier: 4, cost: 22, sealed: true, name: 'Bloodlust', desc: 'Heal on kill and refund charge.' },
+        { id: 'duel5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Sword Saint', desc: 'All your damage funnels into one target — huge single-target, no AOE.' },
+      ] },
+    ],
+  },
+
+  Assassin: {
+    blurb: 'The weaker the prey, the harder you hit. Widen the kill-zone, hunt the wounded automatically, or drown them in poison.',
+    paths: [
+      { id: 'reaper', name: 'REAPER', tag: 'execute', icon: '🗡', color: '#ff7a9c', nodes: [
+        { id: 'reaper1', tier: 1, cost: 4,  name: 'Killer Instinct', desc: '+15% damage from your attacks.',                     apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'reaper2', tier: 2, cost: 8,  name: 'Patience', desc: 'Start every fight with +1 charge banked.',                  apply: (m) => { m.chargeStart += 1; } },
+        { id: 'reaper3', tier: 3, cost: 14, capstone: true, name: "Hunter's Mark", desc: 'Execute triggers below 60% HP, not 45%.', apply: (m) => { m.executeWindow += 0.15; } },
+        { id: 'reaper4', tier: 4, cost: 22, sealed: true, name: 'Cull', desc: 'Executing refunds full charge.' },
+        { id: 'reaper5', tier: 5, cost: 36, sealed: true, keystone: true, name: "Death's Door", desc: 'Instakill anything below 25% HP — but -50% to healthy targets.' },
+      ] },
+      { id: 'hound', name: 'BLOODHOUND', tag: 'hunt the weak', icon: '🩸', color: '#ff9bb5', nodes: [
+        { id: 'hound1', tier: 1, cost: 4,  name: 'Bloodscent', desc: '+15% damage from your attacks.',                          apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'hound2', tier: 2, cost: 8,  name: 'Stalk', desc: 'Start every fight with +1 charge banked.',                     apply: (m) => { m.chargeStart += 1; } },
+        { id: 'hound3', tier: 3, cost: 14, capstone: true, name: 'Blood Hunt', desc: 'Execute auto-hunts the most wounded enemy.', apply: (m) => { m.executeHunt = true; } },
+        { id: 'hound4', tier: 4, cost: 22, sealed: true, name: 'Pack Tactics', desc: 'Executing a target marks the next-weakest for death.' },
+        { id: 'hound5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Apex', desc: 'Each kill permanently raises your damage for the rest of the run.' },
+      ] },
+      { id: 'venom', name: 'VENOM', tag: 'poison everything', icon: '☠', color: '#ff7a9c', hiddenUntilCapstone: true, nodes: [
+        { id: 'venom1', tier: 1, cost: 4,  sealed: true, name: 'Toxin', desc: 'Mark applies a stacking poison that ramps.' },
+        { id: 'venom2', tier: 2, cost: 8,  sealed: true, name: 'Potent', desc: 'Poison stacks never expire and grow with each hit.' },
+        { id: 'venom3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Virulence', desc: 'Poison spreads to a neighbor on death.' },
+        { id: 'venom4', tier: 4, cost: 22, sealed: true, name: 'Toxic Shock', desc: 'Executing a poisoned target detonates poison on all poisoned enemies.' },
+        { id: 'venom5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Plague', desc: 'You deal no direct damage — but poison ignores shields and ramps forever.' },
       ] },
     ],
   },
@@ -297,11 +433,11 @@ function playerDef(member, squadMods, perm) {
       braceTeam:     u.braceTeam   || p.braceTeam   || 0,
       primeTeam:     u.primeTeam   || p.primeTeam   || 0,
       overloadAOE:   u.overloadAOE || p.overloadAOE || false,
-      blitzMulti:    u.blitzMulti    ?? false,
-      executeHunt:   u.executeHunt   ?? false,
-      braceRegen:    u.braceRegen    ?? false,
-      bloomAll:      u.bloomAll      ?? false,
-      overdriveAll:  u.overdriveAll  ?? false,
+      blitzMulti:    u.blitzMulti   || p.blitzMulti   || false,
+      executeHunt:   u.executeHunt  || p.executeHunt  || false,
+      braceRegen:    u.braceRegen   || p.braceRegen   || false,
+      bloomAll:      u.bloomAll     || p.bloomAll     || false,
+      overdriveAll:  u.overdriveAll || p.overdriveAll || false,
     },
   };
 }
@@ -1267,7 +1403,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 <div key={path.id} style={{ background: '#0a0a12', border: `1.5px dashed ${LINE}`, borderRadius: 14, padding: '22px 14px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 180 }}>
                   <div style={{ fontSize: 30, opacity: 0.5 }}>🜂</div>
                   <div style={{ fontSize: T.label, fontWeight: 900, color: '#5a5a6a', marginTop: 8, letterSpacing: 1 }}>??? </div>
-                  <div style={{ fontSize: T.small, color: DIM, marginTop: 8, lineHeight: 1.4 }}>A third path, still hidden. Master <b style={{ color: '#bfae8a' }}>Pyre</b> or <b style={{ color: '#ff8a4a' }}>Detonator</b> to a capstone to reveal it.</div>
+                  <div style={{ fontSize: T.small, color: DIM, marginTop: 8, lineHeight: 1.4 }}>A third path, still hidden. Take either open path to its <b style={{ color: '#cdb6ff' }}>◆ capstone</b> to reveal it.</div>
                 </div>
               );
             }
