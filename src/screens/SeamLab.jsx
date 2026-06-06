@@ -70,21 +70,36 @@ function useViewport() {
   return w;
 }
 
-// ── The climb: three escalating packs, then the boss (fresh each fight). ──
+// ── The climb inward: a fast easy→hard ramp, then the boss. Enemy stats are tuned
+// HERE (overrides on the roster base) so fights stay SHORT and punchy and the
+// difficulty curve is steep — outer rings die in 2–3 rounds, the King is the test.
+// (SeamLab-only — the goldens use the untouched roster base stats.) ──
 const WAVES = [
-  { name: 'Scouts', blurb: 'A pair of jumpy Reactors. Warm up.', seed: 101,
-    enemies: () => [makeUnitDef('glowtail', 'Balanced'), makeUnitDef('fizzpop', 'Balanced')] },
-  { name: 'The Pack', blurb: 'A Striker backed by a Mender — kill the healer first.', seed: 202,
-    enemies: () => [makeUnitDef('swiftpaw', 'Balanced'), makeUnitDef('mossback', 'Balanced')] },
-  { name: 'The Warden', blurb: 'A Bulwark wall guarding an Assassin. Break through.', seed: 303,
-    enemies: () => [makeUnitDef('stoneward', 'Greedy'), makeUnitDef('veilclaw', 'Greedy')] },
-  // The peak: a single huge Reactor that HOARDS charge for one ruinous Overload,
-  // kept standing by a tender. Race it down or cut the healer. AOE + your bends shine.
+  // Ring 1 — a blitz. Low HP, Cautious (they chip, never threaten). Feel strong.
+  { name: 'Scouts', blurb: 'A jumpy pair on the outer ring. Warm up — hit fast.', seed: 101,
+    enemies: () => [
+      { ...makeUnitDef('glowtail', 'Cautious'), hp: 105, maxHp: 105, atk: 16 },
+      { ...makeUnitDef('fizzpop', 'Cautious'), hp: 95, maxHp: 95, atk: 16 },
+    ] },
+  // Ring 2 — medium. A Striker pokes while a Mender sustains; kill the healer first.
+  { name: 'The Pack', blurb: 'A Striker and a Mender, deeper in. Cut the healer first.', seed: 202,
+    enemies: () => [
+      { ...makeUnitDef('swiftpaw', 'Balanced'), hp: 150, maxHp: 150, atk: 28 },
+      { ...makeUnitDef('mossback', 'Balanced'), hp: 150, maxHp: 150 },
+    ] },
+  // Ring 3 — hard. A wall guarding a glass-cannon killer. Real threat now.
+  { name: 'The Warden', blurb: 'A wall guarding a killer. This one bites — break through.', seed: 303,
+    enemies: () => [
+      { ...makeUnitDef('stoneward', 'Greedy'), hp: 240, maxHp: 240 },
+      { ...makeUnitDef('veilclaw', 'Greedy'), hp: 150, maxHp: 150, atk: 42 },
+    ] },
+  // The peak — the test. Trimmed HP so it's not a slog, but it hits HARDER and a
+  // tender keeps it standing. Race it down or cut the healer. AOE + keystones shine.
   { name: 'The Hollow King', boss: true, seed: 404,
     blurb: 'The thing the others were guarding. It hoards fire for one ruinous blast — and a tender keeps it standing. Burn it down, or cut the healer first.',
     enemies: () => [
-      { ...makeUnitDef('cinderpaw', 'Greedy'), name: 'The Hollow King', hp: 720, maxHp: 720, atk: 40, speed: 7 },
-      { ...makeUnitDef('mossback', 'Balanced'), name: 'Ashen Tender', hp: 240, maxHp: 240 },
+      { ...makeUnitDef('cinderpaw', 'Greedy'), name: 'The Hollow King', hp: 560, maxHp: 560, atk: 46, speed: 7 },
+      { ...makeUnitDef('mossback', 'Balanced'), name: 'Ashen Tender', hp: 180, maxHp: 180 },
     ] },
 ];
 
@@ -225,8 +240,9 @@ function loadEquip() { try { return JSON.parse(localStorage.getItem(EQUIP_KEY) |
 function saveEquip(m) { try { localStorage.setItem(EQUIP_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 
 // Progressive Cores: a deeper wave pays more, so pushing the climb funds the tree.
-// Scouts→2, Pack→3, Warden→4, Hollow King→5+8. A full clear ≈ 22 ⬡ per survivor.
-const coresForWave = (idx, isBoss) => (2 + idx) + (isBoss ? 8 : 0);
+// Front-loaded so a build forms FAST early: Scouts→4, Pack→5, Warden→6, King→7+10.
+// A full clear ≈ 32 ⬡ per survivor — run one already buys a couple of nodes.
+const coresForWave = (idx, isBoss) => (4 + idx) + (isBoss ? 10 : 0);
 
 function emptyTreeMods() {
   return { dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0,
