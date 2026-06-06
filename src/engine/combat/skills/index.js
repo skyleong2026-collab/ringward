@@ -5,6 +5,7 @@ import { BOOSTER_SKILLS } from './booster.js';
 import { STRIKER_SKILLS } from './striker.js';
 import { ASSASSIN_SKILLS } from './assassin.js';
 import { WARDEN_SKILLS } from './warden.js';
+import { HEXER_SKILLS } from './hexer.js';
 
 // ─── Skill registry ─────────────────────────────────────────────────────────────
 // One flat map of every skill the manual engine knows. Task 1 ships Reactor only
@@ -18,6 +19,7 @@ export const SKILLS = {
   ...STRIKER_SKILLS,
   ...ASSASSIN_SKILLS,
   ...WARDEN_SKILLS,
+  ...HEXER_SKILLS,
 };
 
 export function getSkill(id) {

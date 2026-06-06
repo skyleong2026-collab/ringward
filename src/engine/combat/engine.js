@@ -1,4 +1,4 @@
-import { ROUND_CAP, BURN, REGEN, AMP } from './dials.js';
+import { ROUND_CAP, BURN, REGEN, AMP, VULN } from './dials.js';
 import { getSkill } from './skills/index.js';
 import {
   livingOnSide,
@@ -37,9 +37,10 @@ function applyDecision(state, actor, decision, emit) {
     heals: result.heals || [],
     regens: result.regens || [],
     amps: result.amps || [],
-    // Conditional: only Warden turns carry freezes, so existing golden turn events
-    // stay byte-identical (the key is simply absent for every current creature).
+    // Conditional: only Warden turns carry freezes / Hexer turns carry vulns, so
+    // existing golden turn events stay byte-identical (the keys are simply absent).
     ...(result.freezes && result.freezes.length ? { freezes: result.freezes } : {}),
+    ...(result.vulns && result.vulns.length ? { vulns: result.vulns } : {}),
     note: result.note,
     amplifiedByBurn: result.amplifiedByBurn || false,
   });
@@ -108,6 +109,18 @@ function decayAmp(state) {
   }
 }
 
+// ─── End of round: Vulnerability decays (a Hexer curse; silent like Amp). A unit with
+// no vuln is skipped, so this is a no-op for every golden — byte-identical. ──
+function decayVuln(state) {
+  for (const side of ['A', 'B']) {
+    for (const u of livingOnSide(state, side)) {
+      const stacks = u.statuses.vuln || 0;
+      if (stacks <= 0) continue;
+      u.statuses.vuln = Math.max(0, stacks - VULN.decayPerRound);
+    }
+  }
+}
+
 // ─── The fixed-round loop (§26.2) ───────────────────────────────────────────────
 // Side that wins initiative acts as a whole block, then the other side's block —
 // NOT interleaved by individual speed. Within a block, the side's driver picks
@@ -148,6 +161,7 @@ async function runRound(state, drivers, emit) {
   if (!battleOver(state)) tickBurns(state, emit);
   if (!battleOver(state)) tickRegen(state, emit);
   decayAmp(state); // always: a buff fades whether or not the round was decisive
+  decayVuln(state); // a curse fades too (no-op unless a Hexer is in play)
   state.round += 1;
   state.firstActionDone = false;
 }

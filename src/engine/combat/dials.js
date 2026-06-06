@@ -48,6 +48,15 @@ export const FREEZE = {
   maxStacks: 3, // a unit can be locked for at most this many of its turns
 };
 
+// ── Vulnerability: a curse Hexers lay on an enemy. While vulnerable, it takes MORE
+// damage from every source (the team multiplier). Decays each round (like amp).
+// Opt-in — no existing creature applies vuln, so every current golden is untouched. ──
+export const VULN = {
+  perStack: 0.15, // +15% damage taken per stack while it lasts
+  decayPerRound: 1,
+  maxStacks: 4, // = +60% damage taken at full curse
+};
+
 // ── Reactor kit (§23.5) — Charge Up / Overload / Backdraft ──
 export const REACTOR = {
   chargeUp: {
@@ -195,6 +204,29 @@ export const WARDEN = {
     minCharge: 2,
     perCharge: 0.35, // line damage = atk * perCharge * charge vented
     freezeStacks: 1, // vent HALF charge → freeze the whole enemy line for 1 turn
+  },
+};
+
+// ── Hexer kit (§ new Type) — Jinx / Doom / Blight. Curse: charge into VULNERABILITY,
+// not raw damage. Low attack; its value is making the enemy take more from the whole
+// squad. Builder seeds a curse + chips; payoff lays a heavy curse (+ damage); wildcard
+// curses the whole line. ──
+export const HEXER = {
+  jinx: {
+    chargeGain: 2,
+    chipMult: 0.4, // a cursed poke so building is never a dead turn
+    vuln: 1, // seeds 1 vulnerability stack
+  },
+  doom: {
+    minCharge: 2,
+    base: 0.6, // atk multiplier floor
+    perCharge: 0.35, // + per point of charge spent
+    vuln: 2, // spend ALL charge → heavy curse on one enemy (whole line with Spreading Hex)
+  },
+  blight: {
+    minCharge: 2,
+    perCharge: 0.25, // line damage = atk * perCharge * charge vented
+    vuln: 1, // vent HALF charge → curse the whole enemy line
   },
 };
 

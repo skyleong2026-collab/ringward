@@ -1,4 +1,4 @@
-import { BURN, BLOCK, REGEN, AMP, FREEZE } from '../dials.js';
+import { BURN, BLOCK, REGEN, AMP, FREEZE, VULN } from '../dials.js';
 
 // ─── Shared combat math (§26.2: ONE place damage/status logic lives) ────────────
 // Every skill across every Type routes through these so a new Type can't quietly
@@ -22,7 +22,10 @@ export function dealDamage(target, amount, actor) {
   // "Shatter" (Warden keystone path): your hits on a frozen target hit 50% harder.
   // Opt-in — default 1, so every existing golden is byte-identical.
   const shatter = (actor?.mods?.shatter && (target.statuses.freeze || 0) > 0) ? 1.5 : 1;
-  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult') * shatter));
+  // Vulnerability (Hexer curse): a cursed target takes more from EVERY source. Opt-in —
+  // no creature carries vuln by default, so this is ×1 and goldens are byte-identical.
+  const vuln = 1 + VULN.perStack * (target.statuses.vuln || 0);
+  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult') * shatter * vuln));
   let remaining = dmg;
   const blocked = Math.min(target.statuses.block || 0, remaining);
   if (blocked > 0) target.statuses.block -= blocked;
@@ -71,6 +74,13 @@ export function applyRegen(target, stacks) {
 export function applyFreeze(target, stacks) {
   target.statuses.freeze = Math.min(FREEZE.maxStacks, (target.statuses.freeze || 0) + stacks);
   return { uid: target.uid, name: target.name, freeze: target.statuses.freeze };
+}
+
+// Curse a unit so it takes more damage from everyone (a Hexer primitive). Decays each
+// round. Opt-in: no existing creature applies vuln, so goldens are byte-identical.
+export function applyVuln(target, stacks) {
+  target.statuses.vuln = Math.min(VULN.maxStacks, (target.statuses.vuln || 0) + stacks);
+  return { uid: target.uid, name: target.name, vuln: target.statuses.vuln };
 }
 
 // Lend an outgoing-damage buff to an ally (capped). Reports the resulting stacks so

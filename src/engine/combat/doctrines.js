@@ -1,4 +1,4 @@
-import { TEMPERAMENT_THRESHOLD, REACTOR, BULWARK, MENDER, BOOSTER, STRIKER, ASSASSIN, WARDEN } from './dials.js';
+import { TEMPERAMENT_THRESHOLD, REACTOR, BULWARK, MENDER, BOOSTER, STRIKER, ASSASSIN, WARDEN, HEXER } from './dials.js';
 import {
   always,
   and,
@@ -269,6 +269,35 @@ export function wardenDoctrine(threshold) {
   };
 }
 
+// Hexer ladder. Banks charge to lay the big curse; facing a line (3+) it Blights to
+// curse everyone; otherwise Dooms the biggest threat; else Jinxes to build + seed vuln.
+export function hexerDoctrine(threshold) {
+  return {
+    type: 'Hexer',
+    threshold,
+    rules: [
+      {
+        name: 'blight-the-swarm',
+        when: and(enemyCountAtLeast(3), chargeAtLeast(HEXER.blight.minCharge)),
+        skillId: 'blight',
+        select: allEnemies,
+      },
+      {
+        name: 'doom-the-threat',
+        when: chargeAtLeast(threshold),
+        skillId: 'doom',
+        select: biggestThreatEnemy,
+      },
+      {
+        name: 'jinx-and-build',
+        when: always,
+        skillId: 'jinx',
+        select: biggestThreatEnemy,
+      },
+    ],
+  };
+}
+
 const DOCTRINE_BY_TYPE = {
   Reactor: reactorDoctrine,
   Bulwark: bulwarkDoctrine,
@@ -277,6 +306,7 @@ const DOCTRINE_BY_TYPE = {
   Striker: strikerDoctrine,
   Assassin: assassinDoctrine,
   Warden: wardenDoctrine,
+  Hexer: hexerDoctrine,
 };
 
 // Resolve a unit's doctrine from its Type + temperament. The temperament maps to a

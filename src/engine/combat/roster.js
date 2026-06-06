@@ -11,6 +11,7 @@ const BOOSTER_KIT = ['prime', 'overdrive', 'resonate'];
 const STRIKER_KIT = ['jab', 'flurry', 'blitz'];
 const ASSASSIN_KIT = ['mark', 'execute', 'ambush'];
 const WARDEN_KIT = ['frostnip', 'glaciate', 'coldsnap'];
+const HEXER_KIT = ['jinx', 'doom', 'blight'];
 
 export const COMBAT_CREATURES = {
   fizzpop: {
@@ -175,6 +176,29 @@ export const COMBAT_CREATURES = {
     atk: 20,
     speed: 6,
     skillIds: WARDEN_KIT,
+  },
+
+  // ── Hexers: curse — low attack, moderate HP; win by making the enemy take more
+  // from the whole squad. The team-multiplier Type (§ new). ──
+  blightcap: {
+    id: 'blightcap',
+    name: 'Blightcap',
+    type: 'Hexer',
+    spriteId: 'fang',
+    hp: 220,
+    atk: 18,
+    speed: 5,
+    skillIds: HEXER_KIT,
+  },
+  hexmoth: {
+    id: 'hexmoth',
+    name: 'Hexmoth',
+    type: 'Hexer',
+    spriteId: 'claw',
+    hp: 205,
+    atk: 20,
+    speed: 6,
+    skillIds: HEXER_KIT,
   },
 };
 
