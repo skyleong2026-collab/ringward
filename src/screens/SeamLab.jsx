@@ -251,15 +251,20 @@ const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (m
 const CORES_KEY = '8gents_creature_cores';
 const TREE_KEY = '8gents_creature_tree';   // UNLOCKED nodes (permanent — what you've bought)
 const EQUIP_KEY = '8gents_creature_equip'; // EQUIPPED nodes (the loadout — a subset, swappable)
-// Model B: you UNLOCK nodes permanently with Cores, but only EQUIP a small loadout at a
-// time. Accumulation never lost; build choice survives forever even on a maxed creature.
-const LOADOUT_SLOTS = 4;
+// Model B: you UNLOCK nodes permanently with Cores, but only EQUIP a loadout at a time.
+// Accumulation never lost; build choice survives forever even on a maxed creature.
+// The loadout GROWS with investment: more nodes unlocked → more slots (4 → 8), so deep
+// investment keeps raising your POWER, not just your options.
+const RANKS_KEY = '8gents_creature_ranks'; // {creatureId: {nodeId: rank}} for repeatable nodes
+const slotsForUnlocked = (n) => Math.min(8, 4 + Math.floor((n || 0) / 4));
 function loadCores() { try { return JSON.parse(localStorage.getItem(CORES_KEY) || '{}') || {}; } catch { return {}; } }
 function saveCores(m) { try { localStorage.setItem(CORES_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 function loadTreeAlloc() { try { return JSON.parse(localStorage.getItem(TREE_KEY) || '{}') || {}; } catch { return {}; } }
 function saveTreeAlloc(m) { try { localStorage.setItem(TREE_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 function loadEquip() { try { return JSON.parse(localStorage.getItem(EQUIP_KEY) || '{}') || {}; } catch { return {}; } }
 function saveEquip(m) { try { localStorage.setItem(EQUIP_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+function loadRanks() { try { return JSON.parse(localStorage.getItem(RANKS_KEY) || '{}') || {}; } catch { return {}; } }
+function saveRanks(m) { try { localStorage.setItem(RANKS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 const AUTO_KEY = '8gents_seam_auto';
 function loadAuto() { try { return localStorage.getItem(AUTO_KEY) === '1'; } catch { return false; } }
 function saveAuto(on) { try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
@@ -471,15 +476,49 @@ const TYPE_TREES = {
   },
 };
 
+// ── Refinement: an INFINITE repeatable node per open path, so there's always a next
+// purchase (answers "I ran out of power-ups"). Unlocked once you take the path's
+// capstone, then bought again and again — one loadout slot, effect scales with rank,
+// cost climbs each rank. A multiplicative stat keeps it useful forever without runaway.
+const REFINE_STAT = { // path id → which multiplicative stat its Refinement grows
+  deto: 'overloadMult', aegis: 'blockMult', guard: 'blockMult',
+  bloom: 'healMult', verdant: 'healMult',
+  // everything else sharpens raw damage
+};
+const REFINE_LABEL = { overloadMult: 'Overload power', blockMult: 'shield strength', healMult: 'healing' };
+function applyRefine(m, stat, rank) { if (rank > 0) m[stat] = (m[stat] ?? 1) * Math.pow(1.06, rank); }
+function refineCost(node, rank) { return node.baseCost + node.costStep * rank; } // rank = ranks ALREADY bought
+
+// Inject one Refinement node at the end of every NON-hidden path (the two open paths
+// per Type). Reachable via `requires` = that path's capstone, independent of keystones.
+Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => {
+  if (p.hiddenUntilCapstone) return;
+  const capstone = p.nodes.find((n) => n.capstone);
+  const stat = REFINE_STAT[p.id] || 'dmgMult';
+  const what = REFINE_LABEL[stat] || 'damage';
+  p.nodes.push({
+    id: `${p.id}_refine`, tier: 6, repeatable: true, refineStat: stat,
+    baseCost: 10, costStep: 6, requires: capstone ? capstone.id : undefined,
+    name: 'Refinement', desc: `+6% ${what} per rank. Buy it again and again — one slot, grows forever.`,
+  });
+}));
+
 // Flat node lookup + per-creature helpers.
 const NODE_BY_ID = {};
 Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => p.nodes.forEach((n) => { NODE_BY_ID[n.id] = { ...n, pathId: p.id }; })));
 const treeForCreature = (id) => TYPE_TREES[COMBAT_CREATURES[id]?.type] ?? null;
-// Combat reads only the EQUIPPED loadout, not everything unlocked.
-function treeModsFor(id, equipMap) {
+// Combat reads only the EQUIPPED loadout. Normal nodes apply(); repeatable Refinement
+// nodes scale by their rank (from the ranks map).
+function treeModsFor(id, equipMap, ranksMap) {
   const active = (equipMap?.[id]) ?? [];
+  const ranks = (ranksMap?.[id]) ?? {};
   const m = emptyTreeMods();
-  active.forEach((nid) => { const n = NODE_BY_ID[nid]; if (n?.apply) n.apply(m); });
+  active.forEach((nid) => {
+    const n = NODE_BY_ID[nid];
+    if (!n) return;
+    if (n.repeatable) applyRefine(m, n.refineStat, ranks[nid] || 0);
+    else if (n.apply) n.apply(m);
+  });
   return m;
 }
 
@@ -1383,6 +1422,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [cores, setCores] = useState(loadCores); // {creatureId: unspent Cores ⬡} — permanent
   const [treeAlloc, setTreeAlloc] = useState(loadTreeAlloc); // {creatureId: [nodeId]} unlocked — permanent
   const [treeEquip, setTreeEquip] = useState(loadEquip); // {creatureId: [nodeId]} equipped loadout
+  const [treeRanks, setTreeRanks] = useState(loadRanks); // {creatureId: {nodeId: rank}} for Refinement
   const [treeFor, setTreeFor] = useState(null); // creatureId whose skill tree is open (overlay)
   const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
   const [auto, setAutoState] = useState(loadAuto); // AUTO: let the AI fight your squad
@@ -1405,28 +1445,48 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setCores((c) => { const n = { ...c }; ids.forEach((id) => { n[id] = (n[id] || 0) + amt; }); saveCores(n); return n; });
     setCoresRun((c) => { const n = { ...c }; ids.forEach((id) => { n[id] = (n[id] || 0) + amt; }); return n; });
   }
-  // Spend Cores to permanently UNLOCK a tree node — and auto-equip it if the loadout
-  // has room, so a freshly-bought node is in play right away.
+  // How many loadout slots a creature has — grows as you unlock more nodes (4 → 8).
+  const slotsForCreature = (creatureId) => slotsForUnlocked((treeAlloc[creatureId] || []).length);
+
+  // Spend Cores on a node. Normal nodes UNLOCK once (auto-equip if the loadout has room).
+  // Repeatable Refinement nodes can be bought again and again — each rank costs more and
+  // adds to its stacked effect; the first purchase also unlocks + auto-equips it.
   function buyNode(creatureId, node) {
-    if ((treeAlloc[creatureId] || []).includes(node.id)) return;
+    const owned = treeAlloc[creatureId] || [];
+    const isUnlocked = owned.includes(node.id);
+    if (node.repeatable) {
+      const rank = (treeRanks[creatureId]?.[node.id]) || 0;
+      const cost = refineCost(node, rank);
+      if ((cores[creatureId] || 0) < cost) return;
+      setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) - cost }; saveCores(n); return n; });
+      setTreeRanks((r) => { const cur = { ...(r[creatureId] || {}) }; cur[node.id] = (cur[node.id] || 0) + 1; const n = { ...r, [creatureId]: cur }; saveRanks(n); return n; });
+      if (!isUnlocked) {
+        setTreeAlloc((a) => { const n = { ...a, [creatureId]: [...(a[creatureId] || []), node.id] }; saveTreeAlloc(n); return n; });
+        setTreeEquip((e) => { const cur = e[creatureId] || []; if (cur.length >= slotsForUnlocked(owned.length + 1)) return e; const n = { ...e, [creatureId]: [...cur, node.id] }; saveEquip(n); return n; });
+      }
+      sfx.upgradePick();
+      return;
+    }
+    if (isUnlocked) return;
     if ((cores[creatureId] || 0) < node.cost) return;
     setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) - node.cost }; saveCores(n); return n; });
     setTreeAlloc((a) => { const n = { ...a, [creatureId]: [...(a[creatureId] || []), node.id] }; saveTreeAlloc(n); return n; });
     setTreeEquip((e) => {
       const cur = e[creatureId] || [];
-      if (cur.length >= LOADOUT_SLOTS) return e; // loadout full — unlock only, equip manually
+      if (cur.length >= slotsForUnlocked(owned.length + 1)) return e; // loadout full — unlock only, equip manually
       const n = { ...e, [creatureId]: [...cur, node.id] }; saveEquip(n); return n;
     });
     sfx.upgradePick();
   }
-  // Toggle a node in/out of the creature's equipped loadout (capped at LOADOUT_SLOTS).
+  // Toggle a node in/out of the creature's equipped loadout (capped at its slot count).
   function toggleEquip(creatureId, node) {
     if (!(treeAlloc[creatureId] || []).includes(node.id)) return; // must be unlocked first
+    const cap = slotsForCreature(creatureId);
     setTreeEquip((e) => {
       const cur = e[creatureId] || [];
       let next;
       if (cur.includes(node.id)) next = cur.filter((x) => x !== node.id);
-      else if (cur.length < LOADOUT_SLOTS) next = [...cur, node.id];
+      else if (cur.length < cap) next = [...cur, node.id];
       else return e; // loadout full
       const n = { ...e, [creatureId]: next }; saveEquip(n); return n;
     });
@@ -1455,7 +1515,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
-    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip)));
+    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
     fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, auto ? 'auto' : 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
@@ -1545,10 +1605,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const owned = treeAlloc[treeFor] || [];     // unlocked
     const equipped = treeEquip[treeFor] || [];  // active loadout
     const bal = cores[treeFor] || 0;
+    const ranks = treeRanks[treeFor] || {};
     const isOwned = (id) => owned.includes(id);
     const isEq = (id) => equipped.includes(id);
+    const slotMax = slotsForUnlocked(owned.length); // loadout grows with what you've unlocked
     const slotsUsed = equipped.length;
-    const slotsFull = slotsUsed >= LOADOUT_SLOTS;
+    const slotsFull = slotsUsed >= slotMax;
     // A path locked "until a capstone" opens once you've UNLOCKED any tier-3 capstone.
     const hasCapstone = tree ? tree.paths.some((p) => p.nodes.some((n) => n.capstone && isOwned(n.id))) : false;
 
@@ -1579,14 +1641,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c1620', border: `1px solid ${slotsFull ? '#3a6a4a' : '#2a4a5a'}`, borderRadius: 10, padding: '8px 12px', marginBottom: 10 }}>
           <span style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>⚡ LOADOUT</span>
           <span style={{ display: 'flex', gap: 4 }}>
-            {Array.from({ length: LOADOUT_SLOTS }).map((_, i) => (
+            {Array.from({ length: slotMax }).map((_, i) => (
               <span key={i} style={{ width: 11, height: 11, borderRadius: 3, background: i < slotsUsed ? WIN : '#1a2630', border: `1px solid ${i < slotsUsed ? WIN : '#2a3a44'}` }} />
             ))}
           </span>
-          <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700, marginLeft: 'auto' }}>{slotsUsed}/{LOADOUT_SLOTS} active{slotsFull ? ' · full' : ''}</span>
+          <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700, marginLeft: 'auto' }}>{slotsUsed}/{slotMax} active{slotsFull ? ' · full' : ''}{slotMax < 8 ? ' · unlock more for +slots' : ''}</span>
         </div>
         <div style={{ fontSize: T.small, color: '#cdb6ff', background: '#0c0c16', border: `1px solid ${LINE}`, borderRadius: 10, padding: '9px 12px', marginBottom: 14, lineHeight: 1.45 }}>
-          {tree.blurb} <span style={{ color: DIM }}>Unlocking is forever — but only <b style={{ color: '#9be7ff' }}>{LOADOUT_SLOTS}</b> paths run at once. Swap your loadout free, anytime. Tap an unlocked path to equip or bench it.</span>
+          {tree.blurb} <span style={{ color: DIM }}>Unlocking is forever; you run <b style={{ color: '#9be7ff' }}>{slotMax}</b> at once (more slots as you unlock more). Tap an unlocked path to equip or bench it. <b style={{ color: '#9be7ff' }}>Refinement</b> nodes can be bought again and again.</span>
         </div>
         {/* Paths */}
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
@@ -1622,20 +1684,59 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   {path.nodes.map((node, i) => {
                     const ownedNode = isOwned(node.id);
                     const equippedNode = isEq(node.id);
-                    const prevOwned = i === 0 ? true : isOwned(path.nodes[i - 1].id);
+                    // Prereq: explicit `requires` (Refinement → capstone) else the prior tier.
+                    const prereqId = node.requires ?? (i > 0 ? path.nodes[i - 1].id : null);
+                    const prereqOwned = prereqId ? isOwned(prereqId) : true;
+                    const prereqName = prereqId ? (NODE_BY_ID[prereqId]?.name ?? '') : '';
+
+                    // ── Refinement: the infinite repeatable node — buy ranks forever ──
+                    if (node.repeatable) {
+                      const rank = ranks[node.id] || 0;
+                      const cost = refineCost(node, rank);
+                      const canBuy = prereqOwned && bal >= cost;
+                      return (
+                        <div key={node.id}>
+                          <div style={{ width: 2, height: 6, background: prereqOwned ? WIN : LINE, margin: '0 auto' }} />
+                          <div style={{ borderRadius: 10, padding: '8px 9px', background: equippedNode ? '#10231a' : '#0e1812', border: `1.5px solid ${equippedNode ? '#9be7ff' : prereqOwned ? '#9be7ff55' : LINE}`, opacity: prereqOwned ? 1 : 0.6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span style={{ fontSize: T.small }}>♾</span>
+                              <span style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>{node.name}</span>
+                              {rank > 0 && <span style={{ fontSize: T.micro, fontWeight: 800, color: WIN }}>· Rank {rank}</span>}
+                              {ownedNode && <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: equippedNode ? WIN : DIM }}>{equippedNode ? '● equipped' : '○ benched'}</span>}
+                            </div>
+                            <div style={{ fontSize: T.micro, color: '#9a9aaa', lineHeight: 1.35, margin: '3px 0 6px' }}>
+                              {prereqOwned ? node.desc : `🔒 take ${prereqName} first to open Refinement.`}
+                            </div>
+                            {prereqOwned && (
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={() => canBuy && buyNode(treeFor, node)} disabled={!canBuy}
+                                  style={{ flex: 1, borderRadius: 8, padding: '5px 0', cursor: canBuy ? 'pointer' : 'default', background: canBuy ? '#14233a' : PANEL, border: `1px solid ${canBuy ? '#5aa9ff' : LINE}`, color: canBuy ? '#9be7ff' : '#6a6a7a', fontSize: T.micro, fontWeight: 900 }}>
+                                  {rank > 0 ? `BUY RANK ${rank + 1}` : 'UNLOCK'} · {cost} ⬡
+                                </button>
+                                {ownedNode && (
+                                  <button onClick={() => (equippedNode || !slotsFull) && toggleEquip(treeFor, node)} disabled={!equippedNode && slotsFull}
+                                    style={{ width: 78, borderRadius: 8, padding: '5px 0', cursor: (equippedNode || !slotsFull) ? 'pointer' : 'default', background: equippedNode ? '#10231a' : PANEL, border: `1px solid ${equippedNode ? WIN : LINE}`, color: equippedNode ? WIN : (slotsFull ? DIM : '#9be7ff'), fontSize: T.micro, fontWeight: 800 }}>
+                                    {equippedNode ? 'bench' : slotsFull ? 'full' : 'equip'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // ── Normal node ──
                     // Desc visibility (fog): see two tiers ahead, and ALWAYS show the
                     // capstone (◆) + keystone (★) — a column must advertise its payoff.
                     const revealed = node.tier <= maxOwnedTier + 2 || node.capstone || node.keystone || ownedNode;
                     const afford = bal >= node.cost;
-                    // Purchase still gates one tier at a time (the prior node must be owned).
-                    const buyable = prevOwned && !node.sealed && !ownedNode && afford;
-                    // Unlocked nodes can always be tapped to bench; benched ones equip if a slot is free.
+                    const buyable = prereqOwned && !node.sealed && !ownedNode && afford;
                     const clickable = buyable || (ownedNode && (equippedNode || !slotsFull));
                     const onClick = () => {
                       if (!ownedNode) { if (buyable) buyNode(treeFor, node); }
                       else toggleEquip(treeFor, node);
                     };
-                    // visual state — equipped = bright green; unlocked-benched = dim green outline
                     const border = equippedNode ? WIN : ownedNode ? `${WIN}66` : node.keystone ? '#ffd166' : node.sealed ? LINE : revealed ? `${path.color}66` : LINE;
                     const bg = equippedNode ? '#10231a' : ownedNode ? '#0e1812' : '#0c0c14';
                     const op = (!revealed && !ownedNode) ? 0.6 : node.sealed && !ownedNode ? 0.78 : 1;
@@ -1645,7 +1746,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     const tagColor = equippedNode ? WIN : ownedNode ? (slotsFull ? DIM : '#9be7ff') : node.sealed ? DIM : afford ? '#9be7ff' : '#6a6a7a';
                     return (
                       <div key={node.id}>
-                        {i > 0 && <div style={{ width: 2, height: 6, background: prevOwned ? WIN : LINE, margin: '0 auto' }} />}
+                        {i > 0 && <div style={{ width: 2, height: 6, background: prereqOwned ? WIN : LINE, margin: '0 auto' }} />}
                         <button
                           onClick={onClick}
                           disabled={!clickable}
@@ -1660,7 +1761,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                           <div style={{ fontSize: T.micro, color: ownedNode ? '#bfe8cf' : revealed ? '#9a9aaa' : '#5a5a6a', lineHeight: 1.35, marginTop: 3 }}>
                             {revealed ? node.desc : `🔒 deeper down this path`}
                             {node.sealed && revealed && <span style={{ color: '#7a7a8a', fontStyle: 'italic' }}> — opens in a coming trial.</span>}
-                            {revealed && !node.sealed && !ownedNode && !prevOwned && <span style={{ color: '#6a6a7a' }}> — locked until {path.nodes[i - 1].name}.</span>}
+                            {revealed && !node.sealed && !ownedNode && !prereqOwned && <span style={{ color: '#6a6a7a' }}> — locked until {prereqName}.</span>}
                           </div>
                         </button>
                       </div>
