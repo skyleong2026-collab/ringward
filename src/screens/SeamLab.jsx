@@ -211,11 +211,17 @@ const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (m
 // SEALED and revealed by play, so there's always a goal ahead. Node effects are
 // opt-in actor.mods (the same frozen-engine-safe path the run bends use).
 const CORES_KEY = '8gents_creature_cores';
-const TREE_KEY = '8gents_creature_tree';
+const TREE_KEY = '8gents_creature_tree';   // UNLOCKED nodes (permanent — what you've bought)
+const EQUIP_KEY = '8gents_creature_equip'; // EQUIPPED nodes (the loadout — a subset, swappable)
+// Model B: you UNLOCK nodes permanently with Cores, but only EQUIP a small loadout at a
+// time. Accumulation never lost; build choice survives forever even on a maxed creature.
+const LOADOUT_SLOTS = 4;
 function loadCores() { try { return JSON.parse(localStorage.getItem(CORES_KEY) || '{}') || {}; } catch { return {}; } }
 function saveCores(m) { try { localStorage.setItem(CORES_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 function loadTreeAlloc() { try { return JSON.parse(localStorage.getItem(TREE_KEY) || '{}') || {}; } catch { return {}; } }
 function saveTreeAlloc(m) { try { localStorage.setItem(TREE_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+function loadEquip() { try { return JSON.parse(localStorage.getItem(EQUIP_KEY) || '{}') || {}; } catch { return {}; } }
+function saveEquip(m) { try { localStorage.setItem(EQUIP_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 
 // Progressive Cores: a deeper wave pays more, so pushing the climb funds the tree.
 // Scouts→2, Pack→3, Warden→4, Hollow King→5+8. A full clear ≈ 22 ⬡ per survivor.
@@ -398,10 +404,11 @@ const TYPE_TREES = {
 const NODE_BY_ID = {};
 Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => p.nodes.forEach((n) => { NODE_BY_ID[n.id] = { ...n, pathId: p.id }; })));
 const treeForCreature = (id) => TYPE_TREES[COMBAT_CREATURES[id]?.type] ?? null;
-function treeModsFor(id, alloc) {
-  const owned = (alloc?.[id]) ?? [];
+// Combat reads only the EQUIPPED loadout, not everything unlocked.
+function treeModsFor(id, equipMap) {
+  const active = (equipMap?.[id]) ?? [];
   const m = emptyTreeMods();
-  owned.forEach((nid) => { const n = NODE_BY_ID[nid]; if (n?.apply) n.apply(m); });
+  active.forEach((nid) => { const n = NODE_BY_ID[nid]; if (n?.apply) n.apply(m); });
   return m;
 }
 
@@ -1223,7 +1230,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
   const [cores, setCores] = useState(loadCores); // {creatureId: unspent Cores ⬡} — permanent
-  const [treeAlloc, setTreeAlloc] = useState(loadTreeAlloc); // {creatureId: [nodeId]} — permanent
+  const [treeAlloc, setTreeAlloc] = useState(loadTreeAlloc); // {creatureId: [nodeId]} unlocked — permanent
+  const [treeEquip, setTreeEquip] = useState(loadEquip); // {creatureId: [nodeId]} equipped loadout
   const [treeFor, setTreeFor] = useState(null); // creatureId whose skill tree is open (overlay)
   const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
 
@@ -1244,12 +1252,31 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setCores((c) => { const n = { ...c }; ids.forEach((id) => { n[id] = (n[id] || 0) + amt; }); saveCores(n); return n; });
     setCoresRun((c) => { const n = { ...c }; ids.forEach((id) => { n[id] = (n[id] || 0) + amt; }); return n; });
   }
-  // Spend Cores to permanently allocate a tree node onto one creature.
+  // Spend Cores to permanently UNLOCK a tree node — and auto-equip it if the loadout
+  // has room, so a freshly-bought node is in play right away.
   function buyNode(creatureId, node) {
     if ((treeAlloc[creatureId] || []).includes(node.id)) return;
     if ((cores[creatureId] || 0) < node.cost) return;
     setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) - node.cost }; saveCores(n); return n; });
     setTreeAlloc((a) => { const n = { ...a, [creatureId]: [...(a[creatureId] || []), node.id] }; saveTreeAlloc(n); return n; });
+    setTreeEquip((e) => {
+      const cur = e[creatureId] || [];
+      if (cur.length >= LOADOUT_SLOTS) return e; // loadout full — unlock only, equip manually
+      const n = { ...e, [creatureId]: [...cur, node.id] }; saveEquip(n); return n;
+    });
+    sfx.upgradePick();
+  }
+  // Toggle a node in/out of the creature's equipped loadout (capped at LOADOUT_SLOTS).
+  function toggleEquip(creatureId, node) {
+    if (!(treeAlloc[creatureId] || []).includes(node.id)) return; // must be unlocked first
+    setTreeEquip((e) => {
+      const cur = e[creatureId] || [];
+      let next;
+      if (cur.includes(node.id)) next = cur.filter((x) => x !== node.id);
+      else if (cur.length < LOADOUT_SLOTS) next = [...cur, node.id];
+      else return e; // loadout full
+      const n = { ...e, [creatureId]: next }; saveEquip(n); return n;
+    });
     sfx.upgradePick();
   }
 
@@ -1275,7 +1302,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
-    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeAlloc)));
+    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip)));
     fight.begin(aDefs, WAVES[idx].enemies(), WAVES[idx].seed, 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
@@ -1362,10 +1389,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const c = COMBAT_CREATURES[treeFor];
     const ti = TYPE_INFO[c.type];
     const tree = treeForCreature(treeFor);
-    const owned = treeAlloc[treeFor] || [];
+    const owned = treeAlloc[treeFor] || [];     // unlocked
+    const equipped = treeEquip[treeFor] || [];  // active loadout
     const bal = cores[treeFor] || 0;
     const isOwned = (id) => owned.includes(id);
-    // A path locked "until a capstone" opens once you've taken ANY tier-3 capstone.
+    const isEq = (id) => equipped.includes(id);
+    const slotsUsed = equipped.length;
+    const slotsFull = slotsUsed >= LOADOUT_SLOTS;
+    // A path locked "until a capstone" opens once you've UNLOCKED any tier-3 capstone.
     const hasCapstone = tree ? tree.paths.some((p) => p.nodes.some((n) => n.capstone && isOwned(n.id))) : false;
 
     if (!tree) {
@@ -1391,8 +1422,18 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>cores to spend</div>
           </div>
         </div>
+        {/* Loadout meter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c1620', border: `1px solid ${slotsFull ? '#3a6a4a' : '#2a4a5a'}`, borderRadius: 10, padding: '8px 12px', marginBottom: 10 }}>
+          <span style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>⚡ LOADOUT</span>
+          <span style={{ display: 'flex', gap: 4 }}>
+            {Array.from({ length: LOADOUT_SLOTS }).map((_, i) => (
+              <span key={i} style={{ width: 11, height: 11, borderRadius: 3, background: i < slotsUsed ? WIN : '#1a2630', border: `1px solid ${i < slotsUsed ? WIN : '#2a3a44'}` }} />
+            ))}
+          </span>
+          <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700, marginLeft: 'auto' }}>{slotsUsed}/{LOADOUT_SLOTS} active{slotsFull ? ' · full' : ''}</span>
+        </div>
         <div style={{ fontSize: T.small, color: '#cdb6ff', background: '#0c0c16', border: `1px solid ${LINE}`, borderRadius: 10, padding: '9px 12px', marginBottom: 14, lineHeight: 1.45 }}>
-          {tree.blurb} <span style={{ color: DIM }}>Cores are earned per creature, every run. Pick one way to go deep — you can't afford everything.</span>
+          {tree.blurb} <span style={{ color: DIM }}>Unlocking is forever — but only <b style={{ color: '#9be7ff' }}>{LOADOUT_SLOTS}</b> paths run at once. Swap your loadout free, anytime. Tap an unlocked path to equip or bench it.</span>
         </div>
         {/* Paths */}
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
@@ -1417,29 +1458,38 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {path.nodes.map((node, i) => {
                     const ownedNode = isOwned(node.id);
+                    const equippedNode = isEq(node.id);
                     const prevOwned = i === 0 ? true : isOwned(path.nodes[i - 1].id);
                     const revealed = prevOwned; // desc unlocks a tier at a time (fog-of-war)
                     const afford = bal >= node.cost;
                     const buyable = revealed && !node.sealed && !ownedNode && afford;
-                    // visual state
-                    const border = ownedNode ? WIN : node.keystone ? '#ffd166' : node.sealed ? LINE : revealed ? `${path.color}66` : LINE;
-                    const bg = ownedNode ? '#10231a' : '#0c0c14';
+                    // Unlocked nodes can always be tapped to bench; benched ones equip if a slot is free.
+                    const clickable = buyable || (ownedNode && (equippedNode || !slotsFull));
+                    const onClick = () => {
+                      if (!ownedNode) { if (buyable) buyNode(treeFor, node); }
+                      else toggleEquip(treeFor, node);
+                    };
+                    // visual state — equipped = bright green; unlocked-benched = dim green outline
+                    const border = equippedNode ? WIN : ownedNode ? `${WIN}66` : node.keystone ? '#ffd166' : node.sealed ? LINE : revealed ? `${path.color}66` : LINE;
+                    const bg = equippedNode ? '#10231a' : ownedNode ? '#0e1812' : '#0c0c14';
                     const op = (!revealed && !ownedNode) ? 0.6 : node.sealed && !ownedNode ? 0.78 : 1;
+                    const tag = equippedNode ? '● EQUIPPED'
+                      : ownedNode ? (slotsFull ? '○ benched' : '+ equip')
+                      : node.sealed ? '✦ SEALED' : `${node.cost} ⬡`;
+                    const tagColor = equippedNode ? WIN : ownedNode ? (slotsFull ? DIM : '#9be7ff') : node.sealed ? DIM : afford ? '#9be7ff' : '#6a6a7a';
                     return (
                       <div key={node.id}>
                         {i > 0 && <div style={{ width: 2, height: 6, background: prevOwned ? WIN : LINE, margin: '0 auto' }} />}
                         <button
-                          onClick={() => buyable && buyNode(treeFor, node)}
-                          disabled={!buyable}
-                          style={{ width: '100%', textAlign: 'left', borderRadius: 10, padding: '8px 9px', cursor: buyable ? 'pointer' : 'default',
+                          onClick={onClick}
+                          disabled={!clickable}
+                          style={{ width: '100%', textAlign: 'left', borderRadius: 10, padding: '8px 9px', cursor: clickable ? 'pointer' : 'default',
                             background: bg, border: `1.5px solid ${border}`, opacity: op }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                             {node.keystone && <span style={{ fontSize: T.small }}>★</span>}
                             {node.capstone && !node.keystone && <span style={{ fontSize: T.small }}>◆</span>}
-                            <span style={{ fontSize: T.small, fontWeight: 900, color: ownedNode ? WIN : node.keystone ? '#ffd166' : revealed ? '#e8e8f0' : '#7a7a8a' }}>{node.name}</span>
-                            <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: ownedNode ? WIN : node.sealed ? DIM : afford ? '#9be7ff' : '#6a6a7a' }}>
-                              {ownedNode ? '✓' : node.sealed ? '✦ SEALED' : `${node.cost} ⬡`}
-                            </span>
+                            <span style={{ fontSize: T.small, fontWeight: 900, color: equippedNode ? WIN : node.keystone ? '#ffd166' : revealed ? '#e8e8f0' : '#7a7a8a' }}>{node.name}</span>
+                            <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: tagColor }}>{tag}</span>
                           </div>
                           <div style={{ fontSize: T.micro, color: ownedNode ? '#bfe8cf' : revealed ? '#9a9aaa' : '#5a5a6a', lineHeight: 1.35, marginTop: 3 }}>
                             {revealed ? node.desc : `🔒 Reach ${path.nodes[i - 1].name} to uncover this.`}

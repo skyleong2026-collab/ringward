@@ -3,6 +3,9 @@
 **Date:** 2026-06-06 · **Status:** Phase 1 SHIPPING (vF-A) · decisions locked below
 **Builds on:** `COMBAT-BUILDCRAFT-VISION.md` (this is the concrete Layer B/C realization)
 
+## Respec / "everyone maxes everything" — resolved with Model B (vF-C)
+The worry: passives don't clash, so a fully-bought creature just has everything on = power creep with no choice. Fix shipped: **unlock-permanent, equip-per-run loadout (Model B).** Cores *unlock* nodes forever (accumulation never lost); each creature *equips* only `LOADOUT_SLOTS` (=4) at a time, swappable free anytime. Choice survives forever even on a maxed creature; no feel-bad respec. The loadout cap is the power-creep dial. (Classic respec = Model A, rejected: doesn't fix the flaw + refunding feels bad.) When keystones unseal, the loadout is also where clashing keystones force a pick.
+
 ## Decisions locked (2026-06-06, Sky)
 - **Per-creature Cores** (not a shared pool) — forces specialization.
 - **Progressive earning** — deeper waves pay more Cores (Scouts 2 → boss 5+8), so pushing the climb funds the tree. Early nodes come in ~1 run; keystones are a multi-run chase.
