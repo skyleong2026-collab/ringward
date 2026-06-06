@@ -1,5 +1,6 @@
 import { ROUND_CAP, BURN, REGEN, AMP, VULN } from './dials.js';
 import { getSkill } from './skills/index.js';
+import { phoenixSave } from './skills/combatMath.js';
 import {
   livingOnSide,
   otherSide,
@@ -55,7 +56,8 @@ function tickBurns(state, emit) {
       const dmg = stacks * BURN.tickDmg;
       const before = u.hp;
       u.hp = Math.max(0, u.hp - dmg);
-      const killed = before > 0 && u.hp === 0;
+      let killed = before > 0 && u.hp === 0;
+      if (killed && phoenixSave(u)) killed = false; // Phoenix catches a burn death too
       if (killed) u.alive = false;
       u.statuses.burn = Math.max(0, stacks - BURN.decayPerRound);
       emit({

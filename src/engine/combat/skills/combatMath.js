@@ -18,6 +18,19 @@ export function ampMult(actor) {
 const modMult = (actor, key) => actor?.mods?.[key] ?? 1;
 const modAdd = (actor, key) => actor?.mods?.[key] ?? 0;
 
+// "Phoenix" (Reactor CINDER keystone): the first lethal blow doesn't kill — the unit
+// blazes back at 30% HP with a full charge bar, once per fight (phoenixUsed). Opt-in,
+// so no creature without the mod is affected and every existing golden is byte-identical.
+// Returns true if it saved the unit (the caller must then NOT mark it dead).
+export function phoenixSave(unit) {
+  if (!unit.mods?.phoenix || unit.phoenixUsed) return false;
+  unit.phoenixUsed = true;
+  unit.hp = Math.max(1, Math.round(unit.maxHp * 0.3));
+  unit.charge = unit.maxCharge ?? unit.charge;
+  unit.alive = true;
+  return true;
+}
+
 export function dealDamage(target, amount, actor) {
   // "Shatter" (Warden keystone path): your hits on a frozen target hit 50% harder.
   // Opt-in — default 1, so every existing golden is byte-identical.
@@ -32,11 +45,13 @@ export function dealDamage(target, amount, actor) {
   remaining -= blocked;
   const before = target.hp;
   target.hp = Math.max(0, target.hp - remaining);
-  const killed = before > 0 && target.hp === 0;
+  let killed = before > 0 && target.hp === 0;
+  const revived = killed && phoenixSave(target); // Phoenix catches the lethal blow
+  if (revived) killed = false;
   if (killed) target.alive = false;
   // `dmg` reported is damage that reached HP (post-block), so feeds/goldens read
   // the real wound; `blocked` is surfaced separately for UI.
-  return { uid: target.uid, name: target.name, dmg: remaining, blocked, killed, hpAfter: target.hp };
+  return { uid: target.uid, name: target.name, dmg: remaining, blocked, killed, hpAfter: target.hp, revived };
 }
 
 export function applyBurn(target, stacks, actor) {

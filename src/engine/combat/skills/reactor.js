@@ -1,6 +1,6 @@
 import { REACTOR } from '../dials.js';
 import { enemiesOf } from '../state.js';
-import { dealDamage, applyBurn, isBurning } from './combatMath.js';
+import { dealDamage, applyBurn, isBurning, heal, addBlock } from './combatMath.js';
 
 // Skills are the *content* of applyDecision (§26.2: the one place combat math lives).
 // Each skill's apply() mutates state and returns a plain result the engine turns
@@ -21,10 +21,13 @@ export const REACTOR_SKILLS = {
     canUse: () => true,
     apply(actor, [target]) {
       if (!target) return { hits: [], note: 'no target' };
-      const gain = REACTOR.chargeUp.chargeGain;
+      // "Heat Exchange" (CINDER): Charge Up builds extra charge. Opt-in → goldens hold.
+      const gain = REACTOR.chargeUp.chargeGain + (actor.mods?.chargeUpBonus ?? 0);
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
       applyBurn(target, REACTOR.chargeUp.burnApply, actor);
       const hit = dealDamage(target, actor.atk * REACTOR.chargeUp.chipMult, actor);
+      // "Cinderskin" (CINDER): the builder also patches you up for the chip it deals.
+      if (actor.mods?.cinderskin && hit.dmg > 0) heal(actor, hit.dmg, actor);
       return { hits: [hit], chargeGained: gain, burned: [target.uid] };
     },
   },
@@ -41,7 +44,13 @@ export const REACTOR_SKILLS = {
       if (!target) return { hits: [], note: 'no target' };
       const spent = actor.charge;
       let mult = REACTOR.overload.base + REACTOR.overload.perCharge * spent;
-      if (isBurning(target)) mult *= REACTOR.overload.burningBonus;
+      if (isBurning(target)) {
+        // "Wildfire Heart" (PYRE keystone): scale with the target's Burn stacks instead
+        // of the flat double. Opt-in — without it, the original ×burningBonus stands.
+        mult *= actor.mods?.wildfire
+          ? 1 + 0.5 * (target.statuses.burn || 0)
+          : REACTOR.overload.burningBonus;
+      }
       // "Focus" tree node scales Overload. Opt-in — default 1 → goldens byte-identical.
       mult *= (actor.mods?.overloadMult ?? 1);
       // "Singularity" keystone: Overload hits ~2.5× as hard (you trade away Backdraft).
@@ -80,10 +89,14 @@ export const REACTOR_SKILLS = {
       const vented = Math.floor(actor.charge / 2);
       actor.charge -= vented;
       const line = enemiesOf(state, actor);
+      // "Conflagration" (PYRE): Backdraft drenches the line in extra Burn. Opt-in.
+      const burn = REACTOR.backdraft.burnApply + (actor.mods?.backdraftBurn ?? 0);
       const hits = line.map((e) => {
-        applyBurn(e, REACTOR.backdraft.burnApply, actor);
+        applyBurn(e, burn, actor);
         return dealDamage(e, actor.atk * REACTOR.backdraft.perCharge * vented, actor);
       });
+      // "Backdraft Ward" (CINDER): the vent also throws a shield onto you.
+      if (actor.mods?.backdraftShield && vented > 0) addBlock(actor, actor.atk * 0.5 * vented, actor);
       return { hits, chargeSpent: vented, burned: line.map((e) => e.uid) };
     },
   },

@@ -34,7 +34,7 @@ function initUnit(creature, side, slot) {
 }
 
 export function createBattleState(squadA, squadB, seed) {
-  return {
+  const state = {
     seed,
     rng: createRng(seed),
     round: 1,
@@ -45,7 +45,22 @@ export function createBattleState(squadA, squadB, seed) {
     firstActionDone: false, // for the Striker "first action of the round" condition
     log: [], // every emitted event, in order — this IS the golden transcript
   };
+  // "Smolder" (Reactor CINDER capstone): a unit with the mod opens the fight with the
+  // ENEMY line already burning. Opt-in — no creature carries `smolder` by default, so
+  // the goldens build with burn 0 and stay byte-identical.
+  applySmolder(state, 'A', 'B');
+  applySmolder(state, 'B', 'A');
+  return state;
 }
+
+function applySmolder(state, fromSide, toSide) {
+  if (!state.units[fromSide].some((u) => u.mods?.smolder)) return;
+  for (const e of state.units[toSide]) {
+    e.statuses.burn = Math.min(SMOLDER_CAP, (e.statuses.burn || 0) + SMOLDER_STACKS);
+  }
+}
+const SMOLDER_STACKS = 2;
+const SMOLDER_CAP = 4; // matches BURN.maxStacks
 
 // ─── Queries (all read-only; never mutate) ─────────────────────────────────────
 export const otherSide = (side) => (side === 'A' ? 'B' : 'A');

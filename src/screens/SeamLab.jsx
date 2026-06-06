@@ -357,7 +357,9 @@ function emptyTreeMods() {
     braceRegen: false, bloomAll: false, overdriveAll: false, blitzMulti: false, executeHunt: false,
     freezeBonus: 0, nipFreeze: false,
     singularity: false, overloadRefund: false, deathsDoor: false, cull: false, absoluteZero: false, shatter: false,
-    doomAll: false, jinxSpread: false };
+    doomAll: false, jinxSpread: false,
+    // Reactor deep tree (vF-N): PYRE tier 4-5 + the CINDER survival path.
+    backdraftBurn: 0, wildfire: false, chargeUpBonus: 0, cinderskin: false, backdraftShield: false, smolder: false, phoenix: false };
 }
 
 // Trees keyed by Type — every creature of a Type shares the tree SHAPE; allocation is
@@ -370,8 +372,8 @@ const TYPE_TREES = {
         { id: 'pyre1', tier: 1, cost: 4,  name: 'Kindling',     desc: 'Every burn you apply lands +1 extra stack.',                       apply: (m) => { m.burnBonus += 1; } },
         { id: 'pyre2', tier: 2, cost: 8,  name: 'Heat',         desc: '+20% damage from all your attacks.',                               apply: (m) => { m.dmgMult *= 1.2; } },
         { id: 'pyre3', tier: 3, cost: 14, capstone: true, name: 'Ember Trail', desc: 'Overload also sets the target ablaze (+2 burn).',         apply: (m) => { m.overloadBurn += 2; } },
-        { id: 'pyre4', tier: 4, cost: 22, sealed: true, name: 'Conflagration', desc: 'When a burning enemy dies, its burn leaps to the whole enemy line.' },
-        { id: 'pyre5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Wildfire Heart', desc: 'Your burns never burn out — but Overload no longer doubles against burning targets.' },
+        { id: 'pyre4', tier: 4, cost: 22, name: 'Conflagration', desc: 'Backdraft drenches the whole line in fire (+2 extra Burn to every enemy).', apply: (m) => { m.backdraftBurn += 2; } },
+        { id: 'pyre5', tier: 5, cost: 36, keystone: true, name: 'Wildfire Heart', desc: 'Overload stops just doubling burning targets — instead it hits +50% harder for EACH stack of Burn on them. Stack the fire, then detonate.', apply: (m) => { m.wildfire = true; } },
       ] },
       { id: 'deto', name: 'DETONATOR', tag: 'big single blast', icon: '💥', color: '#ff8a4a', nodes: [
         { id: 'deto1', tier: 1, cost: 4,  name: 'Focus',      desc: '+15% Overload damage.',                                              apply: (m) => { m.overloadMult *= 1.15; } },
@@ -381,11 +383,11 @@ const TYPE_TREES = {
         { id: 'deto5', tier: 5, cost: 36, keystone: true, name: 'Singularity', desc: 'Overload hits ~2.5× as hard — but you can no longer use Backdraft.', apply: (m) => { m.singularity = true; } },
       ] },
       { id: 'cinder', name: 'CINDER', tag: 'survive the heat', icon: '🜂', color: WIN, hiddenUntilCapstone: true, nodes: [
-        { id: 'cinder1', tier: 1, cost: 4,  sealed: true, name: 'Cinderskin',     desc: 'Charge Up heals you for the chip damage it deals.' },
-        { id: 'cinder2', tier: 2, cost: 8,  sealed: true, name: 'Backdraft Ward', desc: 'Backdraft also throws a shield onto you.' },
-        { id: 'cinder3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Smolder', desc: 'Begin every fight with the enemy line already burning.' },
-        { id: 'cinder4', tier: 4, cost: 22, sealed: true, name: 'Heat Exchange', desc: 'Convert leftover shield into charge at the end of each round.' },
-        { id: 'cinder5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Phoenix', desc: 'The first time you would die, revive at 30% HP and dump your full charge.' },
+        { id: 'cinder1', tier: 1, cost: 4,  name: 'Cinderskin',     desc: 'Charge Up heals you for the chip damage it deals — stay topped up while you build.', apply: (m) => { m.cinderskin = true; } },
+        { id: 'cinder2', tier: 2, cost: 8,  name: 'Backdraft Ward', desc: 'Backdraft throws a shield onto you as it vents — blow up and brace at once.', apply: (m) => { m.backdraftShield = true; } },
+        { id: 'cinder3', tier: 3, cost: 14, capstone: true, name: 'Smolder', desc: 'Begin every fight with the whole enemy line already smouldering (+2 Burn each).', apply: (m) => { m.smolder = true; } },
+        { id: 'cinder4', tier: 4, cost: 22, name: 'Heat Exchange', desc: 'Charge Up builds +1 extra charge — keep the fire fed and never run dry.', apply: (m) => { m.chargeUpBonus += 1; } },
+        { id: 'cinder5', tier: 5, cost: 36, keystone: true, name: 'Phoenix', desc: 'The first time you would fall, blaze back to life at 30% HP with a full charge bar.', apply: (m) => { m.phoenix = true; } },
       ] },
     ],
   },
@@ -648,6 +650,14 @@ function playerDef(member, squadMods, perm) {
       overloadMult: (p.overloadMult ?? 1), // tree-only for now
       freezeBonus: (p.freezeBonus ?? 0),   // Warden tree — extends freezes
       nipFreeze:   p.nipFreeze || false,   // Warden tree — builder also freezes
+      // Reactor deep tree (vF-N):
+      backdraftBurn:   (p.backdraftBurn ?? 0),
+      chargeUpBonus:   (p.chargeUpBonus ?? 0),
+      wildfire:        p.wildfire || false,
+      cinderskin:      p.cinderskin || false,
+      backdraftShield: p.backdraftShield || false,
+      smolder:         p.smolder || false,
+      phoenix:         p.phoenix || false,
       // Keystones (deep tree, opt-in flags):
       singularity:    p.singularity    || false,
       overloadRefund: p.overloadRefund || false,
@@ -1893,7 +1903,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     const op = (!revealed && !ownedNode) ? 0.6 : node.sealed && !ownedNode ? 0.78 : 1;
                     const tag = equippedNode ? '● EQUIPPED'
                       : ownedNode ? (slotsFull ? '○ benched' : '+ equip')
-                      : node.sealed ? '✦ SEALED' : `${node.cost} ⬡`;
+                      : node.sealed ? '🚧 SOON' : `${node.cost} ⬡`;
                     const tagColor = equippedNode ? WIN : ownedNode ? (slotsFull ? DIM : '#9be7ff') : node.sealed ? DIM : afford ? '#9be7ff' : '#6a6a7a';
                     return (
                       <div key={node.id}>
@@ -1911,8 +1921,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                           </div>
                           <div style={{ fontSize: T.micro, color: ownedNode ? '#bfe8cf' : revealed ? '#9a9aaa' : '#5a5a6a', lineHeight: 1.35, marginTop: 3 }}>
                             {revealed ? node.desc : `🔒 deeper down this path`}
-                            {node.sealed && revealed && <span style={{ color: '#7a7a8a', fontStyle: 'italic' }}> — opens in a coming trial.</span>}
-                            {revealed && !node.sealed && !ownedNode && !prereqOwned && <span style={{ color: '#6a6a7a' }}> — locked until {prereqName}.</span>}
+                            {node.sealed && revealed && <span style={{ color: '#7a7a8a', fontStyle: 'italic' }}> — this Type's deep path is still being charted (coming soon). Reactor's is fully open now.</span>}
+                            {revealed && !node.sealed && !ownedNode && !prereqOwned && <span style={{ color: '#6a6a7a' }}> — buy {prereqName} first to open this.</span>}
                           </div>
                         </button>
                       </div>
