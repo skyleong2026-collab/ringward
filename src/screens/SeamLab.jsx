@@ -422,15 +422,15 @@ const TYPE_TREES = {
     blurb: 'Charge and fire. Burn them down over time, blow them up all at once, or learn to outlast the heat.',
     paths: [
       { id: 'pyre', name: 'PYRE', tag: 'burn over time', icon: '🔥', color: BURN, nodes: [
-        { id: 'pyre1', tier: 1, cost: 4,  name: 'Kindling',     desc: 'Every burn you apply lands +1 extra stack.',                       apply: (m) => { m.burnBonus += 1; } },
-        { id: 'pyre2', tier: 2, cost: 8,  name: 'Heat',         desc: '+20% damage from all your attacks.',                               apply: (m) => { m.dmgMult *= 1.2; } },
+        { id: 'pyre1', tier: 1, cost: 4, costStep: 3, ranks: 2, name: 'Kindling', desc: 'Every burn you apply lands +1 extra stack per rank (max +2).', apply: (m, r) => { m.burnBonus += r; } },
+        { id: 'pyre2', tier: 2, cost: 5, costStep: 3, ranks: 3, name: 'Heat',     desc: '+8% damage from all your attacks per rank (max +24%).',     apply: (m, r) => { m.dmgMult *= (1 + 0.08 * r); } },
         { id: 'pyre3', tier: 3, cost: 14, capstone: true, name: 'Ember Trail', desc: 'Overload also sets the target ablaze (+2 burn).',         apply: (m) => { m.overloadBurn += 2; } },
         { id: 'pyre4', tier: 4, cost: 22, name: 'Conflagration', desc: 'Backdraft drenches the whole line in fire (+2 extra Burn to every enemy).', apply: (m) => { m.backdraftBurn += 2; } },
         { id: 'pyre5', tier: 5, cost: 36, keystone: true, name: 'Wildfire Heart', desc: 'Overload stops just doubling burning targets — instead it hits +50% harder for EACH stack of Burn on them. Stack the fire, then detonate.', apply: (m) => { m.wildfire = true; } },
       ] },
       { id: 'deto', name: 'DETONATOR', tag: 'big single blast', icon: '💥', color: '#ff8a4a', nodes: [
-        { id: 'deto1', tier: 1, cost: 4,  name: 'Focus',      desc: '+15% Overload damage.',                                              apply: (m) => { m.overloadMult *= 1.15; } },
-        { id: 'deto2', tier: 2, cost: 8,  name: 'Capacitor',  desc: 'Start every fight with +1 charge already banked.',                   apply: (m) => { m.chargeStart += 1; } },
+        { id: 'deto1', tier: 1, cost: 4, costStep: 3, ranks: 3, name: 'Focus',     desc: '+6% Overload damage per rank (max +18%).',                  apply: (m, r) => { m.overloadMult *= (1 + 0.06 * r); } },
+        { id: 'deto2', tier: 2, cost: 6, costStep: 4, ranks: 2, name: 'Capacitor', desc: 'Start every fight with +1 charge banked per rank (max +2).', apply: (m, r) => { m.chargeStart += r; } },
         { id: 'deto3', tier: 3, cost: 14, capstone: true, name: 'Combustion', desc: 'Overload erupts across the whole enemy line.',           apply: (m) => { m.overloadAOE = true; } },
         { id: 'deto4', tier: 4, cost: 22, name: 'Chain Reaction', desc: 'Overload refunds 2 charge whenever it lands a kill.', apply: (m) => { m.overloadRefund = true; } },
         { id: 'deto5', tier: 5, cost: 36, keystone: true, name: 'Singularity', desc: 'Overload hits ~2.5× as hard — but you can no longer use Backdraft.', apply: (m) => { m.singularity = true; } },
@@ -647,6 +647,9 @@ const REFINE_STAT = { // path id → which multiplicative stat its Refinement gr
 const REFINE_LABEL = { overloadMult: 'Overload power', blockMult: 'shield strength', healMult: 'healing' };
 function applyRefine(m, stat, rank) { if (rank > 0) m[stat] = (m[stat] ?? 1) * Math.pow(1.06, rank); }
 function refineCost(node, rank) { return node.baseCost + node.costStep * rank; } // rank = ranks ALREADY bought
+// Ranked stat node: cumulative steps (cheap rank-1 entry → higher ceiling). More
+// incremental purchases + a deeper Core sink, with no new nodes. `rank` = ranks owned.
+function rankedCost(node, rank) { return node.cost + (node.costStep ?? Math.ceil(node.cost / 2)) * rank; }
 
 // Inject one Refinement node at the end of every NON-hidden path (the two open paths
 // per Type). Reachable via `requires` = that path's capstone, independent of keystones.
@@ -676,6 +679,7 @@ function treeModsFor(id, equipMap, ranksMap) {
     const n = NODE_BY_ID[nid];
     if (!n) return;
     if (n.repeatable) applyRefine(m, n.refineStat, ranks[nid] || 0);
+    else if (n.ranks) { if (n.apply) n.apply(m, ranks[nid] || 1); } // ranked node: effect scales by rank
     else if (n.apply) n.apply(m);
   });
   return m;
@@ -1642,6 +1646,21 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function buyNode(creatureId, node) {
     const owned = treeAlloc[creatureId] || [];
     const isUnlocked = owned.includes(node.id);
+    // Ranked stat node — buy the next cumulative rank (capped at node.ranks).
+    if (node.ranks) {
+      const rank = (treeRanks[creatureId]?.[node.id]) || 0;
+      if (rank >= node.ranks) return; // maxed
+      const cost = rankedCost(node, rank);
+      if ((cores[creatureId] || 0) < cost) return;
+      setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) - cost }; saveCores(n); return n; });
+      setTreeRanks((r) => { const cur = { ...(r[creatureId] || {}) }; cur[node.id] = (cur[node.id] || 0) + 1; const n = { ...r, [creatureId]: cur }; saveRanks(n); return n; });
+      if (!isUnlocked) {
+        setTreeAlloc((a) => { const n = { ...a, [creatureId]: [...(a[creatureId] || []), node.id] }; saveTreeAlloc(n); return n; });
+        setTreeEquip((e) => { const cur = e[creatureId] || []; if (cur.length >= slotsForUnlocked(owned.length + 1)) return e; const n = { ...e, [creatureId]: [...cur, node.id] }; saveEquip(n); return n; });
+      }
+      sfx.upgradePick();
+      return;
+    }
     if (node.repeatable) {
       const rank = (treeRanks[creatureId]?.[node.id]) || 0;
       const cost = refineCost(node, rank);
@@ -1922,29 +1941,34 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     const prereqOwned = prereqId ? isOwned(prereqId) : true;
                     const prereqName = prereqId ? (NODE_BY_ID[prereqId]?.name ?? '') : '';
 
-                    // ── Refinement: the infinite repeatable node — buy ranks forever ──
-                    if (node.repeatable) {
+                    // ── Ranked nodes: Refinement (infinite ♾) OR a capped stat node (II/III).
+                    // Both buy cumulative ranks from the same machinery; ranked ones cap out. ──
+                    if (node.repeatable || node.ranks) {
+                      const isRanked = !!node.ranks;
                       const rank = ranks[node.id] || 0;
-                      const cost = refineCost(node, rank);
-                      const canBuy = prereqOwned && bal >= cost;
+                      const maxRank = node.ranks ?? Infinity;
+                      const maxed = rank >= maxRank;
+                      const cost = isRanked ? rankedCost(node, rank) : refineCost(node, rank);
+                      const accent = isRanked ? path.color : '#9be7ff';
+                      const canBuy = prereqOwned && !maxed && bal >= cost;
                       return (
                         <div key={node.id}>
-                          <div style={{ width: 2, height: 6, background: prereqOwned ? WIN : LINE, margin: '0 auto' }} />
-                          <div style={{ borderRadius: 10, padding: '8px 9px', background: equippedNode ? '#10231a' : '#0e1812', border: `1.5px solid ${equippedNode ? '#9be7ff' : prereqOwned ? '#9be7ff55' : LINE}`, opacity: prereqOwned ? 1 : 0.6 }}>
+                          {i > 0 && <div style={{ width: 2, height: 6, background: prereqOwned ? WIN : LINE, margin: '0 auto' }} />}
+                          <div style={{ borderRadius: 10, padding: '8px 9px', background: equippedNode ? '#10231a' : '#0e1812', border: `1.5px solid ${equippedNode ? accent : prereqOwned ? `${accent}55` : LINE}`, opacity: prereqOwned ? 1 : 0.6 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                              <span style={{ fontSize: T.small }}>♾</span>
-                              <span style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>{node.name}</span>
-                              {rank > 0 && <span style={{ fontSize: T.micro, fontWeight: 800, color: WIN }}>· Rank {rank}</span>}
+                              <span style={{ fontSize: T.small }}>{isRanked ? '▮' : '♾'}</span>
+                              <span style={{ fontSize: T.small, fontWeight: 900, color: accent }}>{node.name}</span>
+                              {rank > 0 && <span style={{ fontSize: T.micro, fontWeight: 800, color: maxed ? WIN : '#cdd' }}>· {isRanked ? `${rank}/${maxRank}` : `Rank ${rank}`}</span>}
                               {ownedNode && <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: equippedNode ? WIN : DIM }}>{equippedNode ? '● equipped' : '○ benched'}</span>}
                             </div>
                             <div style={{ fontSize: T.micro, color: '#9a9aaa', lineHeight: 1.35, margin: '3px 0 6px' }}>
-                              {prereqOwned ? node.desc : `🔒 take ${prereqName} first to open Refinement.`}
+                              {prereqOwned ? node.desc : `🔒 buy ${prereqName} first to open this.`}
                             </div>
                             {prereqOwned && (
                               <div style={{ display: 'flex', gap: 6 }}>
                                 <button onClick={() => canBuy && buyNode(treeFor, node)} disabled={!canBuy}
-                                  style={{ flex: 1, borderRadius: 8, padding: '5px 0', cursor: canBuy ? 'pointer' : 'default', background: canBuy ? '#14233a' : PANEL, border: `1px solid ${canBuy ? '#5aa9ff' : LINE}`, color: canBuy ? '#9be7ff' : '#6a6a7a', fontSize: T.micro, fontWeight: 900 }}>
-                                  {rank > 0 ? `BUY RANK ${rank + 1}` : 'UNLOCK'} · {cost} ⬡
+                                  style={{ flex: 1, borderRadius: 8, padding: '5px 0', cursor: canBuy ? 'pointer' : 'default', background: canBuy ? `${accent}22` : PANEL, border: `1px solid ${canBuy ? accent : LINE}`, color: canBuy ? accent : '#6a6a7a', fontSize: T.micro, fontWeight: 900 }}>
+                                  {maxed ? '✓ MAXED' : `${rank > 0 ? `RANK ${rank + 1}` : 'UNLOCK'} · ${cost} ⬡`}
                                 </button>
                                 {ownedNode && (
                                   <button onClick={() => (equippedNode || !slotsFull) && toggleEquip(treeFor, node)} disabled={!equippedNode && slotsFull}
