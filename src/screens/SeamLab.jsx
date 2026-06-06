@@ -1483,30 +1483,43 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
           {tree.paths.map((path) => {
             const locked = path.hiddenUntilCapstone && !hasCapstone;
+            const keystoneNode = path.nodes.find((n) => n.keystone);
             if (locked) {
               return (
-                <div key={path.id} style={{ background: '#0a0a12', border: `1.5px dashed ${LINE}`, borderRadius: 14, padding: '22px 14px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 180 }}>
-                  <div style={{ fontSize: 30, opacity: 0.5 }}>🜂</div>
-                  <div style={{ fontSize: T.label, fontWeight: 900, color: '#5a5a6a', marginTop: 8, letterSpacing: 1 }}>??? </div>
-                  <div style={{ fontSize: T.small, color: DIM, marginTop: 8, lineHeight: 1.4 }}>A third path, still hidden. Take either open path to its <b style={{ color: '#cdb6ff' }}>◆ capstone</b> to reveal it.</div>
+                <div key={path.id} style={{ background: '#0a0a12', border: `1.5px dashed ${path.color}55`, borderRadius: 14, padding: '16px 13px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 180, opacity: 0.92 }}>
+                  <div style={{ fontSize: 26, opacity: 0.6 }}>{path.icon}</div>
+                  <div style={{ fontSize: T.label, fontWeight: 900, color: '#7a7a8a', marginTop: 6, letterSpacing: 1 }}>🔒 {path.name}</div>
+                  <div style={{ fontSize: T.micro, color: path.color, fontWeight: 800, opacity: 0.8 }}>{path.tag}</div>
+                  {keystoneNode && (
+                    <div style={{ fontSize: T.micro, color: '#ffd166', fontWeight: 800, marginTop: 8 }}>★ ends in {keystoneNode.name}</div>
+                  )}
+                  <div style={{ fontSize: T.micro, color: DIM, marginTop: 8, lineHeight: 1.4 }}>Take either open path to its <b style={{ color: '#cdb6ff' }}>◆ capstone</b> to unlock this third way.</div>
                 </div>
               );
             }
+            const ownedTiers = path.nodes.filter((n) => isOwned(n.id)).map((n) => n.tier);
+            const maxOwnedTier = ownedTiers.length ? Math.max(...ownedTiers) : 0;
             return (
               <div key={path.id} style={{ background: PANEL, border: `1.5px solid ${path.color}44`, borderRadius: 14, padding: '12px 11px' }}>
                 <div style={{ textAlign: 'center', marginBottom: 10 }}>
                   <div style={{ fontSize: 22 }}>{path.icon}</div>
                   <div style={{ fontSize: T.label, fontWeight: 900, color: path.color, letterSpacing: 1 }}>{path.name}</div>
-                  <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>{path.tag}</div>
+                  <div style={{ fontSize: T.micro, color: path.color, fontWeight: 800, opacity: 0.85 }}>{path.tag}</div>
+                  {keystoneNode && (
+                    <div style={{ fontSize: T.micro, color: '#9a9aaa', fontWeight: 700, marginTop: 3 }}>builds toward <span style={{ color: '#ffd166', fontWeight: 800 }}>★ {keystoneNode.name}</span></div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {path.nodes.map((node, i) => {
                     const ownedNode = isOwned(node.id);
                     const equippedNode = isEq(node.id);
                     const prevOwned = i === 0 ? true : isOwned(path.nodes[i - 1].id);
-                    const revealed = prevOwned; // desc unlocks a tier at a time (fog-of-war)
+                    // Desc visibility (fog): see two tiers ahead, and ALWAYS show the
+                    // capstone (◆) + keystone (★) — a column must advertise its payoff.
+                    const revealed = node.tier <= maxOwnedTier + 2 || node.capstone || node.keystone || ownedNode;
                     const afford = bal >= node.cost;
-                    const buyable = revealed && !node.sealed && !ownedNode && afford;
+                    // Purchase still gates one tier at a time (the prior node must be owned).
+                    const buyable = prevOwned && !node.sealed && !ownedNode && afford;
                     // Unlocked nodes can always be tapped to bench; benched ones equip if a slot is free.
                     const clickable = buyable || (ownedNode && (equippedNode || !slotsFull));
                     const onClick = () => {
@@ -1536,8 +1549,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                             <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: tagColor }}>{tag}</span>
                           </div>
                           <div style={{ fontSize: T.micro, color: ownedNode ? '#bfe8cf' : revealed ? '#9a9aaa' : '#5a5a6a', lineHeight: 1.35, marginTop: 3 }}>
-                            {revealed ? node.desc : `🔒 Reach ${path.nodes[i - 1].name} to uncover this.`}
+                            {revealed ? node.desc : `🔒 deeper down this path`}
                             {node.sealed && revealed && <span style={{ color: '#7a7a8a', fontStyle: 'italic' }}> — opens in a coming trial.</span>}
+                            {revealed && !node.sealed && !ownedNode && !prevOwned && <span style={{ color: '#6a6a7a' }}> — locked until {path.nodes[i - 1].name}.</span>}
                           </div>
                         </button>
                       </div>
@@ -1939,7 +1953,8 @@ export function SeamLab({ onClose, slag = 0, onSlag }) {
             <div style={{ fontSize: T.head, fontWeight: 900, color: '#e86040', letterSpacing: 2 }}>RINGWARD</div>
             <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>Manual combat · charge, spend, build.</div>
           </div>
-          <button onClick={onClose} style={{ background: PANEL, border: `1px solid ${LINE}`, color: '#9a9aaa', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', fontSize: T.small, fontWeight: 700 }}>← ROSTER</button>
+          {/* No "← ROSTER" exit: the run IS the game now (vE-A). The old LAB/auto-battle
+              shell is no longer a place the player should land. onClose kept for callers. */}
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {tabBtn('learn', '🎓 LEARN')}
