@@ -233,7 +233,8 @@ function emptyTreeMods() {
     overloadMult: 1, overloadBurn: 0, overloadAOE: false,
     extraHits: 0, executeWindow: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
     braceRegen: false, bloomAll: false, overdriveAll: false, blitzMulti: false, executeHunt: false,
-    freezeBonus: 0, nipFreeze: false };
+    freezeBonus: 0, nipFreeze: false,
+    singularity: false, overloadRefund: false, deathsDoor: false, cull: false, absoluteZero: false, shatter: false };
 }
 
 // Trees keyed by Type — every creature of a Type shares the tree SHAPE; allocation is
@@ -253,8 +254,8 @@ const TYPE_TREES = {
         { id: 'deto1', tier: 1, cost: 4,  name: 'Focus',      desc: '+15% Overload damage.',                                              apply: (m) => { m.overloadMult *= 1.15; } },
         { id: 'deto2', tier: 2, cost: 8,  name: 'Capacitor',  desc: 'Start every fight with +1 charge already banked.',                   apply: (m) => { m.chargeStart += 1; } },
         { id: 'deto3', tier: 3, cost: 14, capstone: true, name: 'Combustion', desc: 'Overload erupts across the whole enemy line.',           apply: (m) => { m.overloadAOE = true; } },
-        { id: 'deto4', tier: 4, cost: 22, sealed: true, name: 'Chain Reaction', desc: 'Overload refunds 2 charge whenever it lands a kill.' },
-        { id: 'deto5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Singularity', desc: 'Overload costs double charge but detonates for triple damage.' },
+        { id: 'deto4', tier: 4, cost: 22, name: 'Chain Reaction', desc: 'Overload refunds 2 charge whenever it lands a kill.', apply: (m) => { m.overloadRefund = true; } },
+        { id: 'deto5', tier: 5, cost: 36, keystone: true, name: 'Singularity', desc: 'Overload hits ~2.5× as hard — but you can no longer use Backdraft.', apply: (m) => { m.singularity = true; } },
       ] },
       { id: 'cinder', name: 'CINDER', tag: 'survive the heat', icon: '🜂', color: WIN, hiddenUntilCapstone: true, nodes: [
         { id: 'cinder1', tier: 1, cost: 4,  sealed: true, name: 'Cinderskin',     desc: 'Charge Up heals you for the chip damage it deals.' },
@@ -381,8 +382,8 @@ const TYPE_TREES = {
         { id: 'reaper1', tier: 1, cost: 4,  name: 'Killer Instinct', desc: '+15% damage from your attacks.',                     apply: (m) => { m.dmgMult *= 1.15; } },
         { id: 'reaper2', tier: 2, cost: 8,  name: 'Patience', desc: 'Start every fight with +1 charge banked.',                  apply: (m) => { m.chargeStart += 1; } },
         { id: 'reaper3', tier: 3, cost: 14, capstone: true, name: "Hunter's Mark", desc: 'Execute triggers below 60% HP, not 45%.', apply: (m) => { m.executeWindow += 0.15; } },
-        { id: 'reaper4', tier: 4, cost: 22, sealed: true, name: 'Cull', desc: 'Executing refunds full charge.' },
-        { id: 'reaper5', tier: 5, cost: 36, sealed: true, keystone: true, name: "Death's Door", desc: 'Instakill anything below 25% HP — but -50% to healthy targets.' },
+        { id: 'reaper4', tier: 4, cost: 22, name: 'Cull', desc: 'A kill refunds full charge — chain executions across the line.', apply: (m) => { m.cull = true; } },
+        { id: 'reaper5', tier: 5, cost: 36, keystone: true, name: "Death's Door", desc: 'Instakill anything below 25% HP — but -50% to healthy targets.', apply: (m) => { m.deathsDoor = true; } },
       ] },
       { id: 'hound', name: 'BLOODHOUND', tag: 'hunt the weak', icon: '🩸', color: '#ff9bb5', nodes: [
         { id: 'hound1', tier: 1, cost: 4,  name: 'Bloodscent', desc: '+15% damage from your attacks.',                          apply: (m) => { m.dmgMult *= 1.15; } },
@@ -408,8 +409,8 @@ const TYPE_TREES = {
         { id: 'frost1', tier: 1, cost: 4,  name: 'Biting Cold', desc: '+15% damage from your attacks.',                          apply: (m) => { m.dmgMult *= 1.15; } },
         { id: 'frost2', tier: 2, cost: 8,  name: 'Cold Store', desc: 'Start every fight with +1 charge banked.',                  apply: (m) => { m.chargeStart += 1; } },
         { id: 'frost3', tier: 3, cost: 14, capstone: true, name: 'Deep Freeze', desc: 'Your freezes last 1 turn longer.',          apply: (m) => { m.freezeBonus += 1; } },
-        { id: 'frost4', tier: 4, cost: 22, sealed: true, name: 'Shatter', desc: 'Frozen enemies take +50% damage from all sources.' },
-        { id: 'frost5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Absolute Zero', desc: 'Glaciate freezes for 3 turns and cannot be resisted.' },
+        { id: 'frost4', tier: 4, cost: 22, name: 'Shatter', desc: 'Your hits on a frozen enemy land 50% harder.', apply: (m) => { m.shatter = true; } },
+        { id: 'frost5', tier: 5, cost: 36, keystone: true, name: 'Absolute Zero', desc: 'Glaciate freezes for the full 3 turns.', apply: (m) => { m.absoluteZero = true; } },
       ] },
       { id: 'rime', name: 'RIME', tag: 'ice the line', icon: '🌨', color: '#bfeaff', nodes: [
         { id: 'rime1', tier: 1, cost: 4,  name: 'Frostfall', desc: '+15% damage from your attacks.',                             apply: (m) => { m.dmgMult *= 1.15; } },
@@ -463,6 +464,13 @@ function playerDef(member, squadMods, perm) {
       overloadMult: (p.overloadMult ?? 1), // tree-only for now
       freezeBonus: (p.freezeBonus ?? 0),   // Warden tree — extends freezes
       nipFreeze:   p.nipFreeze || false,   // Warden tree — builder also freezes
+      // Keystones (deep tree, opt-in flags):
+      singularity:    p.singularity    || false,
+      overloadRefund: p.overloadRefund || false,
+      deathsDoor:     p.deathsDoor     || false,
+      cull:           p.cull           || false,
+      absoluteZero:   p.absoluteZero   || false,
+      shatter:        p.shatter        || false,
       // per-creature bends (run-scoped) + permanent tree, combined:
       extraHits:     (u.extraHits     ?? 0) + (p.extraHits     ?? 0),
       executeWindow: (u.executeWindow ?? 0) + (p.executeWindow ?? 0),

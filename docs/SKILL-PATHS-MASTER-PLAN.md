@@ -333,6 +333,12 @@ A **vertical slice first** — prove the loop on ONE creature before generalizin
 - **Phase 1 — Cores + one tree.** Add the Cores currency (earn from runs, persist per creature). Build Fizzpop's full 3-path tree as the prototype. Tree UI on the creature card. Permanent mods bake into the run the same way bends do today (so the engine stays frozen — keystones that need new mechanics come later).
 - **Phase 2 — All 6 existing types get trees.** Reuse the shipped bends as the ◆ capstones. Most T1–T4 nodes are numeric/flag mods the engine already supports.
 - **Phase 3 — New mechanics for keystones.** The ★ keystones (turn-steal, poison, freeze, reflect…) need engine work — re-bless the goldens as each lands, one at a time. This is the "frozen engine thaws, carefully" step from the vision doc.
+  - **First batch SHIPPED (vF-E)** — all opt-in, 6 goldens byte-identical:
+    - Reactor DETONATOR: **Chain Reaction** (T4, refund 2 charge on kill) + **Singularity** (★, Overload ~2.5×, loses Backdraft)
+    - Assassin REAPER: **Cull** (T4, kill refunds full charge) + **Death's Door** (★, instakill <25%, −50% vs healthy)
+    - Warden FROST: **Shatter** (T4, +50% dmg to frozen) + **Absolute Zero** (★, Glaciate freezes 3)
+    - Squad combo proven: freeze → Shatter → execute. Engine-tested: Death's Door instakills, Singularity ×2.50, Shatter ×1.5.
+  - Still sealed (need source-attribution or initiative work): Wildfire Heart, Evergreen, Thousand Cuts (bleed), Unbreakable, Blur, all third-path keystones.
 - **Phase 4 — New types.** Warden → Hexer → Trickster → Siphon → Phantom → Titan, each adding its lane. New creatures to fill them (toward the 13+ stable).
 - **Phase 5 — Squad meta surfacing.** Name the OP squads in-game; show synergy hints; tune so no single squad dominates.
 

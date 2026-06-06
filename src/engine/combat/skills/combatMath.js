@@ -19,7 +19,10 @@ const modMult = (actor, key) => actor?.mods?.[key] ?? 1;
 const modAdd = (actor, key) => actor?.mods?.[key] ?? 0;
 
 export function dealDamage(target, amount, actor) {
-  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult')));
+  // "Shatter" (Warden keystone path): your hits on a frozen target hit 50% harder.
+  // Opt-in — default 1, so every existing golden is byte-identical.
+  const shatter = (actor?.mods?.shatter && (target.statuses.freeze || 0) > 0) ? 1.5 : 1;
+  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult') * shatter));
   let remaining = dmg;
   const blocked = Math.min(target.statuses.block || 0, remaining);
   if (blocked > 0) target.statuses.block -= blocked;

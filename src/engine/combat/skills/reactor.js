@@ -44,8 +44,12 @@ export const REACTOR_SKILLS = {
       if (isBurning(target)) mult *= REACTOR.overload.burningBonus;
       // "Focus" tree node scales Overload. Opt-in — default 1 → goldens byte-identical.
       mult *= (actor.mods?.overloadMult ?? 1);
+      // "Singularity" keystone: Overload hits ~2.5× as hard (you trade away Backdraft).
+      if (actor.mods?.singularity) mult *= 2.5;
       actor.charge = 0;
       const emberBurn = actor.mods?.overloadBurn ?? 0;
+      // "Chain Reaction" node: Overload refunds 2 charge if it lands a kill (snowball).
+      const refundOnKill = (hits) => { if (actor.mods?.overloadRefund && hits.some((h) => h.killed)) actor.charge = Math.min(actor.maxCharge, actor.charge + 2); };
       // "Combustion" upgrade: Overload erupts across the whole enemy line.
       if (actor.mods?.overloadAOE && state) {
         const line = enemiesOf(state, actor);
@@ -53,10 +57,12 @@ export const REACTOR_SKILLS = {
           if (emberBurn > 0) applyBurn(e, emberBurn, actor);
           return dealDamage(e, actor.atk * mult, actor);
         });
+        refundOnKill(hits);
         return { hits, chargeSpent: spent };
       }
       const hit = dealDamage(target, actor.atk * mult, actor);
       if (emberBurn > 0) applyBurn(target, emberBurn, actor);
+      refundOnKill([hit]);
       return { hits: [hit], chargeSpent: spent, amplifiedByBurn: isBurning(target) };
     },
   },
@@ -68,7 +74,8 @@ export const REACTOR_SKILLS = {
     kind: 'wildcard',
     blurb: 'Blow off half your charge to hit every enemy at once and spread Burn.',
     targetMode: 'allEnemies',
-    canUse: (actor) => actor.charge >= REACTOR.backdraft.minCharge,
+    // Singularity routes all your charge into Overload — Backdraft is given up.
+    canUse: (actor) => actor.charge >= REACTOR.backdraft.minCharge && !actor.mods?.singularity,
     apply(actor, _targets, state) {
       const vented = Math.floor(actor.charge / 2);
       actor.charge -= vented;

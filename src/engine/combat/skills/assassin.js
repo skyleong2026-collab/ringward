@@ -50,8 +50,17 @@ export const ASSASSIN_SKILLS = {
       let mult = ASSASSIN.execute.base + ASSASSIN.execute.perCharge * spent;
       const executed = isWounded(prey, thr);
       if (executed) mult *= ASSASSIN.execute.executeBonus;
+      // "Death's Door" keystone: instakill anything under 25% HP, but only half damage
+      // to healthy targets. Opt-in — default off, so goldens are byte-identical.
+      if (actor.mods?.deathsDoor) {
+        const pct = prey.hp / prey.maxHp;
+        if (pct < 0.25) mult = 999;       // certain death for the wounded
+        else if (pct > 0.6) mult *= 0.5;  // feeble against the healthy
+      }
       const hit = dealDamage(prey, actor.atk * mult, actor);
-      return { hits: [hit], chargeSpent: spent, executed };
+      // "Cull" node: a kill refunds full charge → chain executions across the line.
+      if (actor.mods?.cull && hit.killed) actor.charge = actor.maxCharge;
+      return { hits: [hit], chargeSpent: spent, executed: executed || hit.killed };
     },
   },
 

@@ -42,8 +42,9 @@ export const WARDEN_SKILLS = {
       if (!target) return { hits: [], chargeSpent: spent };
       const mult = WARDEN.glaciate.base + WARDEN.glaciate.perCharge * spent;
       const hit = dealDamage(target, actor.atk * mult, actor);
-      // "Deep Freeze" tree node extends every freeze. Opt-in — default 0.
-      const stacks = WARDEN.glaciate.freezeStacks + (actor.mods?.freezeBonus ?? 0);
+      // "Deep Freeze" extends every freeze; "Absolute Zero" keystone maxes it out.
+      let stacks = WARDEN.glaciate.freezeStacks + (actor.mods?.freezeBonus ?? 0);
+      if (actor.mods?.absoluteZero) stacks = 3;
       const fr = applyFreeze(target, stacks);
       return { hits: [hit], chargeSpent: spent, freezes: [fr] };
     },
