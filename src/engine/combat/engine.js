@@ -37,6 +37,9 @@ function applyDecision(state, actor, decision, emit) {
     heals: result.heals || [],
     regens: result.regens || [],
     amps: result.amps || [],
+    // Conditional: only Warden turns carry freezes, so existing golden turn events
+    // stay byte-identical (the key is simply absent for every current creature).
+    ...(result.freezes && result.freezes.length ? { freezes: result.freezes } : {}),
     note: result.note,
     amplifiedByBurn: result.amplifiedByBurn || false,
   });
@@ -121,6 +124,15 @@ async function runRound(state, drivers, emit) {
     let pool = livingOnSide(state, side).filter((u) => !acted.has(u.uid));
     while (pool.length > 0 && !battleOver(state)) {
       const actor = await driver.chooseNextActor(pool, state);
+      // Frozen (a Warden control) — skip the turn and thaw by one. Opt-in: no existing
+      // creature carries freeze, so this branch never runs for any current golden.
+      if ((actor.statuses.freeze || 0) > 0) {
+        actor.statuses.freeze -= 1;
+        emit({ type: 'frozen', round: state.round, actor: { uid: actor.uid, name: actor.name, side: actor.side }, stacksLeft: actor.statuses.freeze });
+        acted.add(actor.uid);
+        pool = livingOnSide(state, side).filter((u) => !acted.has(u.uid));
+        continue;
+      }
       const decision = await driver.decide(actor, state);
       applyDecision(state, actor, decision, emit);
       acted.add(actor.uid);

@@ -56,6 +56,7 @@ const TYPE_INFO = {
   Booster: { glyph: '✦', accent: AMP, nick: 'The Hype', role: 'Makes an ally hit way harder.' },
   Striker: { glyph: '⚔', accent: '#ffd166', nick: 'The Brawler', role: 'Fast — lots of quick hits.' },
   Assassin: { glyph: '🗡', accent: '#ff7a9c', nick: 'The Killer', role: 'Hunts and finishes the weak.' },
+  Warden: { glyph: '❄', accent: '#8fd8ff', nick: 'The Jailer', role: 'Freezes enemies out of their turns.' },
 };
 
 function useViewport() {
@@ -231,7 +232,8 @@ function emptyTreeMods() {
   return { dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0,
     overloadMult: 1, overloadBurn: 0, overloadAOE: false,
     extraHits: 0, executeWindow: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
-    braceRegen: false, bloomAll: false, overdriveAll: false, blitzMulti: false, executeHunt: false };
+    braceRegen: false, bloomAll: false, overdriveAll: false, blitzMulti: false, executeHunt: false,
+    freezeBonus: 0, nipFreeze: false };
 }
 
 // Trees keyed by Type — every creature of a Type shares the tree SHAPE; allocation is
@@ -398,6 +400,33 @@ const TYPE_TREES = {
       ] },
     ],
   },
+
+  Warden: {
+    blurb: 'Control — charge into freeze, not damage. Lock one threat solid, ice the whole line, or learn to shut their big moves down.',
+    paths: [
+      { id: 'frost', name: 'FROST', tag: 'lock one solid', icon: '❄', color: '#8fd8ff', nodes: [
+        { id: 'frost1', tier: 1, cost: 4,  name: 'Biting Cold', desc: '+15% damage from your attacks.',                          apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'frost2', tier: 2, cost: 8,  name: 'Cold Store', desc: 'Start every fight with +1 charge banked.',                  apply: (m) => { m.chargeStart += 1; } },
+        { id: 'frost3', tier: 3, cost: 14, capstone: true, name: 'Deep Freeze', desc: 'Your freezes last 1 turn longer.',          apply: (m) => { m.freezeBonus += 1; } },
+        { id: 'frost4', tier: 4, cost: 22, sealed: true, name: 'Shatter', desc: 'Frozen enemies take +50% damage from all sources.' },
+        { id: 'frost5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Absolute Zero', desc: 'Glaciate freezes for 3 turns and cannot be resisted.' },
+      ] },
+      { id: 'rime', name: 'RIME', tag: 'ice the line', icon: '🌨', color: '#bfeaff', nodes: [
+        { id: 'rime1', tier: 1, cost: 4,  name: 'Frostfall', desc: '+15% damage from your attacks.',                             apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'rime2', tier: 2, cost: 8,  name: 'Deep Cold', desc: 'Start every fight with +1 charge banked.',                   apply: (m) => { m.chargeStart += 1; } },
+        { id: 'rime3', tier: 3, cost: 14, capstone: true, name: 'Frostbite', desc: 'Frost Nip also freezes its target — control every turn.', apply: (m) => { m.nipFreeze = true; } },
+        { id: 'rime4', tier: 4, cost: 22, sealed: true, name: 'Whiteout', desc: 'Cold Snap hits the whole line far harder.' },
+        { id: 'rime5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Eternal Winter', desc: 'Cold Snap freezes the whole line for 2 turns.' },
+      ] },
+      { id: 'blizzard', name: 'BLIZZARD', tag: 'shut them down', icon: '🌬', color: '#8fd8ff', hiddenUntilCapstone: true, nodes: [
+        { id: 'blizzard1', tier: 1, cost: 4,  sealed: true, name: 'Hush', desc: 'Chilled enemies deal less damage.' },
+        { id: 'blizzard2', tier: 2, cost: 8,  sealed: true, name: 'Numb', desc: 'Freezing an enemy also slows the one beside it.' },
+        { id: 'blizzard3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Silence', desc: 'Frozen enemies cannot use their payoff move when they thaw.' },
+        { id: 'blizzard4', tier: 4, cost: 22, sealed: true, name: 'Brittle', desc: 'Each time an enemy thaws, it takes a burst of frost damage.' },
+        { id: 'blizzard5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Time Lock', desc: 'Enemies act only every other round while you live.' },
+      ] },
+    ],
+  },
 };
 
 // Flat node lookup + per-creature helpers.
@@ -432,6 +461,8 @@ function playerDef(member, squadMods, perm) {
       burnBonus: (squadMods?.burnBonus ?? 0) + (p.burnBonus ?? 0),
       ampBonus:  (squadMods?.ampBonus  ?? 0) + (p.ampBonus  ?? 0),
       overloadMult: (p.overloadMult ?? 1), // tree-only for now
+      freezeBonus: (p.freezeBonus ?? 0),   // Warden tree — extends freezes
+      nipFreeze:   p.nipFreeze || false,   // Warden tree — builder also freezes
       // per-creature bends (run-scoped) + permanent tree, combined:
       extraHits:     (u.extraHits     ?? 0) + (p.extraHits     ?? 0),
       executeWindow: (u.executeWindow ?? 0) + (p.executeWindow ?? 0),
@@ -455,6 +486,7 @@ function feedLine(e) {
   if (e.type === 'battle-end') return { kind: 'end', text: `${e.winner === 'draw' ? 'Draw' : e.winner + ' wins'} — ${e.rounds} rounds` };
   if (e.type === 'burn') return { kind: 'burn', text: `${e.target.name} burns for ${e.dmg}${e.killed ? ' — KO' : ''} (${e.stacksLeft} stack${e.stacksLeft === 1 ? '' : 's'} left)` };
   if (e.type === 'regen') return { kind: 'regen', text: `${e.target.name} regenerates +${e.healed} (${e.stacksLeft} stack${e.stacksLeft === 1 ? '' : 's'} left)` };
+  if (e.type === 'frozen') return { kind: 'freeze', text: `❄ ${e.actor.name} is frozen — skips its turn${e.stacksLeft > 0 ? ` (${e.stacksLeft} more)` : ''}` };
   const hits = (e.hits || []).filter((h) => h.dmg > 0 || h.killed).map((h) => `${h.dmg} → ${h.name}${h.killed ? ' (KO)' : ''}`).join(', ');
   const chg = e.chargeBefore !== e.chargeAfter ? ` · charge ${e.chargeBefore}→${e.chargeAfter}` : '';
   const amp = e.amplifiedByBurn ? ' · 🔥×2' : '';
@@ -470,7 +502,7 @@ function snapshot(state) {
   const map = (u) => ({
     uid: u.uid, name: u.name, side: u.side, spriteId: u.spriteId, type: u.type,
     hp: u.hp, maxHp: u.maxHp, charge: u.charge, maxCharge: u.maxCharge,
-    burn: u.statuses.burn || 0, block: u.statuses.block || 0, regen: u.statuses.regen || 0, amp: u.statuses.amp || 0, alive: u.alive,
+    burn: u.statuses.burn || 0, block: u.statuses.block || 0, regen: u.statuses.regen || 0, amp: u.statuses.amp || 0, freeze: u.statuses.freeze || 0, alive: u.alive,
   });
   return { A: state.units.A.map(map), B: state.units.B.map(map), round: state.round };
 }
@@ -715,6 +747,9 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         </div>
         {/* shield: a glowing blue dome wrapping the body — clearly "protected", over everything */}
         {u.block > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', width: size * 1.18, height: size * 1.18, borderRadius: '50%', border: `2px solid #bfeaff`, background: `radial-gradient(circle, transparent 55%, #7fd6ff33 80%, #7fd6ff66 100%)`, boxShadow: '0 0 14px #7fd6ffaa, inset 0 0 18px #7fd6ff55', animation: 'seam-shield 1.6s ease-in-out infinite', pointerEvents: 'none', zIndex: 6 }} />}
+        {/* freeze: a pale ice slab encasing the body + a ❄ — clearly "can't act", over everything */}
+        {u.freeze > 0 && !dead && <div style={{ position: 'absolute', top: '44%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.05, height: size * 1.05, borderRadius: 14, border: '2px solid #cdeeff', background: 'linear-gradient(135deg, #cdeeff33 0%, #8fd8ff55 100%)', boxShadow: '0 0 16px #8fd8ffcc, inset 0 0 20px #cdeeff66', pointerEvents: 'none', zIndex: 7 }} />}
+        {u.freeze > 0 && !dead && <div style={{ position: 'absolute', top: '8%', left: '50%', transform: 'translateX(-50%)', fontSize: size * 0.34, pointerEvents: 'none', zIndex: 8, textShadow: '0 0 6px #8fd8ff' }}>❄</div>}
       </div>
       <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {ti.glyph} {u.name}
@@ -727,6 +762,7 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {u.block > 0 && <span style={{ fontSize: T.micro, color: '#7fd6ff', fontWeight: 700 }}>🛡{u.block}</span>}
         {u.regen > 0 && <span style={{ fontSize: T.micro, color: WIN, fontWeight: 700 }}>🌿{u.regen}</span>}
         {u.amp > 0 && <span style={{ fontSize: T.micro, color: AMP, fontWeight: 700 }}>✦{u.amp}</span>}
+        {u.freeze > 0 && <span style={{ fontSize: T.micro, color: '#8fd8ff', fontWeight: 700 }}>❄{u.freeze}</span>}
       </div>
     </div>
   );

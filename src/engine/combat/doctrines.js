@@ -1,4 +1,4 @@
-import { TEMPERAMENT_THRESHOLD, REACTOR, BULWARK, MENDER, BOOSTER, STRIKER, ASSASSIN } from './dials.js';
+import { TEMPERAMENT_THRESHOLD, REACTOR, BULWARK, MENDER, BOOSTER, STRIKER, ASSASSIN, WARDEN } from './dials.js';
 import {
   always,
   and,
@@ -240,6 +240,35 @@ export function assassinDoctrine(threshold) {
   };
 }
 
+// Warden ladder. Banks charge for the lockdown: facing a line (3+) it Cold Snaps to
+// freeze everyone; otherwise spends Glaciate to lock the biggest threat; else chips.
+export function wardenDoctrine(threshold) {
+  return {
+    type: 'Warden',
+    threshold,
+    rules: [
+      {
+        name: 'freeze-the-swarm',
+        when: and(enemyCountAtLeast(3), chargeAtLeast(WARDEN.coldsnap.minCharge)),
+        skillId: 'coldsnap',
+        select: allEnemies,
+      },
+      {
+        name: 'lock-the-threat',
+        when: chargeAtLeast(threshold),
+        skillId: 'glaciate',
+        select: biggestThreatEnemy,
+      },
+      {
+        name: 'chip-and-build',
+        when: always,
+        skillId: 'frostnip',
+        select: biggestThreatEnemy,
+      },
+    ],
+  };
+}
+
 const DOCTRINE_BY_TYPE = {
   Reactor: reactorDoctrine,
   Bulwark: bulwarkDoctrine,
@@ -247,6 +276,7 @@ const DOCTRINE_BY_TYPE = {
   Booster: boosterDoctrine,
   Striker: strikerDoctrine,
   Assassin: assassinDoctrine,
+  Warden: wardenDoctrine,
 };
 
 // Resolve a unit's doctrine from its Type + temperament. The temperament maps to a

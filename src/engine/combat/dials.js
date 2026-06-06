@@ -41,6 +41,13 @@ export const AMP = {
   maxStacks: 4, // cap = ×2 damage at full stacks
 };
 
+// ── Freeze: a control status Wardens apply. A frozen unit SKIPS its turn; the
+// freeze drops by one each time it would have acted (its natural thaw). Opt-in —
+// no existing creature carries freeze, so every current golden is untouched. ──
+export const FREEZE = {
+  maxStacks: 3, // a unit can be locked for at most this many of its turns
+};
+
 // ── Reactor kit (§23.5) — Charge Up / Overload / Backdraft ──
 export const REACTOR = {
   chargeUp: {
@@ -166,6 +173,28 @@ export const ASSASSIN = {
     hitMult: 1.2, // ×charge vented
     woundedPct: 0.6,
     woundedBonus: 1.8,
+  },
+};
+
+// ── Warden kit (§ new Type) — Frost Nip / Glaciate / Cold Snap. Control: charge
+// into FREEZE, not damage. Low attack; its value is denying the enemy its turns.
+// Builder banks charge + chips; payoff locks one enemy solid; wildcard briefly
+// freezes the whole line. ──
+export const WARDEN = {
+  frostnip: {
+    chargeGain: 2,
+    chipMult: 0.4, // small cold poke so building is never a dead turn
+  },
+  glaciate: {
+    minCharge: 2,
+    base: 0.7, // atk multiplier floor
+    perCharge: 0.4, // + per point of charge spent
+    freezeStacks: 2, // spend ALL charge → freeze one enemy for 2 of its turns
+  },
+  coldsnap: {
+    minCharge: 2,
+    perCharge: 0.35, // line damage = atk * perCharge * charge vented
+    freezeStacks: 1, // vent HALF charge → freeze the whole enemy line for 1 turn
   },
 };
 

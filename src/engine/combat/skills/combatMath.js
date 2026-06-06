@@ -1,4 +1,4 @@
-import { BURN, BLOCK, REGEN, AMP } from '../dials.js';
+import { BURN, BLOCK, REGEN, AMP, FREEZE } from '../dials.js';
 
 // ─── Shared combat math (§26.2: ONE place damage/status logic lives) ────────────
 // Every skill across every Type routes through these so a new Type can't quietly
@@ -60,6 +60,14 @@ export function heal(target, amount, actor) {
 export function applyRegen(target, stacks) {
   target.statuses.regen = Math.min(REGEN.maxStacks, (target.statuses.regen || 0) + stacks);
   return { uid: target.uid, name: target.name, regen: target.statuses.regen };
+}
+
+// Lock a unit out of its next turn(s). A Warden control primitive — the engine skips
+// a unit whose freeze > 0 and decrements it (the thaw). Opt-in: no existing creature
+// applies freeze, so every current golden is byte-identical.
+export function applyFreeze(target, stacks) {
+  target.statuses.freeze = Math.min(FREEZE.maxStacks, (target.statuses.freeze || 0) + stacks);
+  return { uid: target.uid, name: target.name, freeze: target.statuses.freeze };
 }
 
 // Lend an outgoing-damage buff to an ally (capped). Reports the resulting stacks so

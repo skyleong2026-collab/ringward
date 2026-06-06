@@ -10,6 +10,7 @@ const MENDER_KIT = ['mend', 'bloom', 'ward'];
 const BOOSTER_KIT = ['prime', 'overdrive', 'resonate'];
 const STRIKER_KIT = ['jab', 'flurry', 'blitz'];
 const ASSASSIN_KIT = ['mark', 'execute', 'ambush'];
+const WARDEN_KIT = ['frostnip', 'glaciate', 'coldsnap'];
 
 export const COMBAT_CREATURES = {
   fizzpop: {
@@ -151,6 +152,29 @@ export const COMBAT_CREATURES = {
     atk: 40,
     speed: 8,
     skillIds: ASSASSIN_KIT,
+  },
+
+  // ── Wardens: control — low attack, moderate HP; win by freezing enemies out of
+  // their turns. The first denial Type (§ new). ──
+  frostwarden: {
+    id: 'frostwarden',
+    name: 'Frostward',
+    type: 'Warden',
+    spriteId: 'vault',
+    hp: 240,
+    atk: 18,
+    speed: 5,
+    skillIds: WARDEN_KIT,
+  },
+  rimecaller: {
+    id: 'rimecaller',
+    name: 'Rimecaller',
+    type: 'Warden',
+    spriteId: 'nexus',
+    hp: 220,
+    atk: 20,
+    speed: 6,
+    skillIds: WARDEN_KIT,
   },
 };
 

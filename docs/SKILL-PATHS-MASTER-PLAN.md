@@ -270,11 +270,15 @@ The build blocks. Everything in **bold** is NEW vs. what the engine does today.
 
 Six new roles, each opening a mechanical lane the current 6 don't cover. Each gets the same 3-path / 5-tier skeleton (paths sketched; full trees TBD when we build them).
 
-### 🔒 WARDEN — *control / denial*
+### 🔒 WARDEN — *control / denial* — **SHIPPED (vF-D), the first new type**
 Locks enemies out of acting. The answer to "I want to stop them, not out-damage them."
-- **Frost** — freeze/stun, skip enemy turns → ★ **DEEP FREEZE**: chain-freeze the whole line
-- **Silence** — disable enemy payoffs → ★ **TOTAL SILENCE**: no enemy ultimates all fight
-- **Bind** — slow/snare, manipulate initiative → ★ **TIME LOCK**: enemies act only every other round
+The **freeze** mechanic is live: a frozen unit skips its turn and thaws by one each
+time it would have acted. Engine change was opt-in — all 6 goldens byte-identical.
+- 2 creatures: **Frostward**, **Rimecaller**. Kit: Frost Nip (build) / Glaciate (lock one) / Cold Snap (ice the line).
+- Tree (live): **FROST** (Deep Freeze — freezes last longer) / **RIME** (Frostbite — builder also freezes) / **BLIZZARD** (sealed third path).
+- **Frost** — freeze/stun, skip enemy turns → ★ **ABSOLUTE ZERO**: 3-turn unresistable freeze
+- **Silence** — disable enemy payoffs → ★ **TIME LOCK** (BLIZZARD): enemies act only every other round
+- Open balance note: Warden is intentionally low-damage (control, not kills) — pairs with a damage carry; solo it loses on the round cap.
 
 ### 💀 HEXER — *curses / vulnerability*
 Makes everything else hit harder. The multiplier nobody sees coming.
