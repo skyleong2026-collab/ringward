@@ -158,6 +158,21 @@ function loadPerks() {
 function savePerks(ids) {
   try { localStorage.setItem(PERKS_KEY, JSON.stringify(ids)); } catch { /* best-effort */ }
 }
+
+// ── Stable: the creatures you've caught — grows every time you clear the ring. ──
+// You start with three (one of three Types) and win one more per clear. Once you
+// have all 13 the stable is full; extra wins still pay slag.
+const STABLE_KEY = '8gents_seam_stable';
+const STARTER_IDS = ['cinderpaw', 'ironwall', 'swiftpaw'];
+function loadStable() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STABLE_KEY) || 'null');
+    return Array.isArray(s) && s.length > 0 ? s : [...STARTER_IDS];
+  } catch { return [...STARTER_IDS]; }
+}
+function saveStable(ids) {
+  try { localStorage.setItem(STABLE_KEY, JSON.stringify(ids)); } catch { /* best-effort */ }
+}
 // Build the starting mods for a run from the perks you own (vs. EMPTY_MODS before).
 function perkBaseMods(owned) {
   const m = { ...EMPTY_MODS };
@@ -821,6 +836,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [stats, setStats] = useState({ dmg: 0, biggest: 0, waves: 0 }); // run recap tally
   const [owned, setOwned] = useState(loadPerks); // permanent perks bought with slag
   const [earned, setEarned] = useState(0); // slag this run banked (for the recap)
+  const [stable, setStable] = useState(loadStable); // creature IDs you've caught
+  const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
@@ -834,6 +851,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
 
   function toggle(id) {
+    if (!stable.includes(id)) return; // can't pick locked creatures
     setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
   }
   function rollOffer() {
@@ -864,7 +882,15 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
       setSquad(patched);
-      if (idx === WAVES.length - 1) { onSlag?.(WIN_SLAG); setEarned(WIN_SLAG); setRunPhase('won'); return; }
+      if (idx === WAVES.length - 1) {
+        onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
+        // Catch one random creature from those not yet in your stable.
+        const locked = COMBAT_ROSTER.filter((c) => !stable.includes(c.id));
+        const caught = locked.length > 0 ? locked[Math.floor(Math.random() * locked.length)] : null;
+        if (caught) { const next = [...stable, caught.id]; setStable(next); saveStable(next); }
+        setCaughtNow(caught);
+        setRunPhase('won'); return;
+      }
       setWaveIdx(idx + 1); rollOffer(); setRunPhase('upgrade');
     });
     setWaveIdx(idx);
@@ -886,7 +912,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setRunMods(m); setSquad(sq); setTaken((t) => [...t, up]);
     startWave(waveIdx, sq, m);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); }
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
@@ -924,9 +950,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             })}
           </div>
         </div>
-        <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span></div>
-        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 18 }}>
-          {COMBAT_ROSTER.map((c) => {
+        <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>
+          Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span>
+          <span style={{ float: 'right', fontSize: T.micro, color: DIM, fontWeight: 700, lineHeight: '22px' }}>{stable.length}/{COMBAT_ROSTER.length} caught</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+          {COMBAT_ROSTER.filter((c) => stable.includes(c.id)).map((c) => {
             const ti = TYPE_INFO[c.type];
             const on = picked.includes(c.id);
             const full = !on && picked.length >= 3;
@@ -950,6 +979,20 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             );
           })}
         </div>
+        {(() => {
+          const lockedCount = COMBAT_ROSTER.length - stable.length;
+          if (lockedCount === 0) return null;
+          return (
+            <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '10px 14px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>🔒</span>
+              <div>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: DIM }}>{lockedCount} creature{lockedCount !== 1 ? 's' : ''} still out there</div>
+                <div style={{ fontSize: T.micro, color: '#666' }}>Clear the ring to catch one. Win runs to fill your stable.</div>
+              </div>
+            </div>
+          );
+        })()}
+        <div style={{ marginBottom: 18 }} />
         <button onClick={startRun} disabled={picked.length < 2}
           style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
           {picked.length < 2 ? 'PICK AT LEAST 2' : `START RUN — ${picked.length} creatures →`}
@@ -989,15 +1032,35 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // ── In a run: progress bar + the fight (+ result banner). ──
   const wave = WAVES[waveIdx];
   const banner = (() => {
-    if (runPhase === 'won') return (
-      <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
-        <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
-        <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You broke <b>The Hollow King</b> and cleared the approach.</div>
-        <SlagBanked earned={earned} balance={slag} />
-        <RunRecap taken={taken} stats={stats} squad={squad} />
-        <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
-      </div>
-    );
+    if (runPhase === 'won') {
+      const ti = caughtNow ? TYPE_INFO[caughtNow.type] : null;
+      return (
+        <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
+          <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You broke <b>The Hollow King</b> and cleared the approach.</div>
+          {caughtNow && ti && (
+            <div style={{ margin: '14px 0', background: '#091a12', border: `2px solid ${ti.accent}`, borderRadius: 12, padding: '14px 16px' }}>
+              <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6 }}>CAUGHT</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                <Sprite spriteId={caughtNow.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={64} />
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: T.sub, fontWeight: 900, color: ti.accent }}>{ti.glyph} {caughtNow.name}</div>
+                  <div style={{ fontSize: T.small, color: '#cdd', fontWeight: 700 }}>{ti.nick}</div>
+                  <div style={{ fontSize: T.micro, color: DIM, marginTop: 2 }}>{ti.role}</div>
+                  <div style={{ fontSize: T.micro, color: '#888', marginTop: 3 }}>Now in your stable — {stable.length}/{COMBAT_ROSTER.length} caught.</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {!caughtNow && (
+            <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>Your stable is full — all {COMBAT_ROSTER.length} creatures caught.</div>
+          )}
+          <SlagBanked earned={earned} balance={slag} />
+          <RunRecap taken={taken} stats={stats} squad={squad} />
+          <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
+        </div>
+      );
+    }
     if (runPhase === 'lost') return (
       <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
