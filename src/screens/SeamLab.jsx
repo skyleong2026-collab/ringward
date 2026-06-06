@@ -57,6 +57,7 @@ const TYPE_INFO = {
   Striker: { glyph: '⚔', accent: '#ffd166', nick: 'The Brawler', role: 'Fast — lots of quick hits.' },
   Assassin: { glyph: '🗡', accent: '#ff7a9c', nick: 'The Killer', role: 'Hunts and finishes the weak.' },
   Warden: { glyph: '❄', accent: '#8fd8ff', nick: 'The Jailer', role: 'Freezes enemies out of their turns.' },
+  Hexer: { glyph: '💀', accent: '#b06bff', nick: 'The Curse', role: 'Makes enemies take more from the whole squad.' },
 };
 
 // ── Rumors of the grunlings still out there (preview/hint lore). Folk-mystery tone:
@@ -79,7 +80,57 @@ const CREATURE_LORE = {
   veilclaw:   { rumor: 'A killer wrapped in shadow — the weaker you are, the harder it bites.', where: 'the lightless inner rings' },
   frostwarden:{ rumor: 'A cold so total it stops a creature mid-step. Time seems to freeze around it.', where: 'the frostbound deep, far inward' },
   rimecaller: { rumor: 'It calls down a stillness over a whole battlefield. Few have seen one and moved again.', where: 'the silent rings near the Drop' },
+  blightcap:  { rumor: 'Where it treads, armor rots and wounds refuse to close. The blight seems to wear its face.', where: 'the witherfen, where the blight pools' },
+  hexmoth:    { rumor: 'Its dust settles on you like a mark — and everything that strikes you after bites deeper.', where: 'the spore-choked dark' },
 };
+
+// ── Hunting grounds — WHERE you push biases WHO you draw out (directed farming). ──
+// The world is concentric rings (outer → inner = stronger, deeper, newer types). Each
+// ground leans toward one Type-cluster's creatures; clearing the ring while hunting it
+// makes those creatures far likelier to be the one you catch — but never hard-locks, so
+// any uncaught grunling can still appear. Ordered outer (gentle) → inner (the deep).
+const HUNTING_GROUNDS = [
+  { id: 'outer-ring',  name: 'The Crackling Outer Ring', tag: 'outer ring',     biasIds: ['fizzpop', 'glowtail', 'cinderpaw'] },
+  { id: 'fallen-gate', name: 'The Fallen Gate',          tag: 'the ruined gate', biasIds: ['stoneward', 'ironwall'] },
+  { id: 'green-seam',  name: 'The Green Seam',           tag: 'between the rings', biasIds: ['mossback', 'dewleaf'] },
+  { id: 'storm-wire',  name: 'Storm-Wire Thickets',      tag: 'the storm-wire',  biasIds: ['buzzline', 'tanglewing'] },
+  { id: 'fast-trails', name: 'The Fast Trails',          tag: 'the narrow trails', biasIds: ['swiftpaw', 'dartwing'] },
+  { id: 'lightless',   name: 'The Lightless Deep',       tag: 'past the Warden', biasIds: ['shadefang', 'veilclaw'] },
+  { id: 'witherfen',   name: 'The Witherfen',            tag: 'where the blight pools', biasIds: ['blightcap', 'hexmoth'] },
+  { id: 'frostbound',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', biasIds: ['frostwarden', 'rimecaller'] },
+];
+const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
+const GROUND_KEY = '8gents_seam_ground';
+const BIAS_WEIGHT = 8; // a biased, still-uncaught creature is this many × likelier to be drawn
+function loadGround() {
+  try { const id = localStorage.getItem(GROUND_KEY); return GROUND_BY_ID[id] ? id : HUNTING_GROUNDS[0].id; }
+  catch { return HUNTING_GROUNDS[0].id; }
+}
+function saveGround(id) { try { localStorage.setItem(GROUND_KEY, id); } catch { /* best-effort */ } }
+
+// The ground you'll actually hunt: the stored choice if it still has uncaught creatures,
+// otherwise the first ring that does. Keeps the displayed ring and the catch in lockstep
+// once a ground has been cleared out, without mutating state during render.
+function effectiveGround(stableIds, groundId) {
+  const lockedSet = new Set(COMBAT_ROSTER.map((c) => c.id).filter((id) => !stableIds.includes(id)));
+  const has = (g) => g && g.biasIds.some((id) => lockedSet.has(id));
+  const stored = GROUND_BY_ID[groundId];
+  if (has(stored)) return stored;
+  return HUNTING_GROUNDS.find(has) || stored || HUNTING_GROUNDS[0];
+}
+
+// Weighted catch: the chosen ground's uncaught creatures are far likelier, but the draw
+// is never hard-locked — any uncaught creature can still surface (the ring steers, it
+// doesn't dictate). Returns the caught creature def, or null when the stable is full.
+function drawCatch(stableIds, groundId, rand = Math.random) {
+  const locked = COMBAT_ROSTER.filter((c) => !stableIds.includes(c.id));
+  if (locked.length === 0) return null;
+  const biased = new Set(effectiveGround(stableIds, groundId).biasIds || []);
+  const weights = locked.map((c) => (biased.has(c.id) ? BIAS_WEIGHT : 1));
+  let roll = rand() * weights.reduce((s, w) => s + w, 0);
+  for (let i = 0; i < locked.length; i++) { roll -= weights[i]; if (roll < 0) return locked[i]; }
+  return locked[locked.length - 1];
+}
 
 function useViewport() {
   const [w, setW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1024));
@@ -280,7 +331,8 @@ function emptyTreeMods() {
     extraHits: 0, executeWindow: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
     braceRegen: false, bloomAll: false, overdriveAll: false, blitzMulti: false, executeHunt: false,
     freezeBonus: 0, nipFreeze: false,
-    singularity: false, overloadRefund: false, deathsDoor: false, cull: false, absoluteZero: false, shatter: false };
+    singularity: false, overloadRefund: false, deathsDoor: false, cull: false, absoluteZero: false, shatter: false,
+    doomAll: false, jinxSpread: false };
 }
 
 // Trees keyed by Type — every creature of a Type shares the tree SHAPE; allocation is
@@ -474,6 +526,33 @@ const TYPE_TREES = {
       ] },
     ],
   },
+
+  Hexer: {
+    blurb: 'Curse — charge into vulnerability, not raw damage. Make one enemy take far more, spread the curse across the line, or doom them outright.',
+    paths: [
+      { id: 'curse', name: 'CURSE', tag: 'one heavy curse', icon: '💀', color: '#b06bff', nodes: [
+        { id: 'curse1', tier: 1, cost: 4,  name: 'Ill Omen', desc: '+15% damage from your attacks.',                          apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'curse2', tier: 2, cost: 8,  name: 'Patience', desc: 'Start every fight with +1 charge banked.',                apply: (m) => { m.chargeStart += 1; } },
+        { id: 'curse3', tier: 3, cost: 14, capstone: true, name: 'Spreading Hex', desc: 'Doom curses your WHOLE enemy line, not just one.', apply: (m) => { m.doomAll = true; } },
+        { id: 'curse4', tier: 4, cost: 22, sealed: true, name: 'Wither', desc: 'Cursed enemies also take a creeping damage-over-time.' },
+        { id: 'curse5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Hexmaster', desc: 'Every curse sits on every enemy at once, and never fades.' },
+      ] },
+      { id: 'decay', name: 'DECAY', tag: 'spread the rot', icon: '🦠', color: '#c89bff', nodes: [
+        { id: 'decay1', tier: 1, cost: 4,  name: 'Creeping Rot', desc: '+15% damage from your attacks.',                     apply: (m) => { m.dmgMult *= 1.15; } },
+        { id: 'decay2', tier: 2, cost: 8,  name: 'Steady', desc: 'Start every fight with +1 charge banked.',                  apply: (m) => { m.chargeStart += 1; } },
+        { id: 'decay3', tier: 3, cost: 14, capstone: true, name: 'Contagion', desc: 'Jinx also curses a second enemy — the rot spreads.', apply: (m) => { m.jinxSpread = true; } },
+        { id: 'decay4', tier: 4, cost: 22, sealed: true, name: 'Entropy', desc: 'Your curses also strip enemy shields and cannot be cleansed.' },
+        { id: 'decay5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Pandemic', desc: 'When a cursed enemy dies, its curse leaps to the rest of the line.' },
+      ] },
+      { id: 'doomp', name: 'DOOM', tag: 'a death sentence', icon: '☠', color: '#b06bff', hiddenUntilCapstone: true, nodes: [
+        { id: 'doomp1', tier: 1, cost: 4,  sealed: true, name: 'Mark of Doom', desc: 'Brand an enemy — it detonates after a few rounds.' },
+        { id: 'doomp2', tier: 2, cost: 8,  sealed: true, name: 'Hasten', desc: 'The doom mark counts down faster.' },
+        { id: 'doomp3', tier: 3, cost: 14, sealed: true, capstone: true, name: 'Death Sentence', desc: 'A doomed enemy that dies early refunds the doom onto another.' },
+        { id: 'doomp4', tier: 4, cost: 22, sealed: true, name: 'Inevitable', desc: 'Doom marks cannot be cleansed or outhealed.' },
+        { id: 'doomp5', tier: 5, cost: 36, sealed: true, keystone: true, name: 'Armageddon', desc: 'Doom every enemy at once — the whole line is on a timer.' },
+      ] },
+    ],
+  },
 };
 
 // ── Refinement: an INFINITE repeatable node per open path, so there's always a next
@@ -551,6 +630,8 @@ function playerDef(member, squadMods, perm) {
       cull:           p.cull           || false,
       absoluteZero:   p.absoluteZero   || false,
       shatter:        p.shatter        || false,
+      doomAll:        p.doomAll        || false, // Hexer tree — Doom curses the line
+      jinxSpread:     p.jinxSpread     || false, // Hexer tree — Jinx curses a 2nd enemy
       // per-creature bends (run-scoped) + permanent tree, combined:
       extraHits:     (u.extraHits     ?? 0) + (p.extraHits     ?? 0),
       executeWindow: (u.executeWindow ?? 0) + (p.executeWindow ?? 0),
@@ -582,7 +663,8 @@ function feedLine(e) {
   const heals = (e.heals || []).filter((h) => h.healed > 0).map((h) => `💚${h.healed}→${h.name}`).join(' ');
   const wards = (e.regens || []).length ? `🌿ward ×${e.regens.length}` : '';
   const amps = (e.amps || []).map((a) => `⚡${a.amp}→${a.name}`).join(' ');
-  const extra = [shields, heals, wards, amps].filter(Boolean).join(' · ');
+  const vulns = (e.vulns || []).length ? `💀curse ×${e.vulns.length}` : '';
+  const extra = [shields, heals, wards, amps, vulns].filter(Boolean).join(' · ');
   return { kind: 'turn', side: e.actor.side, text: `${e.actor.name} — ${e.skill.name}${amp}${hits ? `: ${hits}` : ''}${extra ? ` · ${extra}` : ''}${chg}` };
 }
 
@@ -590,7 +672,7 @@ function snapshot(state) {
   const map = (u) => ({
     uid: u.uid, name: u.name, side: u.side, spriteId: u.spriteId, type: u.type,
     hp: u.hp, maxHp: u.maxHp, charge: u.charge, maxCharge: u.maxCharge,
-    burn: u.statuses.burn || 0, block: u.statuses.block || 0, regen: u.statuses.regen || 0, amp: u.statuses.amp || 0, freeze: u.statuses.freeze || 0, alive: u.alive,
+    burn: u.statuses.burn || 0, block: u.statuses.block || 0, regen: u.statuses.regen || 0, amp: u.statuses.amp || 0, freeze: u.statuses.freeze || 0, vuln: u.statuses.vuln || 0, alive: u.alive,
   });
   return { A: state.units.A.map(map), B: state.units.B.map(map), round: state.round };
 }
@@ -838,6 +920,9 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {/* freeze: a pale ice slab encasing the body + a ❄ — clearly "can't act", over everything */}
         {u.freeze > 0 && !dead && <div style={{ position: 'absolute', top: '44%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.05, height: size * 1.05, borderRadius: 14, border: '2px solid #cdeeff', background: 'linear-gradient(135deg, #cdeeff33 0%, #8fd8ff55 100%)', boxShadow: '0 0 16px #8fd8ffcc, inset 0 0 20px #cdeeff66', pointerEvents: 'none', zIndex: 7 }} />}
         {u.freeze > 0 && !dead && <div style={{ position: 'absolute', top: '8%', left: '50%', transform: 'translateX(-50%)', fontSize: size * 0.34, pointerEvents: 'none', zIndex: 8, textShadow: '0 0 6px #8fd8ff' }}>❄</div>}
+        {/* vulnerability (Hexer curse): a creeping violet haze + 💀 — "takes more from everyone" */}
+        {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.1, height: size * 1.1, borderRadius: '50%', background: 'radial-gradient(circle, transparent 50%, #b06bff22 72%, #b06bff55 100%)', boxShadow: 'inset 0 0 18px #b06bff66', pointerEvents: 'none', zIndex: 5 }} />}
+        {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '6%', right: '12%', fontSize: size * 0.26, pointerEvents: 'none', zIndex: 8, textShadow: '0 0 6px #b06bff' }}>💀</div>}
       </div>
       <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {ti.glyph} {u.name}
@@ -851,6 +936,7 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {u.regen > 0 && <span style={{ fontSize: T.micro, color: WIN, fontWeight: 700 }}>🌿{u.regen}</span>}
         {u.amp > 0 && <span style={{ fontSize: T.micro, color: AMP, fontWeight: 700 }}>✦{u.amp}</span>}
         {u.freeze > 0 && <span style={{ fontSize: T.micro, color: '#8fd8ff', fontWeight: 700 }}>❄{u.freeze}</span>}
+        {u.vuln > 0 && <span style={{ fontSize: T.micro, color: '#b06bff', fontWeight: 700 }}>💀{u.vuln}</span>}
       </div>
     </div>
   );
@@ -1417,7 +1503,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [owned, setOwned] = useState(loadPerks); // permanent perks bought with slag
   const [earned, setEarned] = useState(0); // slag this run banked (for the recap)
   const [stable, setStable] = useState(loadStable); // creature IDs you've caught
+  const [ground, setGround] = useState(loadGround); // hunting ground — biases who you catch
   const [caughtNow, setCaughtNow] = useState(null); // creature caught this run (for reveal)
+  const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
   const [cores, setCores] = useState(loadCores); // {creatureId: unspent Cores ⬡} — permanent
   const [treeAlloc, setTreeAlloc] = useState(loadTreeAlloc); // {creatureId: [nodeId]} unlocked — permanent
@@ -1537,11 +1625,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       setSquad(patched);
       if (idx === WAVES.length - 1) {
         onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
-        // Catch one random creature from those not yet in your stable.
-        const locked = COMBAT_ROSTER.filter((c) => !stable.includes(c.id));
-        const caught = locked.length > 0 ? locked[Math.floor(Math.random() * locked.length)] : null;
+        // Draw a creature out of the ring — biased by the hunting ground you chose.
+        const caught = drawCatch(stable, ground);
         if (caught) { const next = [...stable, caught.id]; setStable(next); saveStable(next); }
         setCaughtNow(caught);
+        setCaughtFrom(effectiveGround(stable, ground));
         sfx.ringTaken();
         if (caught) setTimeout(() => sfx.caughtCreature(), 720);
         setRunPhase('won'); return;
@@ -1595,7 +1683,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked([]); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setPendingUpgrade(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -1856,21 +1944,53 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {(() => {
           const lockedIds = COMBAT_ROSTER.map((c) => c.id).filter((id) => !stable.includes(id));
           if (lockedIds.length === 0) return null;
-          // Show a few rumors — a window onto who's still out there to seek out.
-          const hints = lockedIds.filter((id) => CREATURE_LORE[id]).slice(0, 3);
+          const lockedSet = new Set(lockedIds);
+          // Uncaught creatures this ground leans toward — what you're hunting for.
+          const targetsOf = (g) => g.biasIds.filter((id) => lockedSet.has(id));
+          // The ring you'll actually hunt (auto-advances past cleared-out rings) — same
+          // helper the catch uses, so the display and the draw never disagree.
+          const sel = effectiveGround(stable, ground);
+          const selTargets = targetsOf(sel);
           return (
             <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: hints.length ? 8 : 0 }}>
-                <span style={{ fontSize: 16, lineHeight: 1 }}>🔒</span>
-                <div style={{ fontSize: T.small, fontWeight: 900, color: DIM }}>{lockedIds.length} grunling{lockedIds.length !== 1 ? 's' : ''} still out there</div>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>rumors from the rings</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 16, lineHeight: 1 }}>🧭</span>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO HUNT</div>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length} grunling{lockedIds.length !== 1 ? 's' : ''} still out there</span>
               </div>
-              {hints.map((id) => (
+              {/* Ring picker — choose where to push; it biases who you draw out on a clear. */}
+              <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 7, marginBottom: 10 }}>
+                {HUNTING_GROUNDS.map((g) => {
+                  const targets = targetsOf(g);
+                  const cleared = targets.length === 0;
+                  const on = g.id === sel.id;
+                  const glyphs = [...new Set(g.biasIds.map((id) => TYPE_INFO[COMBAT_CREATURES[id].type].glyph))].join('');
+                  return (
+                    <button key={g.id} onClick={() => { setGround(g.id); saveGround(g.id); }} disabled={cleared}
+                      style={{ textAlign: 'left', cursor: cleared ? 'default' : 'pointer', borderRadius: 10, padding: '8px 9px',
+                        background: on ? '#16202e' : PANEL, border: `1.5px solid ${on ? SEL : LINE}`, opacity: cleared ? 0.4 : 1,
+                        boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ fontSize: T.small }}>{glyphs}</span>
+                        <span style={{ fontSize: T.micro, fontWeight: 900, color: on ? '#eaf2ff' : '#cfcfda', lineHeight: 1.15 }}>{g.name}</span>
+                      </div>
+                      <div style={{ fontSize: T.micro, color: cleared ? WIN : on ? '#9be7ff' : DIM, fontWeight: 700, marginTop: 3 }}>
+                        {cleared ? '✓ cleared out' : `likely: ${targets.map((id) => COMBAT_CREATURES[id].name).join(', ')}`}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Rumors of who you're hunting in the selected ring. */}
+              <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 800, marginBottom: 4 }}>
+                Hunting {sel.tag} — clear the ring to draw one out.
+              </div>
+              {selTargets.map((id) => CREATURE_LORE[id] && (
                 <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
-                  <span style={{ color: '#a99' }}>“{CREATURE_LORE[id].rumor}”</span> <span style={{ color: '#666' }}>— {CREATURE_LORE[id].where}.</span>
+                  <span style={{ color: '#cdd', fontWeight: 700 }}>{COMBAT_CREATURES[id].name}:</span>{' '}
+                  <span style={{ color: '#a99' }}>“{CREATURE_LORE[id].rumor}”</span>
                 </div>
               ))}
-              <div style={{ fontSize: T.micro, color: '#666', marginTop: 8, paddingLeft: 24 }}>Clear the ring to draw one out. (Soon: seek specific creatures by where you hunt.)</div>
             </div>
           );
         })()}
@@ -1982,6 +2102,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   <div style={{ fontSize: T.sub, fontWeight: 900, color: ti.accent }}>{ti.glyph} {caughtNow.name}</div>
                   <div style={{ fontSize: T.small, color: '#cdd', fontWeight: 700 }}>{ti.nick}</div>
                   <div style={{ fontSize: T.micro, color: DIM, marginTop: 2 }}>{ti.role}</div>
+                  {caughtFrom && <div style={{ fontSize: T.micro, color: '#9be7ff', marginTop: 3 }}>Drawn out of {caughtFrom.name}.</div>}
                   <div style={{ fontSize: T.micro, color: '#888', marginTop: 3 }}>Now in your stable — {stable.length}/{COMBAT_ROSTER.length} caught.</div>
                 </div>
               </div>
