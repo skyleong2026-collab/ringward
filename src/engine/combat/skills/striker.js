@@ -63,11 +63,14 @@ export const STRIKER_SKILLS = {
       const vented = Math.floor(actor.charge / 2);
       actor.charge -= vented;
       if (!target) return { hits: [], chargeSpent: vented };
-      const first = !state.firstActionDone; // the round's opening move (§24 isFirstAction)
+      const first = !state.firstActionDone;
       let mult = STRIKER.blitz.hitMult * Math.max(1, vented);
       if (first) mult *= STRIKER.blitz.firstStrikeBonus;
-      const hit = dealDamage(target, actor.atk * mult, actor);
-      return { hits: [hit], chargeSpent: vented, firstStrike: first };
+      // "Blitz Storm" upgrade: Blitz becomes a 3-hit barrage instead of one heavy strike.
+      const hitCount = actor.mods?.blitzMulti ? 3 : 1;
+      const hits = [];
+      for (let i = 0; i < hitCount; i++) hits.push(dealDamage(target, actor.atk * mult, actor));
+      return { hits, chargeSpent: vented, firstStrike: first };
     },
   },
 };

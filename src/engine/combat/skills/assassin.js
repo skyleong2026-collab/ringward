@@ -37,16 +37,20 @@ export const ASSASSIN_SKILLS = {
     blurb: 'Spend all charge for a lethal blow — devastating against a wounded target.',
     targetMode: 'enemy',
     canUse: (actor) => actor.charge >= ASSASSIN.execute.minCharge,
-    apply(actor, [target]) {
+    apply(actor, [target], state) {
       const spent = actor.charge;
       actor.charge = 0;
       if (!target) return { hits: [], chargeSpent: spent };
-      let mult = ASSASSIN.execute.base + ASSASSIN.execute.perCharge * spent;
-      // "Hunter's Mark" widens the kill-zone. Opt-in — adds 0 → threshold unchanged.
       const thr = ASSASSIN.execute.executeThreshold + (actor.mods?.executeWindow ?? 0);
-      const executed = isWounded(target, thr);
+      // "Blood Hunt" upgrade: Execute auto-hunts the most wounded enemy, ignoring the
+      // chosen target — the Assassin always finds the kill regardless of selection.
+      const prey = (actor.mods?.executeHunt && state)
+        ? (() => { const es = state.units[actor.side === 'A' ? 'B' : 'A'].filter(u => u.alive); return es.reduce((w, u) => u.hp / u.maxHp < w.hp / w.maxHp ? u : w, es[0]); })()
+        : target;
+      let mult = ASSASSIN.execute.base + ASSASSIN.execute.perCharge * spent;
+      const executed = isWounded(prey, thr);
       if (executed) mult *= ASSASSIN.execute.executeBonus;
-      const hit = dealDamage(target, actor.atk * mult, actor);
+      const hit = dealDamage(prey, actor.atk * mult, actor);
       return { hits: [hit], chargeSpent: spent, executed };
     },
   },

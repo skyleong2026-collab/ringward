@@ -47,8 +47,13 @@ export const MENDER_SKILLS = {
     apply(actor, [target], state) {
       const spent = actor.charge;
       actor.charge = 0;
-      const ally = target || mostWounded(actor, state);
       const amount = MENDER.bloom.base + MENDER.bloom.perCharge * spent;
+      // "Full Bloom" upgrade: Bloom washes over the whole team at once.
+      if (actor.mods?.bloomAll && state) {
+        const heals = alliesOf(state, actor).map((a) => heal(a, amount, actor));
+        return { hits: [], heals, chargeSpent: spent };
+      }
+      const ally = target || mostWounded(actor, state);
       return { hits: [], heals: [heal(ally, amount, actor)], chargeSpent: spent };
     },
   },

@@ -126,6 +126,7 @@ const EMPTY_MODS = {
 // can be applied to ONE named creature rather than the whole squad.
 const EMPTY_UNIT_MODS = {
   extraHits: 0, executeWindow: 0, overloadBurn: 0, braceTeam: 0, mendRegen: 0, primeTeam: 0,
+  overloadAOE: false, blitzMulti: false, executeHunt: false, braceRegen: false, bloomAll: false, overdriveAll: false,
 };
 
 // The upgrade pool — pick 1 of 3 between fights; they compound into a build.
@@ -148,6 +149,13 @@ const UPGRADES = [
   { id: 'aegisreflex',scope: 'unit', icon: '🛡',  color: '#7fd6ff',  name: 'Aegis Reflex', needsType: 'Bulwark',  desc: "ONE creature: Brace shields your WHOLE team, not just itself.",   apply: (m) => { m.braceTeam     = 1; } },
   { id: 'lifebloom',  scope: 'unit', icon: '🌿', color: WIN,        name: 'Lifebloom',    needsType: 'Mender',   desc: "ONE creature: Mend leaves a regen ward on whoever it heals.",     apply: (m) => { m.mendRegen     += 1; } },
   { id: 'powerchord', scope: 'unit', icon: '✦',  color: AMP,        name: 'Power Chord',  needsType: 'Booster',  desc: "ONE creature: Prime amps your WHOLE team, not just the strongest.",apply: (m) => { m.primeTeam     = 1; } },
+  // ── Tier-2 chain bends: only offered if the creature already has the tier-1 prereq ──
+  { id: 'combustion',  scope: 'unit', icon: '💥', color: BURN,       name: 'Combustion',   needsType: 'Reactor',  chain: 'embertrail',  desc: "ONE creature: Overload erupts across the WHOLE enemy line.",           apply: (m) => { m.overloadAOE   = true; } },
+  { id: 'blitzstorm',  scope: 'unit', icon: '⚡', color: '#ffd166',  name: 'Blitz Storm',  needsType: 'Striker',  chain: 'twinstrike',  desc: "ONE creature: Blitz becomes a 3-hit barrage instead of one strike.",   apply: (m) => { m.blitzMulti    = true; } },
+  { id: 'bloodhunt',   scope: 'unit', icon: '🩸', color: '#ff7a9c',  name: 'Blood Hunt',   needsType: 'Assassin', chain: 'huntersmark', desc: "ONE creature: Execute auto-hunts the most wounded enemy regardless of target.", apply: (m) => { m.executeHunt = true; } },
+  { id: 'ironbastion', scope: 'unit', icon: '✨', color: '#7fd6ff',  name: 'Iron Bastion', needsType: 'Bulwark',  chain: 'aegisreflex', desc: "ONE creature: Brace seeds regen on everyone it shields.",              apply: (m) => { m.braceRegen    = true; } },
+  { id: 'fullbloom',   scope: 'unit', icon: '🌸', color: WIN,        name: 'Full Bloom',   needsType: 'Mender',   chain: 'lifebloom',   desc: "ONE creature: Bloom washes over the WHOLE team at once.",             apply: (m) => { m.bloomAll       = true; } },
+  { id: 'surge',       scope: 'unit', icon: '⬆️', color: AMP,        name: 'Surge',        needsType: 'Booster',  chain: 'powerchord',  desc: "ONE creature: Overdrive floods ALL allies with Amp, not just the carry.",apply: (m) => { m.overdriveAll  = true; } },
 ];
 
 // ── Permanent PERKS (§ meta) — bought once with slag, they persist across runs and
@@ -221,6 +229,12 @@ function playerDef(member, squadMods) {
       braceTeam:     u.braceTeam     ?? 0,
       mendRegen:     u.mendRegen     ?? 0,
       primeTeam:     u.primeTeam     ?? 0,
+      overloadAOE:   u.overloadAOE   ?? false,
+      blitzMulti:    u.blitzMulti    ?? false,
+      executeHunt:   u.executeHunt   ?? false,
+      braceRegen:    u.braceRegen    ?? false,
+      bloomAll:      u.bloomAll      ?? false,
+      overdriveAll:  u.overdriveAll  ?? false,
     },
   };
 }
@@ -1001,9 +1015,15 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
   // Only offer a move-bend when the matching Type is still alive — pass aliveTypes
   // after each wave so a dead creature's bend can't appear in the next offer.
-  function rollOffer(aliveTypes) {
+  // Chain bends only enter the pool if some alive creature already owns the prereq.
+  function rollOffer(aliveTypes, currentSquad) {
     const types = aliveTypes ?? new Set(picked.map((id) => COMBAT_CREATURES[id].type));
-    const pool = UPGRADES.filter((u) => !u.needsType || types.has(u.needsType));
+    const sq = currentSquad ?? squad;
+    const pool = UPGRADES.filter((u) => {
+      if (u.needsType && !types.has(u.needsType)) return false;
+      if (u.chain) return sq.some((m) => m.hp > 0 && COMBAT_CREATURES[m.id].type === u.needsType && (m.bends ?? []).some((b) => b.id === u.chain));
+      return true;
+    });
     const out = [];
     for (let k = 0; k < offerCount && pool.length; k++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
     setOffer(out);
@@ -1041,7 +1061,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       }
       const aliveTypes = new Set(patched.filter((m) => m.hp > 0).map((m) => COMBAT_CREATURES[m.id].type));
       sfx.waveClear();
-      setWaveIdx(idx + 1); rollOffer(aliveTypes); setRunPhase('upgrade');
+      setWaveIdx(idx + 1); rollOffer(aliveTypes, patched); setRunPhase('upgrade');
     });
     setWaveIdx(idx);
     setRunPhase('fighting');

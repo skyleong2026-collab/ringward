@@ -37,16 +37,23 @@ export const REACTOR_SKILLS = {
     blurb: 'Dump ALL your charge into one massive hit — doubled if the target is on fire.',
     targetMode: 'enemy',
     canUse: (actor) => actor.charge >= REACTOR.overload.minCharge,
-    apply(actor, [target]) {
+    apply(actor, [target], state) {
       if (!target) return { hits: [], note: 'no target' };
       const spent = actor.charge;
       let mult = REACTOR.overload.base + REACTOR.overload.perCharge * spent;
       if (isBurning(target)) mult *= REACTOR.overload.burningBonus;
       actor.charge = 0;
-      const hit = dealDamage(target, actor.atk * mult, actor);
-      // Run-upgrade "Ember Trail": Overload also lights the target. Opt-in — a unit
-      // with no mod adds 0 → applyBurn is skipped → the golden stays byte-identical.
       const emberBurn = actor.mods?.overloadBurn ?? 0;
+      // "Combustion" upgrade: Overload erupts across the whole enemy line.
+      if (actor.mods?.overloadAOE && state) {
+        const line = enemiesOf(state, actor);
+        const hits = line.map((e) => {
+          if (emberBurn > 0) applyBurn(e, emberBurn, actor);
+          return dealDamage(e, actor.atk * mult, actor);
+        });
+        return { hits, chargeSpent: spent };
+      }
+      const hit = dealDamage(target, actor.atk * mult, actor);
       if (emberBurn > 0) applyBurn(target, emberBurn, actor);
       return { hits: [hit], chargeSpent: spent, amplifiedByBurn: isBurning(target) };
     },

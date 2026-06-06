@@ -47,8 +47,13 @@ export const BOOSTER_SKILLS = {
     apply(actor, [target], state) {
       const spent = actor.charge;
       actor.charge = 0;
-      const ally = target || bestCarry(actor, state);
       const stacks = BOOSTER.overdrive.base + BOOSTER.overdrive.perCharge * spent;
+      // "Surge" upgrade: Overdrive floods the whole team with Amp instead of one carry.
+      if (actor.mods?.overdriveAll && state) {
+        const amps = alliesOf(state, actor).map((a) => applyAmp(a, stacks, actor));
+        return { hits: [], amps, chargeSpent: spent };
+      }
+      const ally = target || bestCarry(actor, state);
       return { hits: [], amps: [applyAmp(ally, stacks, actor)], chargeSpent: spent };
     },
   },

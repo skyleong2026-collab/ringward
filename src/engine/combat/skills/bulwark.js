@@ -1,6 +1,6 @@
 import { BULWARK } from '../dials.js';
 import { alliesOf } from '../state.js';
-import { dealDamage, addBlock } from './combatMath.js';
+import { dealDamage, addBlock, applyRegen } from './combatMath.js';
 
 // ─── Bulwark — "the wall: charge into shields, not damage" (§23) ────────────────
 // Same charge spine as Reactor, but the payoff is DEFENSE: it banks charge and
@@ -23,8 +23,10 @@ export const BULWARK_SKILLS = {
       // with no mod the recipient list is just [actor], byte-identical to before.
       const recipients = (actor.mods?.braceTeam && state) ? alliesOf(state, actor) : [actor];
       const shields = recipients.map((a) => addBlock(a, BULWARK.brace.blockGain, actor));
+      // "Iron Bastion" upgrade: Brace also seeds regen on everyone it shields.
+      const regens = (actor.mods?.braceRegen) ? recipients.map((a) => applyRegen(a, 1)) : [];
       const hits = target ? [dealDamage(target, actor.atk * BULWARK.brace.chipMult, actor)] : [];
-      return { hits, chargeGained: gain, shields };
+      return { hits, chargeGained: gain, shields, regens };
     },
   },
 
