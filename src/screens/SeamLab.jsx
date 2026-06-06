@@ -38,7 +38,7 @@ const PANEL = '#12121c';
 const LINE = '#2a2a3a';
 const SEL = '#9cd1ff';
 const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
-const PATCHUP = 0.3; // between-wave heal (fraction of max HP)
+const PATCHUP = 0.18; // between-wave heal (fraction of max HP) — small, so a run is a war of attrition
 // Input-locking beat after each action — the hit animates, THEN the next actor is
 // asked. Weighted by move size for a Summoners-War-style feel (~1.2–1.9s/turn): a
 // big payoff lands heavier than a chip builder, so the spend FEELS mighty without
@@ -215,8 +215,12 @@ function useViewport() {
 // Difficulty dials (vF-S pass — the starter trio was smashing everything). ATK is the
 // lever that actually threatens the squad (low enemy ATK = nobody dies = trivial), so
 // it's bumped hardest, with a steeper depth curve. All one-line, feel-check freely.
-const D_HP = (d) => 1 + 0.18 * (d - 1);   // depth 1 → ×1.0, depth 8 → ×2.26
-const D_ATK = (d) => 1 + 0.14 * (d - 1);  // depth 1 → ×1.0, depth 8 → ×1.98
+// Difficulty dials (vF-W pass — base starters were still clearing without upgrades). The
+// curve is steeper now (so deep rings are a real wall) and the base bumped so even the
+// outer ring makes you sweat — though it stays beatable, since you bootstrap your first
+// Cores there. Paired with a smaller between-wave patch-up so damage actually accrues.
+const D_HP = (d) => 1 + 0.22 * (d - 1);   // depth 1 → ×1.0, depth 8 → ×2.54
+const D_ATK = (d) => 1 + 0.18 * (d - 1);  // depth 1 → ×1.0, depth 8 → ×2.26
 function foe(id, temperament, roleHp, roleAtk, depth, extra = {}) {
   const hp = Math.round(roleHp * D_HP(depth));
   return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth)), ...extra };
@@ -227,14 +231,14 @@ function wavesForGround(g) {
   const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
   return [
     { name: 'Scouts', seed: 101, blurb: `The edge of ${g.name} — a jumpy pair. Warm up, hit fast.`,
-      enemies: () => [ foe(at(0), 'Cautious', 95, 20, d), foe(at(1), 'Cautious', 90, 20, d) ] },
+      enemies: () => [ foe(at(0), 'Cautious', 110, 26, d), foe(at(1), 'Cautious', 105, 26, d) ] },
     { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back hard.',
-      enemies: () => [ foe(at(0), 'Balanced', 145, 32, d), foe(at(1), 'Balanced', 145, 30, d), foe(at(2), 'Balanced', 135, 32, d) ] },
+      enemies: () => [ foe(at(0), 'Balanced', 175, 40, d), foe(at(1), 'Balanced', 175, 38, d), foe(at(2), 'Balanced', 165, 40, d) ] },
     { name: 'The Pack-Lord', seed: 303, blurb: 'The two meanest things in here, paired up. Break through.',
-      enemies: () => [ foe(at(0), 'Greedy', 250, 42, d), foe(at(1), 'Greedy', 185, 52, d) ] },
+      enemies: () => [ foe(at(0), 'Greedy', 300, 50, d), foe(at(1), 'Greedy', 220, 62, d) ] },
     { name: g.boss, boss: true, seed: 404,
       blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
-      enemies: () => [ foe(at(0), 'Greedy', 450, 58, d, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 200, 20, d, { name: 'Tender' }) ] },
+      enemies: () => [ foe(at(0), 'Greedy', 540, 68, d, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 240, 24, d, { name: 'Tender' }) ] },
   ];
 }
 const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
@@ -1674,6 +1678,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
   const [targetChoice, setTargetChoice] = useState(null); // who's tentatively selected on the target-pick screen (confirm to commit)
+  const [upgradeChoice, setUpgradeChoice] = useState(null); // which upgrade is tentatively selected (confirm to commit)
   const [cores, setCores] = useState(loadCores); // {creatureId: unspent Cores ⬡} — permanent
   const [treeAlloc, setTreeAlloc] = useState(loadTreeAlloc); // {creatureId: [nodeId]} unlocked — permanent
   const [treeEquip, setTreeEquip] = useState(loadEquip); // {creatureId: [nodeId]} equipped loadout
@@ -1780,7 +1785,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     });
     const out = [];
     for (let k = 0; k < offerCount && pool.length; k++) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0].id);
-    setOffer(out);
+    setOffer(out); setUpgradeChoice(null); // fresh choice each upgrade screen
   }
 
   function startWave(idx, sq, mods) {
@@ -1878,6 +1883,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
   function applyUpgrade(up) {
     sfx.upgradePick();
+    setUpgradeChoice(null);
     if (up.scope === 'unit') {
       // Unit-scope: pause and ask the player to pick which creature gets this bend.
       setPendingUpgrade(up);
@@ -1910,7 +1916,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCaughtNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2392,18 +2398,27 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>{nextWave.blurb}</div>
         </div>
         <AutoToggle auto={auto} setAuto={setAuto} />
+        {/* Tap an upgrade to SELECT it (highlights), then CONFIRM — so a whole-squad / AOE
+            pick can't be committed by a stray tap that starts the next wave. */}
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
           {offer.map((id) => {
             const up = UPGRADE_BY_ID[id];
+            const chosen = upgradeChoice === id;
+            const aoe = up.scope !== 'unit'; // squad-wide / AOE upgrade
             return (
-              <button key={id} onClick={() => applyUpgrade(up)} style={{ textAlign: 'center', cursor: 'pointer', borderRadius: 14, padding: '20px 14px', background: PANEL, border: `2px solid ${up.color}`, boxShadow: `0 0 14px ${up.color}33` }}>
+              <button key={id} onClick={() => setUpgradeChoice(id)} style={{ textAlign: 'center', cursor: 'pointer', borderRadius: 14, padding: '20px 14px', background: chosen ? '#16202e' : PANEL, border: `${chosen ? 3 : 2}px solid ${up.color}`, boxShadow: chosen ? `0 0 20px ${up.color}77` : `0 0 14px ${up.color}33` }}>
                 <div style={{ fontSize: 36, lineHeight: 1 }}>{up.icon}</div>
-                <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}</div>
+                <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}{chosen && ' ✓'}</div>
+                <div style={{ fontSize: 9, fontWeight: 900, color: aoe ? '#9be7ff' : DIM, letterSpacing: 0.5, marginTop: 3 }}>{aoe ? '💥 WHOLE SQUAD' : '🎯 ONE CREATURE'}</div>
                 <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 6 }}>{up.desc}</div>
               </button>
             );
           })}
         </div>
+        <button onClick={() => { if (upgradeChoice) applyUpgrade(UPGRADE_BY_ID[upgradeChoice]); }} disabled={!upgradeChoice}
+          style={{ width: '100%', marginTop: 14, padding: '14px 0', borderRadius: 12, border: 'none', background: upgradeChoice ? ACCENT : '#222', color: upgradeChoice ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 0.5, cursor: upgradeChoice ? 'pointer' : 'default' }}>
+          {upgradeChoice ? ((UPGRADE_BY_ID[upgradeChoice].scope !== 'unit') ? `CONFIRM ${UPGRADE_BY_ID[upgradeChoice].name} → ${nextWave.name}` : `CONFIRM — choose who gets ${UPGRADE_BY_ID[upgradeChoice].name} →`) : 'TAP AN UPGRADE ABOVE'}
+        </button>
       </div>
     );
   }
