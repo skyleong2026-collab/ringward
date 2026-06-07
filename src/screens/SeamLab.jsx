@@ -2146,6 +2146,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [relicDrop, setRelicDrop] = useState(null);        // the relic you chose this clear (won-screen reveal)
   const [showVault, setShowVault] = useState(false);       // the relic VAULT overlay — the full collection to chase
   const [showCodex, setShowCodex] = useState(false);       // THE CHRONICLE — a lore codex that fills as you climb
+  const [homeTab, setHomeTab] = useState('raid');          // home shell page: raid | forge | relics | holdfast
+  const [showSettings, setShowSettings] = useState(false); // ⚙ settings menu overlay (music/auto-pick/beta/reset)
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
@@ -2856,350 +2858,457 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
+    const HOME_TABS = [
+      ['raid', '⚔', 'Raid'],
+      ['forge', '⚒', 'Forge'],
+      ['relics', '✦', 'Relics'],
+      ['holdfast', '🏚', 'Holdfast'],
+    ];
+    const tabTitle = { raid: 'Take the Approach', forge: 'The Cracked Forge', relics: 'Relics', holdfast: 'The Holdfast' }[homeTab];
     return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 8 }}>
-          <button onClick={() => { sfx.resume(); setShowIntro(true); }}
-            title="Watch the opening again"
-            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
-            ❖ The Story
-          </button>
-          <button onClick={() => setShowCodex(true)}
-            title="The Chronicle — every story fragment you've found, in one place"
-            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
-            📖 Chronicle
-          </button>
-          <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
-            title={music ? 'Ambient music on' : 'Ambient music off'}
-            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: `1px solid ${music ? '#4a3a66' : '#33333f'}`, background: music ? '#160f1d' : 'transparent', color: music ? '#cba6ff' : '#777' }}>
-            {music ? '🔊 Music' : '🔇 Music'}
-          </button>
-          <button onClick={() => setAutoPick(!autoPick)}
-            title="Auto-pick upgrades & events on rings you've ALREADY cleared (farming). Never on a fresh ring — the climb stays hands-on."
-            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: `1px solid ${autoPick ? '#2a5a8a' : '#33333f'}`, background: autoPick ? '#0d1622' : 'transparent', color: autoPick ? '#9be7ff' : '#777' }}>
-            {autoPick ? '⏩ Auto-pick' : '⏩ Auto-pick off'}
+      <div style={{ paddingBottom: 84 }}>
+        {/* ── Top utility bar: page title + NG+ pill + ⚙ settings ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', letterSpacing: 0.5 }}>{tabTitle}</span>
+          {crossing > 0 && (
+            <span title={`The Deep Crossing — every ring +${Math.round((crossMult(crossing) - 1) * 100)}% stronger`}
+              style={{ fontSize: T.micro, fontWeight: 900, color: '#cba6ff', background: '#1a0f2a', border: '1px solid #6a4a9a', borderRadius: 999, padding: '3px 9px' }}>
+              ✦ Crossing {roman(crossing)}
+            </span>
+          )}
+          <button onClick={() => setShowSettings(true)} title="Settings — music, auto-pick, dev tools"
+            style={{ marginLeft: 'auto', fontSize: T.body, lineHeight: 1, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, cursor: 'pointer', border: `1px solid ${LINE}`, background: PANEL, color: '#cfcfda' }}>
+            ⚙
           </button>
         </div>
-        {/* ── NG+ banner: which crossing you're on (rings reform harder past the Drop). ── */}
-        {crossing > 0 && (
-          <div style={{ background: 'linear-gradient(90deg, #1a0f2a, #150d22)', border: '1.5px solid #6a4a9a', borderRadius: 12, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 22 }}>✦</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff', letterSpacing: 0.5 }}>THE DEEP CROSSING · {roman(crossing)}</div>
-              <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.4 }}>You stepped through the Drop {crossing === 1 ? 'once' : `${crossing} times`}. Every ring is reformed <b style={{ color: '#cba6ff' }}>+{Math.round((crossMult(crossing) - 1) * 100)}% stronger</b>. Reach the Drop again to climb deeper into his story.</div>
+
+        {/* ═══════════════ RAID — the play loop ═══════════════ */}
+        {homeTab === 'raid' && (
+          <>
+            {/* Compact Holdfast progress strip → taps through to the full Holdfast page. */}
+            {(() => {
+              const ringsToDrop = HOLDFAST_MAX - reclaimed;
+              return (
+                <button onClick={() => setHomeTab('holdfast')}
+                  style={{ width: '100%', textAlign: 'left', background: 'linear-gradient(180deg,#160f1d,#0e0a14)', border: '1px solid #4a3a66', borderRadius: 10, padding: '8px 12px', marginBottom: 14, cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 13 }}>🏚</span>
+                    {HOLDFAST_STAGES.map((s) => {
+                      const done = s.depth <= reclaimed;
+                      const frontier = s.depth === reclaimed + 1;
+                      return (
+                        <div key={s.depth} style={{ flex: 1, height: 7, borderRadius: 3,
+                          background: done ? '#b06bff' : frontier ? '#3a2a52' : '#1c1726',
+                          border: frontier ? '1px solid #7a5aa0' : '1px solid transparent',
+                          boxShadow: done ? '0 0 6px #b06bff88' : 'none' }} />
+                      );
+                    })}
+                    <span style={{ fontSize: 13 }}>✦</span>
+                  </div>
+                  <div style={{ fontSize: T.micro, color: '#9a7fc0', fontWeight: 700, marginTop: 5 }}>
+                    {ringsToDrop > 0
+                      ? <>The Drop lies <b style={{ color: '#eadcff' }}>{ringsToDrop} ring{ringsToDrop !== 1 ? 's' : ''}</b> inward · tap for the Holdfast →</>
+                      : <span style={{ color: '#eadcff' }}>The door is open — and waiting. Tap for the Holdfast →</span>}
+                  </div>
+                </button>
+              );
+            })()}
+            <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>
+              Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span>
+              <span style={{ float: 'right', fontSize: T.micro, color: DIM, fontWeight: 700, lineHeight: '22px' }}>{stable.length}/{COMBAT_ROSTER.length} caught</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              {COMBAT_ROSTER.filter((c) => stable.includes(c.id)).map((c) => {
+                const ti = TYPE_INFO[c.type];
+                const rar = rarityOf(c.id); const tnf = RARITY_INFO[rar]; const tm = tnf.mult; // rarity power
+                const on = picked.includes(c.id);
+                const full = !on && picked.length >= 3;
+                const cBal = cores[c.id] || 0;
+                const nodeCount = (treeAlloc[c.id] || []).length;
+                const hasTree = !!treeForCreature(c.id);
+                return (
+                  <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button onClick={() => toggle(c.id)} disabled={full}
+                      style={{ flex: 1, textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
+                        background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+                      <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+                        <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
+                            <span style={{ fontSize: 9, fontWeight: 900, color: tnf.color, letterSpacing: 0.3 }} title={`${rar}`}>{tnf.pips}</span>
+                            {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
+                          </div>
+                          <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: tnf.color, fontWeight: 700 }}>· {rar}</span></div>
+                          <div style={{ fontSize: T.micro, color: DIM }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: tnf.color, fontWeight: 800 }}> · ×{tm.toFixed(2)}</span>}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''}</span>}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
+                    </button>
+                    <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
+                        background: cBal > 0 ? '#101a22' : '#0c0c14', border: `1px solid ${cBal > 0 ? '#2a4a5a' : LINE}`, opacity: hasTree ? 1 : 0.4 }}>
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: hasTree ? '#9be7ff' : DIM }}>🌳 PATHS</span>
+                      {hasTree && <span style={{ fontSize: T.micro, fontWeight: 800, color: cBal > 0 ? '#9be7ff' : DIM }}>{cBal} ⬡{cBal > 0 ? ' to spend' : ''}</span>}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {(() => {
+              // The ring picker is the RUN selector — it always shows (even with everything
+              // caught, you still pick a ring to raid for Cores + boss clears that open the
+              // way inward). It just stops being a "hunt" once the catch pool is empty.
+              const lockedIds = COMBAT_ROSTER.map((c) => c.id).filter((id) => !stable.includes(id));
+              const lockedSet = new Set(lockedIds);
+              // Uncaught creatures this ground leans toward — what you're hunting for.
+              const targetsOf = (g) => g.biasIds.filter((id) => lockedSet.has(id));
+              // The ring you'll actually hunt — clamped to what you've unlocked (strict inward).
+              const sel = accessibleGround(ground, accessDepth);
+              const selTargets = targetsOf(sel);
+              return (
+                <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>🧭</span>
+                    <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO RAID</div>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length > 0 ? `${lockedIds.length} grunling${lockedIds.length !== 1 ? 's' : ''} still out there` : 'all grunlings caught'}</span>
+                  </div>
+                  {/* The map — tap a ring to select where you raid. */}
+                  <RingMap accessDepth={accessDepth} selectedId={sel.id} clears={clears}
+                    onSelect={(id) => { setGround(id); saveGround(id); }} />
+                  {/* The selected ring, spelled out (the map shows state by colour; this is the detail). */}
+                  {(() => {
+                    const diff = diffOf(sel.depth + crossing); // crossing-aware: rings read harder in NG+
+                    const n = clears[sel.id] || 0; const m = repeatMult(n);
+                    const ringRars = [...new Set(sel.biasIds.map(rarityOf))].sort((a, b) => RARITY_INFO[b].mult - RARITY_INFO[a].mult);
+                    return (
+                      <div style={{ background: '#10131c', border: `1px solid ${SEL}33`, borderRadius: 10, padding: '9px 11px', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: T.small, fontWeight: 900, color: '#eaf2ff' }}>{sel.name}</span>
+                          <span style={{ fontSize: 10 }}>{ringRars.map((r) => <span key={r} title={r} style={{ color: RARITY_INFO[r].color, fontWeight: 900, marginRight: 1 }}>{RARITY_INFO[r].pips}</span>)}</span>
+                          <span style={{ fontSize: T.micro, fontWeight: 800, color: diff.color }}>· {diff.label}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `farmed ×${n} — Cores ×${m.toFixed(2)}`}</span>
+                        </div>
+                        <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
+                          Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {selTargets.map((id) => CREATURE_LORE[id] && (
+                    <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
+                      <span style={{ color: '#cdd', fontWeight: 700 }}>{COMBAT_CREATURES[id].name}:</span>{' '}
+                      <span style={{ color: '#a99' }}>“{CREATURE_LORE[id].rumor}”</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {(() => {
+              // Apex quarry — creatures you're gathering sigils toward. Full bar → challenge.
+              const gathering = [...APEX_IDS].filter((id) => !stable.includes(id) && (sigils[id] || 0) > 0);
+              if (gathering.length === 0) return null;
+              const ringOf = (id) => HUNTING_GROUNDS.find((g) => g.biasIds.includes(id));
+              return (
+                <div style={{ borderRadius: 10, border: `1px solid #2a3a5a`, background: '#0a1018', padding: '12px 14px', marginBottom: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>★</span>
+                    <div style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>APEX QUARRY</div>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>gather sigils, then win it over</span>
+                  </div>
+                  {gathering.map((id) => {
+                    const ac = COMBAT_CREATURES[id]; const ati = TYPE_INFO[ac.type];
+                    const have = Math.min(APEX_SIGILS, sigils[id] || 0);
+                    const ready = have >= APEX_SIGILS;
+                    const ring = ringOf(id);
+                    return (
+                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: `1px solid #18203044` }}>
+                        <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={40} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {ac.type}</span></div>
+                          <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800 }}>{'✦'.repeat(have)}{'·'.repeat(APEX_SIGILS - have)} <span style={{ color: DIM, fontWeight: 600 }}>{have}/{APEX_SIGILS}{!ready && ring ? ` — hunt ${ring.name}` : ''}</span></div>
+                        </div>
+                        {ready && (
+                          <button onClick={() => picked.length >= 2 && startChallenge(id)} disabled={picked.length < 2}
+                            title={picked.length < 2 ? 'Pick at least 2 creatures first' : `Challenge ${ac.name}`}
+                            style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 9, border: `1.5px solid ${picked.length >= 2 ? ati.accent : LINE}`,
+                              background: picked.length >= 2 ? `${ati.accent}22` : '#111', color: picked.length >= 2 ? ati.accent : DIM,
+                              fontSize: T.small, fontWeight: 900, cursor: picked.length >= 2 ? 'pointer' : 'default', letterSpacing: 0.5 }}>
+                            ⚔ CHALLENGE
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {gathering.some((id) => (sigils[id] || 0) >= APEX_SIGILS) && picked.length < 2 && (
+                    <div style={{ fontSize: T.micro, color: ACCENT, marginTop: 8, fontWeight: 700 }}>Pick a squad above, then call out your challenge.</div>
+                  )}
+                </div>
+              );
+            })()}
+            {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth + crossing); return (
+            <button onClick={startRun} disabled={picked.length < 2}
+              style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
+              {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
+            </button>
+            ); })()}
+          </>
+        )}
+
+        {/* ═══════════════ FORGE — spend banked slag on a permanent edge ═══════════════ */}
+        {homeTab === 'forge' && (
+          <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: T.sub, color: '#cdb6ff', fontWeight: 900, letterSpacing: 0.5 }}>⚒ THE FORGE</div>
+              <div style={{ fontSize: T.small, fontWeight: 800, color: '#c9c98a' }}>⚒ {slag} slag</div>
+            </div>
+            <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Slag you bank from runs buys a <b style={{ color: '#cdb6ff' }}>permanent</b> edge — it carries into every run from here on. This is what a run leaves behind.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+              {PERKS.map((p) => {
+                const have = owned.includes(p.id);
+                const afford = slag >= p.cost;
+                return (
+                  <button key={p.id} onClick={() => buyPerk(p)} disabled={have || !afford}
+                    style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: have || !afford ? 'default' : 'pointer',
+                      background: have ? '#10231a' : PANEL, border: `1.5px solid ${have ? WIN : afford ? `${p.color}99` : LINE}`, opacity: !have && !afford ? 0.5 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                      <span style={{ fontSize: T.body }}>{p.icon}</span>
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: have ? WIN : p.color }}>{p.name}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: have ? WIN : afford ? '#c9c98a' : DIM }}>{have ? '✓ OWNED' : `${p.cost} ⚒`}</span>
+                    </div>
+                    <div style={{ fontSize: T.micro, color: have ? '#bfe8cf' : '#9a9aaa', lineHeight: 1.35 }}>{p.desc}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
-        {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
-        {(() => {
-          const ringsToDrop = HOLDFAST_MAX - reclaimed;
-          const latest = stageAtDepth(reclaimed);   // most recent beat (null before any clear)
-          const next = stageAtDepth(reclaimed + 1);  // the part still under the blight
-          const boons = HOLDFAST_STAGES.filter((s) => s.depth <= reclaimed);
-          return (
-            <div style={{ background: 'linear-gradient(180deg,#160f1d,#0e0a14)', border: '1px solid #4a3a66', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>🏚 THE HOLDFAST</span>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#9a7fc0' }}>
-                  {reclaimed === 0 ? 'half-swallowed by the blight' : reclaimed >= HOLDFAST_MAX ? 'reclaimed — you stand at the Drop' : `reclaimed ${reclaimed}/${HOLDFAST_MAX}`}
-                </span>
+
+        {/* ═══════════════ RELICS — found loot, equip a kit ═══════════════ */}
+        {homeTab === 'relics' && (
+          <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 vault {relics.length}/{RELICS.length}</button>
+                <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
               </div>
-              {/* destination bar: the rim → 8 rings inward → the Drop */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '10px 0 6px' }}>
-                <span style={{ fontSize: 13 }} title="The rim — your home">🏚</span>
-                {HOLDFAST_STAGES.map((s) => {
-                  const done = s.depth <= reclaimed;
-                  const frontier = s.depth === reclaimed + 1;
+            </div>
+            <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</div>
+            {(() => { const sets = activeRelicSets(relicKit); return sets.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {sets.map((s) => (
+                  <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: T.micro, fontWeight: 800, color: '#ffe08a', background: '#231d0e', border: '1px solid #6a5a2a', borderRadius: 999, padding: '3px 9px' }}>
+                    ⚜ {s.icon} {s.name} set — {s.desc}
+                  </span>
+                ))}
+              </div>
+            ); })()}
+            {relics.length === 0 ? (
+              <div style={{ fontSize: T.small, color: DIM, fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>No relics yet. Beat a ring's boss to find your first.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+                {RELICS.filter((r) => relics.includes(r.id)).map((r) => {
+                  const eq = relicKit.includes(r.id);
+                  const full = !eq && relicKit.length >= RELIC_SLOTS;
+                  const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
                   return (
-                    <div key={s.depth} title={done ? `${s.part} — reclaimed` : `${s.part} — still blighted`}
-                      style={{ flex: 1, height: 9, borderRadius: 3,
-                        background: done ? '#b06bff' : frontier ? '#3a2a52' : '#1c1726',
-                        border: frontier ? '1px solid #7a5aa0' : '1px solid transparent',
-                        boxShadow: done ? '0 0 6px #b06bff88' : 'none' }} />
+                    <button key={r.id} onClick={() => toggleRelic(r.id)} disabled={full}
+                      title={r.lore}
+                      style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
+                        background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                        <RelicIcon r={r} size={T.body} />
+                        <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
+                      </div>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
+                      <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
+                    </button>
                   );
                 })}
-                <span style={{ fontSize: 13 }} title="The Drop — the destination">✦</span>
-              </div>
-              <div style={{ fontSize: T.small, color: '#bfa8da', fontWeight: 700 }}>
-                {ringsToDrop > 0
-                  ? <>The Drop lies <b style={{ color: '#eadcff' }}>{ringsToDrop} ring{ringsToDrop !== 1 ? 's' : ''}</b> inward. {next && <span style={{ color: '#8f78b0' }}>Take {next.part === "The Drop's Edge" ? 'the last ring' : `ring ${next.depth}`} to reclaim <b style={{ color: '#cba6ff' }}>{next.part}</b>.</span>}</>
-                  : <span style={{ color: '#eadcff' }}>The rings are walked. The door is open — and waiting.</span>}
-              </div>
-              {latest && <div style={{ fontSize: T.micro, color: '#9a7fc0', fontStyle: 'italic', lineHeight: 1.5, marginTop: 6 }}>“{latest.beat.replace(/^"|"$/g, '')}”</div>}
-              {boons.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
-                  {boons.map((s) => (
-                    <span key={s.depth} title={s.boon.desc} style={{ fontSize: T.micro, fontWeight: 800, color: '#cba6ff', background: '#0e0a14', border: '1px solid #4a3a66', borderRadius: 7, padding: '3px 7px' }}>
-                      {s.boon.icon} {s.boon.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-        <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-          <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
-          <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
-            Four trials guard each ring — clear them in one push and the approach is yours. Beat a ring's boss and the next ring <b style={{ color: '#9be7ff' }}>inward</b> opens, with stronger, higher-tier creatures to win over. Wounds carry between fights; you only patch up a little. Choose who goes in.
-          </div>
-        </div>
-        {/* ── β BETA: a removable dev switch — fast-forward the gate for content testing. ── */}
-        {BETA_AVAILABLE && (
-          <div style={{ border: `1px dashed ${beta ? '#ff5cf0' : '#33333f'}`, background: beta ? '#190a17' : '#0b0b11', borderRadius: 10, padding: '9px 12px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => { const b = !beta; setBeta(b); saveBeta(b); }}
-                style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 7, cursor: 'pointer',
-                  border: `1.5px solid ${beta ? '#ff5cf0' : '#444'}`, background: beta ? '#ff5cf022' : 'transparent', color: beta ? '#ff9cf5' : '#888' }}>
-                β BETA · {beta ? 'ON' : 'OFF'}
-              </button>
-              <span style={{ fontSize: T.micro, color: beta ? '#ff9cf5' : '#777', fontWeight: 700 }}>
-                {beta ? '⚠ TEST MODE — every ring open. Turn off to play the real gated build.' : 'Dev fast-forward — unlock all rings + grants for content testing.'}
-              </span>
-            </div>
-            {beta && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                {[
-                  ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
-                  ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
-                  ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
-                  ['Reset ALL progress', () => {
-                    const st = [...STARTER_IDS];
-                    setUnlocked(1); saveUnlocked(1);
-                    setReclaimed(0); saveReclaimed(0);           // the Holdfast falls back to the blight
-                    setStable(st); saveStable(st);
-                    setClears({}); saveClears({});
-                    setSigils({}); saveSigils({});
-                    setPity(0); savePity(0);
-                    setCores({}); saveCores({});                 // wipe the OP trees — Cores,
-                    setTreeAlloc({}); saveTreeAlloc({});          // unlocked nodes,
-                    setTreeEquip({}); saveEquip({});              // equipped loadout,
-                    setTreeRanks({}); saveRanks({});              // and node ranks.
-                    setOwned([]); savePerks([]);                 // Forge perks too.
-                    setRelics([]); saveRelics([]);               // the relic collection,
-                    setRelicKit([]); saveRelicKit([]);            // the equipped kit,
-                    setCrossing(0); saveCrossing(0);              // and the NG+ crossing level.
-                    setGround('outer-ring'); saveGround('outer-ring');
-                    setPicked([]); saveSquad([]);
-                  }],
-                ].map(([label, fn]) => (
-                  <button key={label} onClick={fn} style={{ fontSize: T.micro, fontWeight: 800, padding: '5px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #5a3a5a', background: '#1f0f1d', color: '#ff9cf5' }}>{label}</button>
-                ))}
               </div>
             )}
           </div>
         )}
-        {/* ── THE FORGE: spend slag banked from past runs on a permanent edge ── */}
-        <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={{ fontSize: T.sub, color: '#cdb6ff', fontWeight: 900, letterSpacing: 0.5 }}>⚒ THE FORGE</div>
-            <div style={{ fontSize: T.small, fontWeight: 800, color: '#c9c98a' }}>⚒ {slag} slag</div>
-          </div>
-          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Slag you bank from runs buys a <b style={{ color: '#cdb6ff' }}>permanent</b> edge — it carries into every run from here on. This is what a run leaves behind.</div>
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
-            {PERKS.map((p) => {
-              const have = owned.includes(p.id);
-              const afford = slag >= p.cost;
+
+        {/* ═══════════════ HOLDFAST — home, progress, lore ═══════════════ */}
+        {homeTab === 'holdfast' && (
+          <>
+            {/* ── NG+ banner: which crossing you're on (rings reform harder past the Drop). ── */}
+            {crossing > 0 && (
+              <div style={{ background: 'linear-gradient(90deg, #1a0f2a, #150d22)', border: '1.5px solid #6a4a9a', borderRadius: 12, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>✦</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff', letterSpacing: 0.5 }}>THE DEEP CROSSING · {roman(crossing)}</div>
+                  <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.4 }}>You stepped through the Drop {crossing === 1 ? 'once' : `${crossing} times`}. Every ring is reformed <b style={{ color: '#cba6ff' }}>+{Math.round((crossMult(crossing) - 1) * 100)}% stronger</b>. Reach the Drop again to climb deeper into his story.</div>
+                </div>
+              </div>
+            )}
+            {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
+            {(() => {
+              const ringsToDrop = HOLDFAST_MAX - reclaimed;
+              const latest = stageAtDepth(reclaimed);   // most recent beat (null before any clear)
+              const next = stageAtDepth(reclaimed + 1);  // the part still under the blight
+              const boons = HOLDFAST_STAGES.filter((s) => s.depth <= reclaimed);
               return (
-                <button key={p.id} onClick={() => buyPerk(p)} disabled={have || !afford}
-                  style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: have || !afford ? 'default' : 'pointer',
-                    background: have ? '#10231a' : PANEL, border: `1.5px solid ${have ? WIN : afford ? `${p.color}99` : LINE}`, opacity: !have && !afford ? 0.5 : 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                    <span style={{ fontSize: T.body }}>{p.icon}</span>
-                    <span style={{ fontSize: T.small, fontWeight: 900, color: have ? WIN : p.color }}>{p.name}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: have ? WIN : afford ? '#c9c98a' : DIM }}>{have ? '✓ OWNED' : `${p.cost} ⚒`}</span>
+                <div style={{ background: 'linear-gradient(180deg,#160f1d,#0e0a14)', border: '1px solid #4a3a66', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>🏚 THE HOLDFAST</span>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#9a7fc0' }}>
+                      {reclaimed === 0 ? 'half-swallowed by the blight' : reclaimed >= HOLDFAST_MAX ? 'reclaimed — you stand at the Drop' : `reclaimed ${reclaimed}/${HOLDFAST_MAX}`}
+                    </span>
                   </div>
-                  <div style={{ fontSize: T.micro, color: have ? '#bfe8cf' : '#9a9aaa', lineHeight: 1.35 }}>{p.desc}</div>
+                  {/* destination bar: the rim → 8 rings inward → the Drop */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '10px 0 6px' }}>
+                    <span style={{ fontSize: 13 }} title="The rim — your home">🏚</span>
+                    {HOLDFAST_STAGES.map((s) => {
+                      const done = s.depth <= reclaimed;
+                      const frontier = s.depth === reclaimed + 1;
+                      return (
+                        <div key={s.depth} title={done ? `${s.part} — reclaimed` : `${s.part} — still blighted`}
+                          style={{ flex: 1, height: 9, borderRadius: 3,
+                            background: done ? '#b06bff' : frontier ? '#3a2a52' : '#1c1726',
+                            border: frontier ? '1px solid #7a5aa0' : '1px solid transparent',
+                            boxShadow: done ? '0 0 6px #b06bff88' : 'none' }} />
+                      );
+                    })}
+                    <span style={{ fontSize: 13 }} title="The Drop — the destination">✦</span>
+                  </div>
+                  <div style={{ fontSize: T.small, color: '#bfa8da', fontWeight: 700 }}>
+                    {ringsToDrop > 0
+                      ? <>The Drop lies <b style={{ color: '#eadcff' }}>{ringsToDrop} ring{ringsToDrop !== 1 ? 's' : ''}</b> inward. {next && <span style={{ color: '#8f78b0' }}>Take {next.part === "The Drop's Edge" ? 'the last ring' : `ring ${next.depth}`} to reclaim <b style={{ color: '#cba6ff' }}>{next.part}</b>.</span>}</>
+                      : <span style={{ color: '#eadcff' }}>The rings are walked. The door is open — and waiting.</span>}
+                  </div>
+                  {latest && <div style={{ fontSize: T.micro, color: '#9a7fc0', fontStyle: 'italic', lineHeight: 1.5, marginTop: 6 }}>“{latest.beat.replace(/^"|"$/g, '')}”</div>}
+                  {boons.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                      {boons.map((s) => (
+                        <span key={s.depth} title={s.boon.desc} style={{ fontSize: T.micro, fontWeight: 800, color: '#cba6ff', background: '#0e0a14', border: '1px solid #4a3a66', borderRadius: 7, padding: '3px 7px' }}>
+                          {s.boon.icon} {s.boon.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
+              <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
+                Four trials guard each ring — clear them in one push and the approach is yours. Beat a ring's boss and the next ring <b style={{ color: '#9be7ff' }}>inward</b> opens, with stronger, higher-tier creatures to win over. Wounds carry between fights; you only patch up a little. Choose who goes in.
+              </div>
+            </div>
+            {/* Story + Chronicle — the lore, in one place. */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { sfx.resume(); setShowIntro(true); }}
+                style={{ flex: 1, fontSize: T.small, fontWeight: 800, padding: '11px 0', borderRadius: 10, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
+                ❖ The Story
+              </button>
+              <button onClick={() => setShowCodex(true)}
+                style={{ flex: 1, fontSize: T.small, fontWeight: 800, padding: '11px 0', borderRadius: 10, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
+                📖 The Chronicle
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════ FIXED BOTTOM NAV ═══════════════ */}
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 10001, background: 'rgba(10,10,16,0.97)', borderTop: `1px solid ${LINE}`, backdropFilter: 'blur(8px)' }}>
+          <div style={{ maxWidth: 920, margin: '0 auto', display: 'flex' }}>
+            {HOME_TABS.map(([key, glyph, label]) => {
+              const on = homeTab === key;
+              return (
+                <button key={key} onClick={() => { sfx.resume(); setHomeTab(key); }}
+                  style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '9px 0 11px', background: on ? '#16202e' : 'transparent', border: 'none', borderTop: `2px solid ${on ? ACCENT : 'transparent'}`, cursor: 'pointer', color: on ? '#eaf2ff' : '#888' }}>
+                  <span style={{ fontSize: 19, lineHeight: 1, opacity: on ? 1 : 0.75 }}>{glyph}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3 }}>{label}</span>
                 </button>
               );
             })}
           </div>
         </div>
-        {/* ── RELICS: the loot you find on the climb. Equip up to RELIC_SLOTS into a run. ── */}
-        <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 vault {relics.length}/{RELICS.length}</button>
-              <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
-            </div>
-          </div>
-          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</div>
-          {(() => { const sets = activeRelicSets(relicKit); return sets.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-              {sets.map((s) => (
-                <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: T.micro, fontWeight: 800, color: '#ffe08a', background: '#231d0e', border: '1px solid #6a5a2a', borderRadius: 999, padding: '3px 9px' }}>
-                  ⚜ {s.icon} {s.name} set — {s.desc}
-                </span>
-              ))}
-            </div>
-          ); })()}
-          {relics.length === 0 ? (
-            <div style={{ fontSize: T.small, color: DIM, fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>No relics yet. Beat a ring's boss to find your first.</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
-              {RELICS.filter((r) => relics.includes(r.id)).map((r) => {
-                const eq = relicKit.includes(r.id);
-                const full = !eq && relicKit.length >= RELIC_SLOTS;
-                const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
-                return (
-                  <button key={r.id} onClick={() => toggleRelic(r.id)} disabled={full}
-                    title={r.lore}
-                    style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
-                      background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                      <RelicIcon r={r} size={T.body} />
-                      <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
-                    </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
-                    <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>
-          Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span>
-          <span style={{ float: 'right', fontSize: T.micro, color: DIM, fontWeight: 700, lineHeight: '22px' }}>{stable.length}/{COMBAT_ROSTER.length} caught</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
-          {COMBAT_ROSTER.filter((c) => stable.includes(c.id)).map((c) => {
-            const ti = TYPE_INFO[c.type];
-            const rar = rarityOf(c.id); const tnf = RARITY_INFO[rar]; const tm = tnf.mult; // rarity power
-            const on = picked.includes(c.id);
-            const full = !on && picked.length >= 3;
-            const cBal = cores[c.id] || 0;
-            const nodeCount = (treeAlloc[c.id] || []).length;
-            const hasTree = !!treeForCreature(c.id);
-            return (
-              <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <button onClick={() => toggle(c.id)} disabled={full}
-                  style={{ flex: 1, textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
-                    background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
-                  <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
-                    <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
-                        <span style={{ fontSize: 9, fontWeight: 900, color: tnf.color, letterSpacing: 0.3 }} title={`${rar}`}>{tnf.pips}</span>
-                        {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
-                      </div>
-                      <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: tnf.color, fontWeight: 700 }}>· {rar}</span></div>
-                      <div style={{ fontSize: T.micro, color: DIM }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: tnf.color, fontWeight: 800 }}> · ×{tm.toFixed(2)}</span>}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''}</span>}</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
-                </button>
-                <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
-                    background: cBal > 0 ? '#101a22' : '#0c0c14', border: `1px solid ${cBal > 0 ? '#2a4a5a' : LINE}`, opacity: hasTree ? 1 : 0.4 }}>
-                  <span style={{ fontSize: T.small, fontWeight: 900, color: hasTree ? '#9be7ff' : DIM }}>🌳 PATHS</span>
-                  {hasTree && <span style={{ fontSize: T.micro, fontWeight: 800, color: cBal > 0 ? '#9be7ff' : DIM }}>{cBal} ⬡{cBal > 0 ? ' to spend' : ''}</span>}
-                </button>
+
+        {/* ═══════════════ ⚙ SETTINGS overlay ═══════════════ */}
+        {showSettings && (
+          <div onClick={() => setShowSettings(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(4,4,8,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 400, maxHeight: '86vh', overflowY: 'auto', background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 16, padding: '18px 18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', letterSpacing: 0.5 }}>⚙ Settings</span>
+                <button onClick={() => setShowSettings(false)} style={{ marginLeft: 'auto', fontSize: T.body, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer', border: `1px solid ${LINE}`, background: PANEL, color: DIM }}>✕</button>
               </div>
-            );
-          })}
-        </div>
-        {(() => {
-          // The ring picker is the RUN selector — it always shows (even with everything
-          // caught, you still pick a ring to raid for Cores + boss clears that open the
-          // way inward). It just stops being a "hunt" once the catch pool is empty.
-          const lockedIds = COMBAT_ROSTER.map((c) => c.id).filter((id) => !stable.includes(id));
-          const lockedSet = new Set(lockedIds);
-          // Uncaught creatures this ground leans toward — what you're hunting for.
-          const targetsOf = (g) => g.biasIds.filter((id) => lockedSet.has(id));
-          // The ring you'll actually hunt — clamped to what you've unlocked (strict inward).
-          const sel = accessibleGround(ground, accessDepth);
-          const selTargets = targetsOf(sel);
-          return (
-            <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 16, lineHeight: 1 }}>🧭</span>
-                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO RAID</div>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length > 0 ? `${lockedIds.length} grunling${lockedIds.length !== 1 ? 's' : ''} still out there` : 'all grunlings caught'}</span>
-              </div>
-              {/* The map — tap a ring to select where you raid. */}
-              <RingMap accessDepth={accessDepth} selectedId={sel.id} clears={clears}
-                onSelect={(id) => { setGround(id); saveGround(id); }} />
-              {/* The selected ring, spelled out (the map shows state by colour; this is the detail). */}
-              {(() => {
-                const diff = diffOf(sel.depth + crossing); // crossing-aware: rings read harder in NG+
-                const n = clears[sel.id] || 0; const m = repeatMult(n);
-                const ringRars = [...new Set(sel.biasIds.map(rarityOf))].sort((a, b) => RARITY_INFO[b].mult - RARITY_INFO[a].mult);
-                return (
-                  <div style={{ background: '#10131c', border: `1px solid ${SEL}33`, borderRadius: 10, padding: '9px 11px', marginBottom: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: T.small, fontWeight: 900, color: '#eaf2ff' }}>{sel.name}</span>
-                      <span style={{ fontSize: 10 }}>{ringRars.map((r) => <span key={r} title={r} style={{ color: RARITY_INFO[r].color, fontWeight: 900, marginRight: 1 }}>{RARITY_INFO[r].pips}</span>)}</span>
-                      <span style={{ fontSize: T.micro, fontWeight: 800, color: diff.color }}>· {diff.label}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `farmed ×${n} — Cores ×${m.toFixed(2)}`}</span>
-                    </div>
-                    <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
-                      Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
-                    </div>
-                  </div>
-                );
-              })()}
-              {selTargets.map((id) => CREATURE_LORE[id] && (
-                <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
-                  <span style={{ color: '#cdd', fontWeight: 700 }}>{COMBAT_CREATURES[id].name}:</span>{' '}
-                  <span style={{ color: '#a99' }}>“{CREATURE_LORE[id].rumor}”</span>
+              {/* Music toggle */}
+              <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, marginBottom: 8, cursor: 'pointer', textAlign: 'left',
+                  border: `1px solid ${music ? '#4a3a66' : LINE}`, background: music ? '#160f1d' : PANEL }}>
+                <span style={{ fontSize: T.sub }}>{music ? '🔊' : '🔇'}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: music ? '#cba6ff' : '#bbb' }}>Ambient Music</div>
+                  <div style={{ fontSize: T.micro, color: DIM }}>A low pad under the climb.</div>
                 </div>
-              ))}
-            </div>
-          );
-        })()}
-        {(() => {
-          // Apex quarry — creatures you're gathering sigils toward. Full bar → challenge.
-          const gathering = [...APEX_IDS].filter((id) => !stable.includes(id) && (sigils[id] || 0) > 0);
-          if (gathering.length === 0) return null;
-          const ringOf = (id) => HUNTING_GROUNDS.find((g) => g.biasIds.includes(id));
-          return (
-            <div style={{ borderRadius: 10, border: `1px solid #2a3a5a`, background: '#0a1018', padding: '12px 14px', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 16, lineHeight: 1 }}>★</span>
-                <div style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>APEX QUARRY</div>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>gather sigils, then win it over</span>
-              </div>
-              {gathering.map((id) => {
-                const ac = COMBAT_CREATURES[id]; const ati = TYPE_INFO[ac.type];
-                const have = Math.min(APEX_SIGILS, sigils[id] || 0);
-                const ready = have >= APEX_SIGILS;
-                const ring = ringOf(id);
-                return (
-                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: `1px solid #18203044` }}>
-                    <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={40} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: T.small, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {ac.type}</span></div>
-                      <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800 }}>{'✦'.repeat(have)}{'·'.repeat(APEX_SIGILS - have)} <span style={{ color: DIM, fontWeight: 600 }}>{have}/{APEX_SIGILS}{!ready && ring ? ` — hunt ${ring.name}` : ''}</span></div>
-                    </div>
-                    {ready && (
-                      <button onClick={() => picked.length >= 2 && startChallenge(id)} disabled={picked.length < 2}
-                        title={picked.length < 2 ? 'Pick at least 2 creatures first' : `Challenge ${ac.name}`}
-                        style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 9, border: `1.5px solid ${picked.length >= 2 ? ati.accent : LINE}`,
-                          background: picked.length >= 2 ? `${ati.accent}22` : '#111', color: picked.length >= 2 ? ati.accent : DIM,
-                          fontSize: T.small, fontWeight: 900, cursor: picked.length >= 2 ? 'pointer' : 'default', letterSpacing: 0.5 }}>
-                        ⚔ CHALLENGE
-                      </button>
-                    )}
+                <span style={{ fontSize: T.micro, fontWeight: 900, color: music ? '#9be7ff' : '#777' }}>{music ? 'ON' : 'OFF'}</span>
+              </button>
+              {/* Auto-pick toggle */}
+              <button onClick={() => setAutoPick(!autoPick)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, marginBottom: 8, cursor: 'pointer', textAlign: 'left',
+                  border: `1px solid ${autoPick ? '#2a5a8a' : LINE}`, background: autoPick ? '#0d1622' : PANEL }}>
+                <span style={{ fontSize: T.sub }}>⏩</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: autoPick ? '#9be7ff' : '#bbb' }}>Auto-pick (farming)</div>
+                  <div style={{ fontSize: T.micro, color: DIM, lineHeight: 1.35 }}>Auto-resolve upgrades & events on rings you've <b>already cleared</b>. Never on a fresh ring — the climb stays hands-on.</div>
+                </div>
+                <span style={{ fontSize: T.micro, fontWeight: 900, color: autoPick ? '#9be7ff' : '#777' }}>{autoPick ? 'ON' : 'OFF'}</span>
+              </button>
+              {/* ── β BETA: a removable dev switch — fast-forward the gate for content testing. ── */}
+              {BETA_AVAILABLE && (
+                <div style={{ border: `1px dashed ${beta ? '#ff5cf0' : '#33333f'}`, background: beta ? '#190a17' : '#0b0b11', borderRadius: 10, padding: '10px 12px', marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => { const b = !beta; setBeta(b); saveBeta(b); }}
+                      style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 7, cursor: 'pointer',
+                        border: `1.5px solid ${beta ? '#ff5cf0' : '#444'}`, background: beta ? '#ff5cf022' : 'transparent', color: beta ? '#ff9cf5' : '#888' }}>
+                      β BETA · {beta ? 'ON' : 'OFF'}
+                    </button>
+                    <span style={{ fontSize: T.micro, color: beta ? '#ff9cf5' : '#777', fontWeight: 700 }}>
+                      {beta ? '⚠ TEST MODE — every ring open. Turn off to play the real gated build.' : 'Dev fast-forward — unlock all rings + grants for content testing.'}
+                    </span>
                   </div>
-                );
-              })}
-              {gathering.some((id) => (sigils[id] || 0) >= APEX_SIGILS) && picked.length < 2 && (
-                <div style={{ fontSize: T.micro, color: ACCENT, marginTop: 8, fontWeight: 700 }}>Pick a squad above, then call out your challenge.</div>
+                  {beta && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {[
+                        ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
+                        ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
+                        ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
+                        ['Reset ALL progress', () => {
+                          const st = [...STARTER_IDS];
+                          setUnlocked(1); saveUnlocked(1);
+                          setReclaimed(0); saveReclaimed(0);           // the Holdfast falls back to the blight
+                          setStable(st); saveStable(st);
+                          setClears({}); saveClears({});
+                          setSigils({}); saveSigils({});
+                          setPity(0); savePity(0);
+                          setCores({}); saveCores({});                 // wipe the OP trees — Cores,
+                          setTreeAlloc({}); saveTreeAlloc({});          // unlocked nodes,
+                          setTreeEquip({}); saveEquip({});              // equipped loadout,
+                          setTreeRanks({}); saveRanks({});              // and node ranks.
+                          setOwned([]); savePerks([]);                 // Forge perks too.
+                          setRelics([]); saveRelics([]);               // the relic collection,
+                          setRelicKit([]); saveRelicKit([]);            // the equipped kit,
+                          setCrossing(0); saveCrossing(0);              // and the NG+ crossing level.
+                          setGround('outer-ring'); saveGround('outer-ring');
+                          setPicked([]); saveSquad([]);
+                        }],
+                      ].map(([label, fn]) => (
+                        <button key={label} onClick={fn} style={{ fontSize: T.micro, fontWeight: 800, padding: '5px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #5a3a5a', background: '#1f0f1d', color: '#ff9cf5' }}>{label}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          );
-        })()}
-        <div style={{ marginBottom: 18 }} />
-        {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth + crossing); return (
-        <button onClick={startRun} disabled={picked.length < 2}
-          style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
-          {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
-        </button>
-        ); })()}
+          </div>
+        )}
       </div>
     );
   }
