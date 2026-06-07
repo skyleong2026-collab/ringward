@@ -448,6 +448,11 @@ const UPGRADES = [
   { id: 'thickhide',  scope: 'squad', icon: '❤️', color: '#ff6b6b',  name: 'Thick Hide',     desc: '+20% max HP for the whole squad.',           apply: (m) => { m.hpMult    *= 1.2; } },
   { id: 'wildfire',   scope: 'squad', icon: '🔥', color: BURN,       name: 'Wildfire',       desc: 'Your Burns land +1 extra stack.',            apply: (m) => { m.burnBonus += 1; } },
   { id: 'overhype',   scope: 'squad', icon: '✦',  color: AMP,        name: 'Overhype',       desc: 'Your Amp lands +1 extra stack.',             apply: (m) => { m.ampBonus  += 1; } },
+  // ── Verb upgrades: squad-wide RULES (not flat stats), via the universal combat verbs.
+  //    Mid-run access to the same mechanics relics grant, so a draft can pivot your build. ──
+  { id: 'firststrike', scope: 'squad', icon: '🎯', color: '#ffd166', name: 'Opening Strike', desc: 'First hit on a full-HP enemy: +25% damage.',  apply: (m) => { m.opener = true; } },
+  { id: 'leech',       scope: 'squad', icon: '🩸', color: '#c83a5a', name: 'Leeching Strikes', desc: 'Heal 12% of all damage you deal.',           apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.12; } },
+  { id: 'killingblow', scope: 'squad', icon: '☠️', color: '#c0c0d8', name: 'Killing Blow',   desc: '+30% damage to enemies already below half HP.', apply: (m) => { m.executioner = (m.executioner || 0) + 0.3; } },
   // ── Move-bend upgrades: scope:'unit' — you PICK which creature gets this, so
   // bends define your carry rather than spreading thin across the squad. Only
   // offered when you brought the matching Type (no dead drafts). ──
