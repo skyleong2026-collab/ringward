@@ -148,6 +148,39 @@ function loadUnlocked() {
 }
 function saveUnlocked(n) { try { localStorage.setItem(UNLOCKED_KEY, String(n)); } catch { /* best-effort */ } }
 
+// ── THE HOLDFAST: the home you return to between runs — your mentor's place at the
+// rim, half-swallowed by the blight. It RECLAIMS one stage each time you beat a ring's
+// boss for the first time (so reclaim depth = deepest ring boss ever beaten, 1..8). Each
+// stage heals a part of the home, drips a fragment of the story (mentor's voice / the
+// blight's truth), and grants ONE standing boon. The boons funnel through the same run
+// mods as perks — opt-in, so combat goldens stay byte-identical. Stage 8 = you stand at
+// the Drop itself: the destination the whole climb points toward.
+const HOLDFAST_STAGES = [
+  { depth: 1, part: 'The Hearth',        boon: { icon: '🔥', name: 'Hearthlight',  desc: '+8% max HP, every run.',                  apply: (m) => { m.hpMult *= 1.08; } },
+    beat: '"You lit it. Good." His voice, first night home. "A holdfast with a cold hearth is just a grave with walls." Three cores he left you, humming on the mantel.' },
+  { depth: 2, part: 'The Storeroom',     boon: { icon: '🌿', name: 'Full Stores',  desc: 'Healing is 25% stronger, every run.',     apply: (m) => { m.healMult *= 1.25; } },
+    beat: 'Behind the fallen gate, his old caches — dried feed, spare core-casings. "Never raid hungry," he used to say. "The blight\'s got nothing but time. Don\'t you forget it."' },
+  { depth: 3, part: 'The Drill-Yard',    boon: { icon: '⚔️', name: 'Old Drills',   desc: '+8% squad damage, every run.',            apply: (m) => { m.dmgMult *= 1.08; } },
+    beat: 'The green seam, where things still grow wrong. He drilled his grunlings here. "Grown, not made — earth and old machine. That glow in their chest is the heart. Mind it."' },
+  { depth: 4, part: "The Menders' Well", boon: { icon: '💧', name: 'Clean Water',  desc: '+6% max HP, every run.',                  apply: (m) => { m.hpMult *= 1.06; } },
+    beat: 'The well still runs clean — the one thing the blight never fouled. "It fell seventy-five years back," he told you once. "Out of a clear sky. We\'ve called it the Drop ever since."' },
+  { depth: 5, part: 'The Watchtower',    boon: { icon: '⚡', name: 'The Watch',    desc: 'One grunling starts each run already Primed.', apply: (m) => { m.chargeStart += 2; } },
+    beat: 'From the tower you can finally see inward — ring on ring, closing like a wound. "He went in," says the wind, or memory. "Past the fifth. Came back wrong. Then went in again."' },
+  { depth: 6, part: 'The Deep Cellar',   boon: { icon: '🗡️', name: 'Cold Edge',    desc: '+8% squad damage, every run.',            apply: (m) => { m.dmgMult *= 1.08; } },
+    beat: "Past the Warden, the cold gets honest. You understand now why he kept climbing. Down here the blight isn't spreading. It's remembering — and it remembers you." },
+  { depth: 7, part: 'The Map-Room',      boon: { icon: '❤️', name: "Hunter's Heart", desc: '+6% max HP, every run.',                 apply: (m) => { m.hpMult *= 1.06; } },
+    beat: 'His last map — every ring marked, annotated, crossed out. Except the center. By the Drop he\'d written one word, twice: "Not it. Not it."' },
+  { depth: 8, part: "The Drop's Edge",   boon: { icon: '✦', name: "The Drop's Edge", desc: '+10% damage AND +10% max HP, every run.', apply: (m) => { m.dmgMult *= 1.10; m.hpMult *= 1.10; } },
+    beat: "Frostbound. The rings end. You stand where he stood. The Drop isn't a crater — it's a door, and it's been open the whole time, waiting on someone to come the rest of the way." },
+];
+const HOLDFAST_MAX = HOLDFAST_STAGES.length; // 8 — reaching the Drop
+const stageAtDepth = (d) => HOLDFAST_STAGES.find((s) => s.depth === d) || null;
+const HOLDFAST_KEY = '8gents_seam_holdfast'; // deepest ring boss ever beaten (0..8) = reclaim depth
+function loadReclaimed() { try { const n = parseInt(localStorage.getItem(HOLDFAST_KEY), 10); return Number.isFinite(n) ? Math.min(HOLDFAST_MAX, Math.max(0, n)) : 0; } catch { return 0; } }
+function saveReclaimed(n) { try { localStorage.setItem(HOLDFAST_KEY, String(n)); } catch { /* best-effort */ } }
+// Fold every reclaimed stage's standing boon into a run's opening mods (mutates m).
+function holdfastMods(reclaimed, m) { HOLDFAST_STAGES.forEach((s) => { if (s.depth <= reclaimed) s.boon.apply(m); }); }
+
 // ── Beta / test switch. Fast-forwards content (unlocks every ring + grant buttons) so
 // the deep game can be tested from the start; toggle it OFF to play the real gated build.
 // Flip BETA_AVAILABLE to false to strip the panel entirely from a public deploy.
@@ -370,10 +403,13 @@ function loadStable() {
 function saveStable(ids) {
   try { localStorage.setItem(STABLE_KEY, JSON.stringify(ids)); } catch { /* best-effort */ }
 }
-// Build the starting mods for a run from the perks you own (vs. EMPTY_MODS before).
-function perkBaseMods(owned) {
+// Build the starting mods for a run from the perks you own AND the Holdfast stages
+// you've reclaimed (vs. EMPTY_MODS before). Both are opt-in mods — goldens never set
+// them, so combat stays byte-identical.
+function perkBaseMods(owned, reclaimed = 0) {
   const m = { ...EMPTY_MODS };
   PERKS.forEach((p) => { if (owned.includes(p.id)) p.apply(m); });
+  holdfastMods(reclaimed, m);
   return m;
 }
 
@@ -1697,6 +1733,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [beta, setBeta] = useState(loadBeta); // test switch — fast-forwards the gate
   const accessDepth = beta ? 8 : unlocked; // the deepest ring you may enter right now
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
+  const [reclaimed, setReclaimed] = useState(loadReclaimed); // deepest ring boss ever beaten (0..8) = Holdfast reclaim depth
+  const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
@@ -1846,6 +1884,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         if (!beta && hunted.depth === unlocked && unlocked < 8) {
           const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); setUnlockedNow(nd);
         } else setUnlockedNow(null);
+        // THE HOLDFAST reclaims a stage the first time you beat a ring's boss (works in
+        // beta too — pushing deeper heals more of the home + drips the next story beat).
+        if (hunted.depth > reclaimed) {
+          setReclaimed(hunted.depth); saveReclaimed(hunted.depth);
+          setHoldfastNow(stageAtDepth(hunted.depth));
+        } else setHoldfastNow(null);
         // PULL — a weighted draw from the ring (new creature, or a dupe → Cores).
         const pull = pullFrom(hunted, stable, accessDepth, pity);
         if (pull) {
@@ -1886,7 +1930,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
     setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
-    const base = perkBaseMods(owned); // permanent perks set the run's opening mods
+    const base = perkBaseMods(owned, reclaimed); // perks + reclaimed Holdfast boons set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
     rollOffer(); setRunPhase('upgrade');
@@ -1894,7 +1938,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // ── Apex challenge: a one-off fight against a gathered apex creature. Win → recruit. ──
   function startChallenge(apexId) {
     sfx.resume();
-    const base = perkBaseMods(owned);
+    const base = perkBaseMods(owned, reclaimed);
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     const aDefs = sq.map((m) => playerDef(m, base, treeModsFor(m.id, treeEquip, treeRanks)));
     const apex = COMBAT_CREATURES[apexId];
@@ -1952,7 +1996,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2143,6 +2187,54 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   if (runPhase === 'pick') {
     return (
       <div>
+        {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
+        {(() => {
+          const ringsToDrop = HOLDFAST_MAX - reclaimed;
+          const latest = stageAtDepth(reclaimed);   // most recent beat (null before any clear)
+          const next = stageAtDepth(reclaimed + 1);  // the part still under the blight
+          const boons = HOLDFAST_STAGES.filter((s) => s.depth <= reclaimed);
+          return (
+            <div style={{ background: 'linear-gradient(180deg,#160f1d,#0e0a14)', border: '1px solid #4a3a66', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>🏚 THE HOLDFAST</span>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#9a7fc0' }}>
+                  {reclaimed === 0 ? 'half-swallowed by the blight' : reclaimed >= HOLDFAST_MAX ? 'reclaimed — you stand at the Drop' : `reclaimed ${reclaimed}/${HOLDFAST_MAX}`}
+                </span>
+              </div>
+              {/* destination bar: the rim → 8 rings inward → the Drop */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '10px 0 6px' }}>
+                <span style={{ fontSize: 13 }} title="The rim — your home">🏚</span>
+                {HOLDFAST_STAGES.map((s) => {
+                  const done = s.depth <= reclaimed;
+                  const frontier = s.depth === reclaimed + 1;
+                  return (
+                    <div key={s.depth} title={done ? `${s.part} — reclaimed` : `${s.part} — still blighted`}
+                      style={{ flex: 1, height: 9, borderRadius: 3,
+                        background: done ? '#b06bff' : frontier ? '#3a2a52' : '#1c1726',
+                        border: frontier ? '1px solid #7a5aa0' : '1px solid transparent',
+                        boxShadow: done ? '0 0 6px #b06bff88' : 'none' }} />
+                  );
+                })}
+                <span style={{ fontSize: 13 }} title="The Drop — the destination">✦</span>
+              </div>
+              <div style={{ fontSize: T.small, color: '#bfa8da', fontWeight: 700 }}>
+                {ringsToDrop > 0
+                  ? <>The Drop lies <b style={{ color: '#eadcff' }}>{ringsToDrop} ring{ringsToDrop !== 1 ? 's' : ''}</b> inward. {next && <span style={{ color: '#8f78b0' }}>Take {next.part === "The Drop's Edge" ? 'the last ring' : `ring ${next.depth}`} to reclaim <b style={{ color: '#cba6ff' }}>{next.part}</b>.</span>}</>
+                  : <span style={{ color: '#eadcff' }}>The rings are walked. The door is open — and waiting.</span>}
+              </div>
+              {latest && <div style={{ fontSize: T.micro, color: '#9a7fc0', fontStyle: 'italic', lineHeight: 1.5, marginTop: 6 }}>“{latest.beat.replace(/^"|"$/g, '')}”</div>}
+              {boons.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                  {boons.map((s) => (
+                    <span key={s.depth} title={s.boon.desc} style={{ fontSize: T.micro, fontWeight: 800, color: '#cba6ff', background: '#0e0a14', border: '1px solid #4a3a66', borderRadius: 7, padding: '3px 7px' }}>
+                      {s.boon.icon} {s.boon.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
           <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
           <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
@@ -2171,6 +2263,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   ['Reset ALL progress', () => {
                     const st = [...STARTER_IDS];
                     setUnlocked(1); saveUnlocked(1);
+                    setReclaimed(0); saveReclaimed(0);           // the Holdfast falls back to the blight
                     setStable(st); saveStable(st);
                     setClears({}); saveClears({});
                     setSigils({}); saveSigils({});
@@ -2562,6 +2655,20 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open, with rarer creatures to pull within.</div>
             </div>
           ); })()}
+          {holdfastNow && (
+            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: '#160f1d', border: '2px solid #b06bff', boxShadow: '0 0 16px #b06bff33', textAlign: 'left' }}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>🏚 THE HOLDFAST RECLAIMS</div>
+              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '3px 0 6px' }}>{holdfastNow.part} <span style={{ fontSize: T.micro, fontWeight: 700, color: '#9a7fc0' }}>· stage {holdfastNow.depth}/{HOLDFAST_MAX}</span></div>
+              <div style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.5, fontStyle: 'italic' }}>{holdfastNow.beat}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 10px', borderRadius: 9, background: '#0e0a14', border: '1px solid #4a3a66' }}>
+                <span style={{ fontSize: T.body }}>{holdfastNow.boon.icon}</span>
+                <div>
+                  <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff' }}>Standing boon — {holdfastNow.boon.name}</div>
+                  <div style={{ fontSize: T.micro, color: '#bfa8da' }}>{holdfastNow.boon.desc}</div>
+                </div>
+              </div>
+            </div>
+          )}
           {runRepeat < 1 && (
             <div style={{ fontSize: T.micro, color: '#b58a3a', margin: '8px 0', fontWeight: 700 }}>↻ Repeat clear — Cores paid at ×{runRepeat.toFixed(2)}. Push a fresh ring inward for full ⬡.</div>
           )}
