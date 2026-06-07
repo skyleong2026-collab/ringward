@@ -46,7 +46,10 @@ export function dealDamage(target, amount, actor) {
   // Vulnerability (Hexer curse): a cursed target takes more from EVERY source. Opt-in —
   // no creature carries vuln by default, so this is ×1 and goldens are byte-identical.
   const vuln = 1 + VULN.perStack * (target.statuses.vuln || 0);
-  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult') * shatter * opener * apex * vuln * noDirect));
+  // "Executioner" (relic, vF-AJ): the mirror of opener — you hit HARDER against a target
+  // already below half HP, to close out wounded enemies. Opt-in (default 1) → golden-safe.
+  const executioner = (actor?.mods?.executioner && target.hp < target.maxHp * 0.5) ? (1 + actor.mods.executioner) : 1;
+  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult') * shatter * opener * apex * executioner * vuln * noDirect));
   let remaining = dmg;
   const blocked = Math.min(target.statuses.block || 0, remaining);
   if (blocked > 0) target.statuses.block -= blocked;
@@ -71,6 +74,15 @@ export function dealDamage(target, amount, actor) {
   // and the heal is silent (like reflect) so the golden turn-shape is untouched.
   const ls = actor?.mods?.lifesteal || 0;
   if (ls > 0 && remaining > 0 && actor.alive) actor.hp = Math.min(actor.maxHp, actor.hp + Math.round(remaining * ls));
+  // "Thorns" (relic, vF-AJ): when this unit is struck, the attacker takes a flat fraction
+  // of the wound straight back — unconditional, unlike Riposte (which needs a shield to
+  // counter from). Opt-in — thorns defaults 0 and only player relics set it, so no golden
+  // ever reflects here. Like reflectBack, it can finish off the attacker; no re-trigger.
+  const th = target.mods?.thorns || 0;
+  if (th > 0 && remaining > 0 && actor && actor !== target && actor.alive) {
+    const back = Math.round(remaining * th);
+    if (back > 0) { actor.hp = Math.max(0, actor.hp - back); if (actor.hp === 0 && !phoenixSave(actor)) actor.alive = false; }
+  }
   // `dmg` reported is damage that reached HP (post-block), so feeds/goldens read
   // the real wound; `blocked` is surfaced separately for UI.
   return { uid: target.uid, name: target.name, dmg: remaining, blocked, killed, hpAfter: target.hp, revived };

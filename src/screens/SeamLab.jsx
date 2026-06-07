@@ -485,6 +485,8 @@ const RELICS = [
   { id: 'r_wrathcore', icon: '😤', color: '#ff5a3c',  name: 'Wrathcore',      rarity: 'Rare',      desc: '+42% damage, −12% healing.',                 lore: 'All forward. Mending is for after — if there is an after.',    apply: (m) => { m.dmgMult *= 1.42; m.healMult *= 0.88; } },
   { id: 'r_surgeon',   icon: '🧰', color: '#7be0a0',  name: "Surgeon's Kit",  rarity: 'Rare',      desc: '+70% healing, −12% damage.',                 lore: 'Keep everyone standing and the rest sorts itself out.',        apply: (m) => { m.healMult *= 1.7; m.dmgMult *= 0.88; } },
   { id: 'r_frenzy',    icon: '🔆', color: '#ffb84d',  name: 'Frenzy Totem',   rarity: 'Legendary', desc: '+20% damage and start every fight +1 charge.', lore: 'It will not let you wait. Neither will what is coming.',       apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
+  { id: 'r_reaper',    icon: '☠️', color: '#c0c0d8',  name: "Reaper's Mark",  rarity: 'Legendary', desc: '+40% damage to enemies already below half HP.', lore: 'Finish what the climb started. Leave nothing standing.',      apply: (m) => { m.executioner = (m.executioner || 0) + 0.4; } },
+  { id: 'r_bramble',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
@@ -965,6 +967,8 @@ function playerDef(member, squadMods, perm) {
       opener:         (squadMods?.opener  || false) || p.opener  || false,
       apex:           (squadMods?.apex    || false) || p.apex    || false,
       lifesteal:      (squadMods?.lifesteal ?? 0) + (p.lifesteal ?? 0), // relic-sourced drain-on-hit
+      executioner:    (squadMods?.executioner ?? 0) || (p.executioner ?? 0), // relic — bonus vs low-HP
+      thorns:         (squadMods?.thorns ?? 0) || (p.thorns ?? 0),           // relic — reflect when struck
       doomAll:        p.doomAll        || false, // Hexer tree — Doom curses the line
       jinxSpread:     p.jinxSpread     || false, // Hexer tree — Jinx curses a 2nd enemy
       // per-creature bends (run-scoped) + permanent tree, combined:
