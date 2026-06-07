@@ -550,6 +550,9 @@ const RELIC_SETS = [
   { id: 'lifeblood', name: 'Lifeblood', icon: '🩸', need: 2, desc: '+8% lifesteal',
     members: ['r_vampiric', 'r_bloodpact', 'r_menderknot', 'r_surgeon', 'r_reckless'],
     apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.08; } },
+  { id: 'tempo', name: 'Tempo', icon: '⚡', need: 2, desc: 'Start every fight +1 charge',
+    members: ['r_quickcore', 'r_reservoir', 'r_frenzy', 'r_dropshard'],
+    apply: (m) => { m.chargeStart += 1; } },
 ];
 // Which sets are active for an equipped kit (>= the set's `need` members present).
 function activeRelicSets(equippedIds) {
