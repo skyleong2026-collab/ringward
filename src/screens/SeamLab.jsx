@@ -454,6 +454,7 @@ const UPGRADES = [
   { id: 'leech',       scope: 'squad', icon: '🩸', color: '#c83a5a', name: 'Leeching Strikes', desc: 'Heal 12% of all damage you deal.',           apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.12; } },
   { id: 'killingblow', scope: 'squad', icon: '☠️', color: '#c0c0d8', name: 'Killing Blow',   desc: '+30% damage to enemies already below half HP.', apply: (m) => { m.executioner = (m.executioner || 0) + 0.3; } },
   { id: 'secondwind',  scope: 'squad', icon: '🪶', color: WIN,        name: 'Second Wind',    desc: 'Each grunling cheats death once per fight — survives a lethal blow at 30% HP.', apply: (m) => { m.phoenix = true; } },
+  { id: 'bloodrush',   scope: 'squad', icon: '🌀', color: CHG,        name: 'Bloodrush',      desc: 'Every kill banks +2 charge on the grunling that landed it.', apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
   // ── Move-bend upgrades: scope:'unit' — you PICK which creature gets this, so
   // bends define your carry rather than spreading thin across the squad. Only
   // offered when you brought the matching Type (no dead drafts). ──
@@ -1012,6 +1013,7 @@ function playerDef(member, squadMods, perm) {
       lifesteal:      (squadMods?.lifesteal ?? 0) + (p.lifesteal ?? 0), // relic-sourced drain-on-hit
       executioner:    (squadMods?.executioner ?? 0) || (p.executioner ?? 0), // relic — bonus vs low-HP
       thorns:         (squadMods?.thorns ?? 0) || (p.thorns ?? 0),           // relic — reflect when struck
+      killCharge:     (squadMods?.killCharge ?? 0) + (p.killCharge ?? 0),     // upgrade — bank charge on a kill
       doomAll:        p.doomAll        || false, // Hexer tree — Doom curses the line
       jinxSpread:     p.jinxSpread     || false, // Hexer tree — Jinx curses a 2nd enemy
       // per-creature bends (run-scoped) + permanent tree, combined:

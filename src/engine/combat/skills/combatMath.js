@@ -69,6 +69,9 @@ export function dealDamage(target, amount, actor) {
   if (killed) target.alive = false;
   // Apex: bank a permanent stack for the kill (read above on future hits).
   if (killed && actor?.mods?.apex) actor.huntStacks = (actor.huntStacks || 0) + 1;
+  // "Killing charge" (upgrade, vF-AR): a kill banks charge on the killer, so a snowballing
+  // squad keeps its specials firing. Opt-in — killCharge defaults 0, so no golden gains it.
+  if (killed && actor?.mods?.killCharge && actor.alive) actor.charge = Math.min(actor.maxCharge ?? 6, (actor.charge || 0) + actor.mods.killCharge);
   // "Vampiric" (relic, vF-AH): the attacker drains a fraction of the wound it deals back
   // to its own HP. Opt-in — lifesteal defaults 0, so no existing golden ever heals here,
   // and the heal is silent (like reflect) so the golden turn-shape is untouched.
