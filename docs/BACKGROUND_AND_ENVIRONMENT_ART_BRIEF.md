@@ -1,5 +1,7 @@
 # Background & Environment Art Brief (Ringward)
 
+> **⏱ WHEN TO START (Sky's call, 2026-06-07): _finish the creature regen FIRST._** Backgrounds are the **next** art job after the eye-fixed creature sprites are done. When you pick this up, do **SET A (per-ring battle backgrounds) first** — it's the biggest visual upgrade. No need to wait on me; generate and drop files in, I'll wire the swaps.
+
 > **For the art instance (Midjourney).** Generate these and drop them into `public/art/` at the paths noted; the game is wired (or will be) to swap the flat backgrounds for the paintings, paint-ready, like the cutscenes already work. Tune freely.
 
 ## The assessment (why this brief exists)
