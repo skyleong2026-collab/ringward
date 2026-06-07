@@ -105,6 +105,21 @@ const HUNTING_GROUNDS = [
 const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
 const GROUND_KEY = '8gents_seam_ground';
 
+// ── THE SPINE (vF-Z): crossing into a ring is a moment, not a menu. Each ring gets a
+// threshold beat — the feel of the PLACE, deepening toward the Drop. Shown when you
+// step in (the upgrade screen, wave 0). These are about the land; the Holdfast beats
+// are about home. Together they give the climb a story that points somewhere.
+const RING_INTRO = {
+  'outer-ring': 'The rim. Embers drift up from the cracks like the ground is breathing. Easy country — but it\'s the last place the air still feels clean.',
+  'fallen-gate': 'They built a gate to hold the blight out. It fell. You climb over what\'s left of it, and nobody\'s rebuilt it in your lifetime.',
+  'green-seam': 'A seam of green between the rings, where things still grow — just wrong. Too bright. Too eager. Your grunlings\' cores hum louder here.',
+  'storm-wire': 'Old power-lines run inward, still live after seventy-five years, singing in the wind. Whatever fell never cut the current.',
+  'fast-trails': 'The trails narrow and quicken. This is as far as most ever come back from. Past here, the maps your mentor left just say: careful.',
+  'lightless': 'Past the Warden the light gives out. You go by the glow of your own grunlings\' hearts. Something down here remembers being looked at.',
+  'witherfen': 'The blight stops spreading and starts pooling — thick, patient, almost peaceful. You\'re close now. You can feel it deciding whether to let you by.',
+  'frostbound': 'Everything goes still and cold and clear. The rings end ahead. And past the last of them, faint and steady, something is waiting at the Drop.',
+};
+
 // ── Tiers: ring depth IS character tier. Deeper ring = higher tier = a STRONGER
 // creature (Foundation 1-3 / Specialist 4-6 / Apex 7-8). Higher tiers are both much
 // harder to reach (strict inward unlock + steep depth scaling) AND straight-up better
@@ -448,6 +463,11 @@ function saveRanks(m) { try { localStorage.setItem(RANKS_KEY, JSON.stringify(m))
 const AUTO_KEY = '8gents_seam_auto';
 function loadAuto() { try { return localStorage.getItem(AUTO_KEY) === '1'; } catch { return false; } }
 function saveAuto(on) { try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
+// Ambient music toggle — default ON, but only ever sounds after a user gesture (the
+// AudioContext stays suspended until then), so nothing autoplays uninvited.
+const MUSIC_KEY = '8gents_seam_music';
+function loadMusic() { try { return localStorage.getItem(MUSIC_KEY) !== '0'; } catch { return true; } }
+function saveMusic(on) { try { localStorage.setItem(MUSIC_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
 
 // Progressive Cores: a deeper wave pays more, so pushing the climb funds the tree.
 // Front-loaded so a build forms FAST early: Scouts→4, Pack→5, Warden→6, King→7+10.
@@ -883,6 +903,13 @@ const FX_STYLE = `
 @keyframes seam-hintglow { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,.15)} 50%{box-shadow:0 0 16px 3px rgba(232,160,64,.85)} }
 /* bend proc callout — pill that floats up off the actor, distinct from damage numbers */
 @keyframes seam-procfloat { 0%{transform:translate(-50%,6px) scale(.75);opacity:0} 20%{opacity:1;transform:translate(-50%,-4px) scale(1)} 100%{transform:translate(-50%,-52px) scale(.9);opacity:0} }
+/* ── The Drop ending ceremony (vF-Z) ── */
+@keyframes seam-drop-portal { 0%{transform:scale(.2);opacity:0;box-shadow:0 0 0 0 rgba(176,107,255,0)} 30%{opacity:1} 100%{transform:scale(1);opacity:1;box-shadow:0 0 60px 18px rgba(176,107,255,.5),inset 0 0 50px 8px rgba(232,220,255,.6)} }
+@keyframes seam-drop-ring { 0%{transform:translate(-50%,-50%) scale(.3);opacity:0} 18%{opacity:.7} 100%{transform:translate(-50%,-50%) scale(2.6);opacity:0} }
+@keyframes seam-drop-bloom { 0%{opacity:0} 50%{opacity:0} 78%{opacity:1} 100%{opacity:.85} }
+@keyframes seam-mote { 0%{transform:translateY(40px) scale(.4);opacity:0} 20%{opacity:1} 100%{transform:translateY(-220px) scale(.1);opacity:0} }
+@keyframes seam-drop-text { 0%{opacity:0;transform:translateY(8px)} 100%{opacity:1;transform:translateY(0)} }
+@keyframes seam-threshold { 0%{opacity:0;transform:translateY(-6px)} 12%{opacity:1;transform:translateY(0)} 88%{opacity:1} 100%{opacity:.92} }
 `;
 
 // Horizontal focal point (0–1) to crop ONE clear pose out of each wide turnaround
@@ -1735,6 +1762,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
   const [reclaimed, setReclaimed] = useState(loadReclaimed); // deepest ring boss ever beaten (0..8) = Holdfast reclaim depth
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
+  const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
+  const [music, setMusic] = useState(loadMusic); // ambient pad on/off (user toggle, persisted)
+  // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
+  // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
+  useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
@@ -1914,6 +1946,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           setSigils(nextSig); saveSigils(nextSig);
           setSigilGain({ id: apexId, count, ready: count >= APEX_SIGILS });
         } else setSigilGain(null);
+        // THE DROP — clearing the final ring for the first time is the ending. The whole
+        // climb has pointed here; play the theme and run the ceremony instead of the
+        // ordinary won-screen. (reclaimed still holds the PRE-clear value here.)
+        if (hunted.depth === HOLDFAST_MAX && reclaimed < HOLDFAST_MAX) {
+          sfx.theDrop(); setRunPhase('drop'); return;
+        }
         sfx.ringTaken();
         setRunPhase('won'); return;
       }
@@ -1929,6 +1967,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
     const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
     setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
+    setEnteredRing(g); sfx.ringThreshold(g.depth); // crossing the threshold — a beat + a deepening swell
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
     const base = perkBaseMods(owned, reclaimed); // perks + reclaimed Holdfast boons set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
@@ -1996,7 +2035,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2187,6 +2226,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   if (runPhase === 'pick') {
     return (
       <div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
+            title={music ? 'Ambient music on' : 'Ambient music off'}
+            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: `1px solid ${music ? '#4a3a66' : '#33333f'}`, background: music ? '#160f1d' : 'transparent', color: music ? '#cba6ff' : '#777' }}>
+            {music ? '🔊 Music' : '🔇 Music'}
+          </button>
+        </div>
         {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
         {(() => {
           const ringsToDrop = HOLDFAST_MAX - reclaimed;
@@ -2520,6 +2566,20 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const nextWave = runWaves[waveIdx];
     return (
       <div>
+        {/* THE THRESHOLD (vF-Z): stepping into a ring is a story beat, not a menu. */}
+        {waveIdx === 0 && enteredRing && RING_INTRO[enteredRing.id] && (() => {
+          const di = diffOf(enteredRing.depth);
+          return (
+            <div style={{ animation: 'seam-threshold 1s ease-out', background: 'linear-gradient(180deg,#0e1320,#0b0d16)', border: `1px solid ${SEL}44`, borderLeft: `3px solid ${di.color}`, borderRadius: 12, padding: '12px 15px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#8fa7c8' }}>⛰ YOU CROSS INTO</span>
+                <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff' }}>{enteredRing.name}</span>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: di.color }}>ring {enteredRing.depth}/8 · {di.label}</span>
+              </div>
+              <div style={{ fontSize: T.small, color: '#bcc6d8', lineHeight: 1.55, fontStyle: 'italic', marginTop: 5 }}>{RING_INTRO[enteredRing.id]}</div>
+            </div>
+          );
+        })()}
         <BuildStrip taken={taken} />
         <SquadState squad={squad} runMods={runMods} />
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
@@ -2602,6 +2662,54 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
 
   // ── In a run: progress bar + the fight (+ result banner). ──
+  // ── THE DROP — the ending ceremony (vF-Z). A full-screen takeover when the final
+  // ring falls for the first time: the door, the mentor's last truth, the step through. ──
+  if (runPhase === 'drop') {
+    const motes = [{ l: 10, d: 0 }, { l: 22, d: 1.1 }, { l: 35, d: 0.5 }, { l: 48, d: 1.7 }, { l: 60, d: 0.3 }, { l: 72, d: 1.3 }, { l: 84, d: 0.8 }, { l: 92, d: 2.0 }];
+    const lines = [
+      'You walk the last ring to its end, and the Drop opens — not a pit but a doorway, light spilling up out of the dark.',
+      'Your mentor stood exactly here. Went in. You understand it now: he was never lost. He was the first one through.',
+      'Three cores hum at your chest. The grunlings press close and warm. Seventy-five years of blight — and the answer to all of it is one step away.',
+    ];
+    return (
+      <div style={{ textAlign: 'center', padding: '6px 0 4px' }}>
+        {/* the portal stage */}
+        <div style={{ position: 'relative', height: 224, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginBottom: 16 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ position: 'absolute', top: '50%', left: '50%', width: 130, height: 130, borderRadius: '50%', border: '2px solid #b06bff', animation: `seam-drop-ring 3s ease-out ${i}s infinite` }} />
+          ))}
+          <div style={{ position: 'relative', zIndex: 2, width: 116, height: 168, borderRadius: '58px 58px 10px 10px', background: 'radial-gradient(ellipse at 50% 38%, #f3ecff, #b06bff 56%, #4a2a7a 100%)', animation: 'seam-drop-portal 2.6s ease-out both' }} />
+          {motes.map((m, i) => (
+            <span key={i} style={{ position: 'absolute', bottom: 0, left: `${m.l}%`, width: 5, height: 5, borderRadius: '50%', background: '#e8dcff', boxShadow: '0 0 6px 1px #cba6ff', animation: `seam-mote ${3.2 + m.d}s linear ${m.d}s infinite` }} />
+          ))}
+        </div>
+        <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2.5, color: '#cba6ff', animation: 'seam-drop-text .8s ease-out both' }}>✦ YOU REACHED THE DROP ✦</div>
+        <div style={{ fontSize: T.huge, fontWeight: 900, color: '#eadcff', margin: '6px 0 18px', animation: 'seam-drop-text .8s ease-out .2s both' }}>The First Climb</div>
+        <div style={{ maxWidth: 470, margin: '0 auto', textAlign: 'left' }}>
+          {lines.map((ln, i) => (
+            <div key={i} style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.62, fontStyle: 'italic', marginBottom: 10, animation: `seam-drop-text 1s ease-out ${0.5 + i * 0.6}s both` }}>{ln}</div>
+          ))}
+          <div style={{ fontSize: T.sub, fontWeight: 900, color: '#fff', textAlign: 'center', letterSpacing: 1, margin: '14px 0', animation: `seam-drop-text 1s ease-out ${0.5 + lines.length * 0.6}s both` }}>You take it.</div>
+        </div>
+        {pullNow && (() => {
+          const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
+          return (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, margin: '4px auto 0', background: '#160f1d', border: `1px solid ${ri.color}66`, borderRadius: 10, padding: '7px 12px', animation: `seam-drop-text 1s ease-out ${0.5 + (lines.length + 1) * 0.6}s both` }}>
+              <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={34} />
+              <div style={{ textAlign: 'left', fontSize: T.micro, color: '#cdd' }}>
+                <b style={{ color: ri.color }}>{ri.pips} {pullNow.rarity}</b> · {pullNow.isDupe ? `${ac.name} → +${pullNow.gainedCores} ⬡` : `${ac.name} joins you`}
+              </div>
+            </div>
+          );
+        })()}
+        <div style={{ maxWidth: 470, margin: '20px auto 0', animation: `seam-drop-text 1s ease-out ${0.9 + (lines.length + 1) * 0.6}s both` }}>
+          <div style={{ fontSize: T.small, color: '#9a7fc0', lineHeight: 1.55, marginBottom: 12 }}>The way is yours now. The Drop will keep — come again, stronger. There&apos;s more here than one crossing can hold.</div>
+          <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: '#b06bff', color: '#160f1d', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>↩ CARRY IT HOME</button>
+        </div>
+      </div>
+    );
+  }
+
   const wave = runWaves[waveIdx];
   const banner = (() => {
     if (runPhase === 'won') {
