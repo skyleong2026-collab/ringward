@@ -2475,8 +2475,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       // (Offer is already rolled, so the event sits in front of the upgrade screen.)
       const nextIsBoss = (idx + 1) === WAVE_COUNT - 1;
       const ev = nextIsBoss ? null : maybeWaysideEvent();
-      if (ev && ev.kind === 'elite') { setPendingElite(ev); setEventOutcome(null); sfx.ringThreshold(runDepth); setRunPhase('event'); }
-      else if (ev) { setPendingEvent(ev); setEventOutcome(null); sfx.upgradePick(); setRunPhase('event'); }
+      if (ev && ev.kind === 'elite') { setPendingElite(ev); setEventOutcome(null); sfx.eliteGrowl(); setRunPhase('event'); }
+      else if (ev) { setPendingEvent(ev); setEventOutcome(null); (ev.kind === 'merchant' ? sfx.merchantBell() : ev.kind === 'treasure' ? sfx.treasureChime() : sfx.upgradePick()); setRunPhase('event'); }
       else setRunPhase('upgrade');
     });
     setWaveIdx(idx);
