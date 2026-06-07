@@ -315,27 +315,65 @@ function useViewport() {
 // the lever that actually threatens the squad, so it's front-loaded hardest. Feel-check freely.
 const D_HP = (d) => 1 + 0.34 * (d - 1) - 0.017 * (d - 1) ** 2;  // d1 ×1.0, d3 ×1.61, d4 ×1.87, d8 ×2.55
 const D_ATK = (d) => 1 + 0.30 * (d - 1) - 0.018 * (d - 1) ** 2; // d1 ×1.0, d3 ×1.53, d4 ×1.74, d8 ×2.22
-function foe(id, temperament, roleHp, roleAtk, depth, extra = {}) {
-  const hp = Math.round(roleHp * D_HP(depth));
-  return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth)), ...extra };
+// NG+ "crossing" (vF-BA): once you've gone THROUGH the Drop, the rings reform harder. Each
+// crossing multiplies enemy HP+ATK by +30% on top of the depth curve — an ascension dial. 0 =
+// the first climb (×1). Enemy-side only (SeamLab foes, not goldens). Feel-check freely.
+const crossMult = (crossing) => 1 + 0.30 * (crossing || 0);
+function foe(id, temperament, roleHp, roleAtk, depth, extra = {}, cm = 1) {
+  const hp = Math.round(roleHp * D_HP(depth) * cm);
+  return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth) * cm), ...extra };
 }
 // Generate a run's four waves from the chosen ring. Enemy IDENTITY (kit/behavior) comes
-// from the ring's locals; HP/ATK come from the wave role scaled by depth.
-function wavesForGround(g) {
+// from the ring's locals; HP/ATK come from the wave role scaled by depth × the crossing mult.
+function wavesForGround(g, cm = 1) {
   const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
+  const F = (id, temp, hp, atk, extra) => foe(id, temp, hp, atk, d, extra, cm);
   return [
     { name: 'Scouts', seed: 101, blurb: `The edge of ${g.name} — a jumpy pair. Warm up, hit fast.`,
-      enemies: () => [ foe(at(0), 'Cautious', 110, 26, d), foe(at(1), 'Cautious', 105, 26, d) ] },
+      enemies: () => [ F(at(0), 'Cautious', 110, 26), F(at(1), 'Cautious', 105, 26) ] },
     { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back hard.',
-      enemies: () => [ foe(at(0), 'Balanced', 175, 40, d), foe(at(1), 'Balanced', 175, 38, d), foe(at(2), 'Balanced', 165, 40, d) ] },
+      enemies: () => [ F(at(0), 'Balanced', 175, 40), F(at(1), 'Balanced', 175, 38), F(at(2), 'Balanced', 165, 40) ] },
     { name: 'The Pack-Lord', seed: 303, blurb: 'The two meanest things in here, paired up. Break through.',
-      enemies: () => [ foe(at(0), 'Greedy', 300, 50, d), foe(at(1), 'Greedy', 220, 62, d) ] },
+      enemies: () => [ F(at(0), 'Greedy', 300, 50), F(at(1), 'Greedy', 220, 62) ] },
     { name: g.boss, boss: true, seed: 404,
       blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
-      enemies: () => [ foe(at(0), 'Greedy', 540, 68, d, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 240, 24, d, { name: 'Tender' }) ] },
+      enemies: () => [ F(at(0), 'Greedy', 540, 68, { name: g.boss, speed: 7 }), F('mossback', 'Balanced', 240, 24, { name: 'Tender' }) ] },
   ];
 }
 const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
+// ── THE CROSSINGS (vF-BA NG+) — the story past the Drop. Reaching the Drop at crossing N
+// shows beat[N]; STEP THROUGH advances to crossing N+1 (rings reform harder). The mentor's
+// trail continues on the far side and his fate unfolds, crossing by crossing.
+const CROSSING_BEATS = [
+  { title: 'The First Climb', lines: [
+    'You walk the last ring to its end, and the Drop opens — not a pit but a doorway, light spilling up out of the dark.',
+    'Your mentor stood exactly here. Went in. You understand it now: he was never lost. He was the first one through.',
+    'Three cores hum at your chest. Seventy-five years of blight — and the answer to all of it is one step away.',
+  ], take: 'You take it.', step: 'STEP THROUGH →' },
+  { title: 'The Second Crossing', lines: [
+    'Through the door, the rings are still here — but wrong-side-out, reformed harder behind you, the blight thicker and older.',
+    'And there, scratched into the first stone past the threshold, in a hand you know: "Keep climbing. It gets worse. Keep climbing anyway."',
+    'He came this far and kept going. So will you.',
+  ], take: 'You go on.', step: 'DEEPER →' },
+  { title: 'The Third Crossing', lines: [
+    'Deeper than your mentor\'s notes ever reached. The grunlings\' cores burn bright and certain now, leading you, like they\'ve come home.',
+    'You start to understand what he understood: the Drop was never a wound in the world. It was a door someone left open. And someone has to close it — or walk all the way through.',
+  ], take: 'You choose to walk through.', step: 'FARTHER STILL →' },
+  { title: 'The Fourth Crossing', lines: [
+    'You find him at last — or what the climb made of him. Not dead. Changed. Still climbing, somewhere ahead, a light that never quite stops moving.',
+    '"You came," he says, without turning. "I hoped you wouldn\'t. I hoped you would." He hands you nothing. He\'s already given you everything: the cores, the holdfast, the long road up.',
+  ], take: 'You climb on, together now.', step: 'TO THE END →' },
+  { title: 'The Deep Crossing', lines: [
+    'There is no bottom to it. There never was. Just the climb, and the ones you climb it for, and the light you carry into the dark so the next one can follow.',
+    'You stopped counting crossings a while ago. So did he. You just keep going up — which, this far in, is the only way that\'s left.',
+  ], take: 'You keep climbing.', step: 'AGAIN →' },
+];
+const crossingBeat = (c) => CROSSING_BEATS[Math.min(c, CROSSING_BEATS.length - 1)];
+const CROSSING_KEY = '8gents_seam_crossing'; // how many times you've stepped through the Drop (NG+ level)
+function loadCrossing() { try { return Math.max(0, parseInt(localStorage.getItem(CROSSING_KEY), 10) || 0); } catch { return 0; } }
+function saveCrossing(n) { try { localStorage.setItem(CROSSING_KEY, String(n)); } catch { /* best-effort */ } }
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']; // crossing numeral
+const roman = (n) => ROMAN[n] || ('×' + n);
 
 // ── WAYSIDE EVENTS (vF-AB) — not every step is a fight. Between non-boss waves the
 // trail sometimes offers a CHOICE: a flavored situation + 2-3 options with real stakes
@@ -2059,6 +2097,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const accessDepth = beta ? 8 : unlocked; // the deepest ring you may enter right now
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
   const [reclaimed, setReclaimed] = useState(loadReclaimed); // deepest ring boss ever beaten (0..8) = Holdfast reclaim depth
+  const [crossing, setCrossing] = useState(loadCrossing);    // NG+ level — times stepped through the Drop (0 = first climb)
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
   const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
   const [pendingEvent, setPendingEvent] = useState(null); // a wayside event awaiting a choice (or null)
@@ -2292,12 +2331,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       }
       // Progressive Cores: each surviving fielded creature banks ⬡ for clearing this wave.
       const clearedIds = fielded.filter((mi) => next[mi].hp > 0).map((mi) => next[mi].id);
-      awardCores(clearedIds, Math.max(1, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth) * runRepeat)));
+      awardCores(clearedIds, Math.max(1, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth) * runRepeat * (1 + 0.25 * crossing))));
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
       setSquad(patched);
       if (idx === WAVE_COUNT - 1) {
-        onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
+        const winSlag = Math.round(WIN_SLAG * (1 + 0.25 * crossing)); // deeper crossings pay more
+        onSlag?.(winSlag); setEarned(winSlag);
         const hunted = accessibleGround(ground, accessDepth); // the ring you actually raided
         setCaughtFrom(hunted);
         // Record the clear — repeats of this ring pay diminishing Cores from here on.
@@ -2337,10 +2377,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           setSigils(nextSig); saveSigils(nextSig);
           setSigilGain({ id: apexId, count, ready: count >= APEX_SIGILS });
         } else setSigilGain(null);
-        // THE DROP — clearing the final ring for the first time is the ending. The whole
-        // climb has pointed here; play the theme and run the ceremony instead of the
-        // ordinary won-screen. (reclaimed still holds the PRE-clear value here.)
-        if (hunted.depth === HOLDFAST_MAX && reclaimed < HOLDFAST_MAX) {
+        // THE DROP — clearing the final ring reaches the Drop. The first time it's the ending;
+        // after that (in NG+) every ring-8 clear returns you to the door, with this crossing's
+        // beat + the choice to STEP THROUGH into a harder crossing. Ceremony instead of won-screen.
+        if (hunted.depth === HOLDFAST_MAX) {
           sfx.theDrop(); setRunPhase('drop'); return;
         }
         // RELIC DROP — every ring boss offers a CHOICE of relics (the loot chase). You
@@ -2369,7 +2409,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startRun() {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
     const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
-    setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
+    setRunWaves(wavesForGround(g, crossMult(crossing))); setRunDepth(g.depth);
     setEnteredRing(g); sfx.ringThreshold(g.depth); // crossing the threshold — a beat + a deepening swell
     farmedRef.current = g.depth <= reclaimed; // a re-clear of an already-beaten ring → auto-pick eligible
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
@@ -2760,6 +2800,16 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             {autoPick ? '⏩ Auto-pick' : '⏩ Auto-pick off'}
           </button>
         </div>
+        {/* ── NG+ banner: which crossing you're on (rings reform harder past the Drop). ── */}
+        {crossing > 0 && (
+          <div style={{ background: 'linear-gradient(90deg, #1a0f2a, #150d22)', border: '1.5px solid #6a4a9a', borderRadius: 12, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>✦</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff', letterSpacing: 0.5 }}>THE DEEP CROSSING · {roman(crossing)}</div>
+              <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.4 }}>You stepped through the Drop {crossing === 1 ? 'once' : `${crossing} times`}. Every ring is reformed <b style={{ color: '#cba6ff' }}>+{Math.round((crossMult(crossing) - 1) * 100)}% stronger</b>. Reach the Drop again to climb deeper into his story.</div>
+            </div>
+          </div>
+        )}
         {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
         {(() => {
           const ringsToDrop = HOLDFAST_MAX - reclaimed;
@@ -3279,11 +3329,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // ring falls for the first time: the door, the mentor's last truth, the step through. ──
   if (runPhase === 'drop') {
     const motes = [{ l: 10, d: 0 }, { l: 22, d: 1.1 }, { l: 35, d: 0.5 }, { l: 48, d: 1.7 }, { l: 60, d: 0.3 }, { l: 72, d: 1.3 }, { l: 84, d: 0.8 }, { l: 92, d: 2.0 }];
-    const lines = [
-      'You walk the last ring to its end, and the Drop opens — not a pit but a doorway, light spilling up out of the dark.',
-      'Your mentor stood exactly here. Went in. You understand it now: he was never lost. He was the first one through.',
-      'Three cores hum at your chest. The grunlings press close and warm. Seventy-five years of blight — and the answer to all of it is one step away.',
-    ];
+    const beat = crossingBeat(crossing); // this crossing's story; STEP THROUGH advances to crossing+1
+    const lines = beat.lines;
+    const stepThrough = () => { const n = crossing + 1; setCrossing(n); saveCrossing(n); newRun(); };
     return (
       <div style={{ textAlign: 'center', padding: '6px 0 4px' }}>
         {/* the portal stage */}
@@ -3296,13 +3344,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <span key={i} style={{ position: 'absolute', bottom: 0, left: `${m.l}%`, width: 5, height: 5, borderRadius: '50%', background: '#e8dcff', boxShadow: '0 0 6px 1px #cba6ff', animation: `seam-mote ${3.2 + m.d}s linear ${m.d}s infinite` }} />
           ))}
         </div>
-        <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2.5, color: '#cba6ff', animation: 'seam-drop-text .8s ease-out both' }}>✦ YOU REACHED THE DROP ✦</div>
-        <div style={{ fontSize: T.huge, fontWeight: 900, color: '#eadcff', margin: '6px 0 18px', animation: 'seam-drop-text .8s ease-out .2s both' }}>The First Climb</div>
+        <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2.5, color: '#cba6ff', animation: 'seam-drop-text .8s ease-out both' }}>{crossing === 0 ? '✦ YOU REACHED THE DROP ✦' : `✦ THE DROP — CROSSING ${roman(crossing)} ✦`}</div>
+        <div style={{ fontSize: T.huge, fontWeight: 900, color: '#eadcff', margin: '6px 0 18px', animation: 'seam-drop-text .8s ease-out .2s both' }}>{beat.title}</div>
         <div style={{ maxWidth: 470, margin: '0 auto', textAlign: 'left' }}>
           {lines.map((ln, i) => (
             <div key={i} style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.62, fontStyle: 'italic', marginBottom: 10, animation: `seam-drop-text 1s ease-out ${0.5 + i * 0.6}s both` }}>{ln}</div>
           ))}
-          <div style={{ fontSize: T.sub, fontWeight: 900, color: '#fff', textAlign: 'center', letterSpacing: 1, margin: '14px 0', animation: `seam-drop-text 1s ease-out ${0.5 + lines.length * 0.6}s both` }}>You take it.</div>
+          <div style={{ fontSize: T.sub, fontWeight: 900, color: '#fff', textAlign: 'center', letterSpacing: 1, margin: '14px 0', animation: `seam-drop-text 1s ease-out ${0.5 + lines.length * 0.6}s both` }}>{beat.take}</div>
         </div>
         {pullNow && (() => {
           const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
@@ -3316,8 +3364,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           );
         })()}
         <div style={{ maxWidth: 470, margin: '20px auto 0', animation: `seam-drop-text 1s ease-out ${0.9 + (lines.length + 1) * 0.6}s both` }}>
-          <div style={{ fontSize: T.small, color: '#9a7fc0', lineHeight: 1.55, marginBottom: 12 }}>The way is yours now. The Drop will keep — come again, stronger. There&apos;s more here than one crossing can hold.</div>
-          <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: '#b06bff', color: '#160f1d', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>↩ CARRY IT HOME</button>
+          <div style={{ fontSize: T.small, color: '#9a7fc0', lineHeight: 1.55, marginBottom: 12 }}>Step through, and the rings reform <b style={{ color: '#cba6ff' }}>harder</b> — the next crossing, the next of his story. Or carry it home and come again when you're ready.</div>
+          <button onClick={stepThrough} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: '#b06bff', color: '#160f1d', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer', marginBottom: 8 }}>{beat.step}</button>
+          <button onClick={newRun} style={{ width: '100%', padding: '11px 0', borderRadius: 10, background: 'transparent', border: '1px solid #4a3a66', color: '#9a7fc0', fontSize: T.small, fontWeight: 800, cursor: 'pointer' }}>↩ carry it home {crossing > 0 ? `(stay on Crossing ${roman(crossing)})` : ''}</button>
         </div>
       </div>
     );
