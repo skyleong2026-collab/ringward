@@ -459,6 +459,35 @@ const WAYSIDE_EVENTS = [
       { label: 'Add your name', detail: 'Say you were here.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.05; }), "🪦 You cut your name beneath his. Whatever waits at the Drop, it will know you came on purpose. The squad climbs with that purpose in them — Primed, +5% damage.") },
       { label: 'Take a stone for luck', detail: 'Carry them with you.', apply: (c) => (c.cores(20), '✦ You pocket one small stone, still warm from the sun. +20 ⬡ — and something steadier sitting in your chest for the climb ahead.') },
     ] },
+  // ── MERCHANT nodes (vF-BB): spend the slag you'd otherwise hoard for the Forge on an
+  // immediate edge for THIS run. A real trade — power now vs. a permanent perk later. ──
+  { id: 'trader', kind: 'merchant', glyph: '🛒', tint: '#c9c98a', title: 'The Wayside Trader',
+    text: 'A trader has set a blanket of wares across a flat stone — salves, whetstones, odd bright things. "Long climb ahead," she says. "I take slag. You won\'t carry it through the door anyway."',
+    choices: [
+      { label: 'Buy a mending', cost: 25, detail: 'Patch the whole squad up.', apply: (c) => (c.heal(0.5), '🛒 She works salve into every crack and wound. The squad stands easier. (−25 ⚒)') },
+      { label: 'Buy a whetted edge', cost: 35, detail: '+15% damage, rest of the climb.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.15; }), '🛒 She hones every claw and tooth to a wicked point. +15% damage onward. (−35 ⚒)') },
+      { label: 'Just passing', detail: 'Keep your slag.', apply: () => '🛒 You nod and move on, slag still in your pocket.' },
+    ] },
+  { id: 'dealer', kind: 'merchant', glyph: '🛒', tint: '#c9c98a', title: 'The Scrap-Dealer',
+    text: 'A wiry dealer crouches over a hoard of salvage, sorting cores from junk by feel. "Everyone\'s broke this deep in," he mutters, not looking up. "But everyone needs something. What\'s it gonna be?"',
+    choices: [
+      { label: 'Buy a jolt', cost: 20, detail: 'Start the next fights Primed.', apply: (c) => (c.prime(3), '🛒 He cracks a spare core against yours and the squad lights up — well Primed for what\'s coming. (−20 ⚒)') },
+      { label: 'Buy a found charm', cost: 50, detail: 'A relic, sight unseen.', apply: (c) => { const r = c.relic(); if (r) return `🛒 He digs it out of the pile — ${r.name}. Yours now. (−50 ⚒)`; c.slag(50); return '🛒 He roots through the lot and comes up empty — you already own everything worth selling. Your slag, returned.'; } },
+      { label: 'Walk on', detail: 'Save it for the Forge.', apply: () => '🛒 You leave him to his sorting and keep your slag for home.' },
+    ] },
+  // ── TREASURE nodes (vF-BB): a generous cache — no cost, just a good choice. ──
+  { id: 'cache2', kind: 'treasure', glyph: '💎', tint: '#7fd6ff', title: 'A Hidden Cache',
+    text: 'Tucked into a hollow off the trail, sealed and dry against the blight: a climber\'s cache, forgotten or left on purpose. Whoever stowed it isn\'t coming back for it.',
+    choices: [
+      { label: 'Take the relic', detail: 'Gear for the collection.', apply: (c) => { const r = c.relic(); if (r) return `💎 Wrapped in oilcloth — a relic, ${r.name}. It's yours.`; c.cores(40); return '💎 You own every relic it could hold — so you take the Cores stashed beside them instead. +40 ⬡.'; } },
+      { label: 'Take the supplies', detail: 'Cores and a good rest.', apply: (c) => (c.cores(25), c.heal(0.35), '💎 Food, salve, a handful of banked Cores. The squad recovers and you climb on heavier in the pack. +25 ⬡.') },
+    ] },
+  { id: 'hoard', kind: 'treasure', glyph: '💎', tint: '#7fd6ff', title: "The Climber's Hoard",
+    text: 'A whole shelf of stone, stacked with what the lost left behind — cores in little cairns, gear gone green at the edges, a lifetime of climbs that ended here. You can carry only so much.',
+    choices: [
+      { label: 'Pocket the cores', detail: 'A big haul of Cores.', apply: (c) => (c.cores(50), '💎 You fill your pack with banked Cores — a fortune by rim standards. +50 ⬡.') },
+      { label: 'Take the best relic', detail: 'One good piece of gear.', apply: (c) => { const r = c.relic(); if (r) return `💎 You pick the finest piece — ${r.name}.`; c.cores(50); return '💎 Nothing here you don\'t already own — so you take the Cores. +50 ⬡.'; } },
+    ] },
 ];
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
@@ -2154,7 +2183,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       } else if (runPhase === 'event' && pendingEvent && !eventOutcome) {
         sig = 'ev' + pendingEvent.id;
         const ev = pendingEvent;
-        act = () => chooseEvent(ev.choices[0]);
+        // prefer a FREE choice (don't auto-spend slag at a merchant); else the first.
+        const ch = ev.choices.find((c) => !c.cost) || ev.choices[0];
+        act = () => chooseEvent(ch);
       } else if (runPhase === 'event' && eventOutcome) {
         sig = 'eo' + waveIdx;
         act = () => eventPressOn();
@@ -2288,16 +2319,24 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   // Roll a wayside event for this between-waves step (~55%), never repeating one in a run.
   function maybeWaysideEvent() {
-    if (Math.random() > 0.55) return null;
-    const pool = WAYSIDE_EVENTS.filter((e) => !eventsSeenRef.current.includes(e.id));
-    if (!pool.length) return null;
-    const ev = pool[Math.floor(Math.random() * pool.length)];
+    if (Math.random() > 0.7) return null; // ~70% of non-boss steps are a NODE, not just a fight
+    const unseen = WAYSIDE_EVENTS.filter((e) => !eventsSeenRef.current.includes(e.id));
+    if (!unseen.length) return null;
+    // Roll a node KIND (weighted), then an unseen node of that kind; fall back to any unseen.
+    const kindOf = (e) => e.kind || 'story';
+    const roll = Math.random() * 100;
+    const kind = roll < 56 ? 'story' : roll < 78 ? 'merchant' : 'treasure';
+    const ofKind = unseen.filter((e) => kindOf(e) === kind);
+    const pickPool = ofKind.length ? ofKind : unseen;
+    const ev = pickPool[Math.floor(Math.random() * pickPool.length)];
     eventsSeenRef.current = [...eventsSeenRef.current, ev.id];
     return ev;
   }
   // Apply a chosen option's effect via a ctx bound to the live run state, then show the outcome.
   function chooseEvent(choice) {
     if (eventOutcome) return; // already chosen — wait for PRESS ON
+    if (choice.cost && slag < choice.cost) return; // can't afford this ware (button is also disabled)
+    if (choice.cost) onSlag?.(-choice.cost); // merchant: pay before the goods
     const aliveIds = squad.filter((m) => m.hp > 0).map((m) => m.id);
     const ctx = {
       rng: Math.random,
@@ -2307,6 +2346,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       hurt: (frac) => setSquad((sq) => sq.map((m) => m.hp > 0 ? { ...m, hp: Math.max(1, Math.round(m.hp - maxHpOf(m, runMods) * frac)) } : m)),
       buff: (fn) => setRunMods((rm) => { const n = { ...rm }; fn(n); return n; }),
       prime: (n = 2) => setRunMods((rm) => ({ ...rm, chargeStart: (rm.chargeStart || 0) + n })),
+      // grant a relic into the permanent collection (a weighted unowned draw); null if full.
+      relic: () => { const rd = rollRelicChoices(relics, 1)[0]; if (!rd) return null; const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); return rd; },
     };
     sfx.upgradePick();
     setEventOutcome(choice.apply(ctx) || 'You press on.');
@@ -3199,13 +3240,19 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{ev.text}</div>
           {!eventOutcome ? (
             <div style={{ display: 'grid', gap: 10 }}>
-              {ev.choices.map((ch, k) => (
-                <button key={k} onClick={() => chooseEvent(ch)}
-                  style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${ev.tint}66` }}>
-                  <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff' }}>{ch.label}</div>
-                  <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2 }}>{ch.detail}</div>
-                </button>
-              ))}
+              {ev.choices.map((ch, k) => {
+                const tooPoor = ch.cost && slag < ch.cost;
+                return (
+                  <button key={k} onClick={() => chooseEvent(ch)} disabled={tooPoor}
+                    style={{ textAlign: 'left', cursor: tooPoor ? 'not-allowed' : 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${tooPoor ? LINE : `${ev.tint}66`}`, opacity: tooPoor ? 0.5 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff', flex: 1 }}>{ch.label}</div>
+                      {ch.cost ? <div style={{ fontSize: T.small, fontWeight: 900, color: tooPoor ? '#a85a5a' : '#c9c98a' }}>{ch.cost} ⚒</div> : null}
+                    </div>
+                    <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2 }}>{tooPoor ? 'Not enough slag.' : ch.detail}</div>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div>
