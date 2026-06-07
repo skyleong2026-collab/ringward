@@ -18,7 +18,6 @@ import {
   createBattleState,
   runBattle,
   createAIDriver,
-  createHumanDriver,
   getSkill,
   legalSkills,
   enemiesOf,
@@ -2549,7 +2548,6 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       if (mem.id !== memberId) return mem;
       const unitMods = { ...(mem.unitMods ?? EMPTY_UNIT_MODS) };
       up.apply(unitMods); // mutates the copy; original is unaffected
-      const targetName = COMBAT_CREATURES[memberId].name;
       return { ...mem, unitMods, bends: [...(mem.bends ?? []), { id: up.id, icon: up.icon, name: up.name, color: up.color }] };
     });
     const targetName = COMBAT_CREATURES[memberId].name;
@@ -3797,7 +3795,7 @@ function LearnMode({ narrow, onGraduate }) {
   return <FightView fight={fight} narrow={narrow} banner={banner} hintSkill={hintSkill} />;
 }
 
-export function SeamLab({ onClose, slag = 0, onSlag, version }) {
+export function SeamLab({ slag = 0, onSlag, version }) {
   const vw = useViewport();
   const narrow = vw < 760;
   const [tab, setTab] = useState('run'); // 'learn' | 'run' | 'sandbox'
