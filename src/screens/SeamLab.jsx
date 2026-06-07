@@ -298,6 +298,30 @@ function pullFrom(ground, stableIds, accessDepth, pity = 0, rand = Math.random) 
   return { id, rarity: rarityOf(id), isDupe: stableIds.includes(id) };
 }
 
+// ── SUMMON / GACHA (vF-BJ): a deliberate pull you SPEND slag on, drawn from the whole
+// wild roster (not a single ring), weighted by rarity, sharing the same PITY as ring-pulls.
+// New → caught (+ a rarity Core head-start); dupe → melts to that creature's Cores. Gives
+// breadth (creatures + Cores), never a shortcut past the climb. Returns {id,rarity,isDupe}.
+const SUMMON_COST = 50;    // slag for a single Wild Call
+const SUMMON5_COST = 220;  // slag for a five-fold call (a small discount + a guaranteed Rare+)
+function summonPull(stableIds, pity = 0, rand = Math.random) {
+  const pool = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id));
+  if (!pool.length) return null;
+  const legs = pool.filter((x) => rarityOf(x) === 'Legendary');
+  let id;
+  if (legs.length && pity >= PITY_AT) {                 // pity: guarantee a Legendary (prefer an unowned one)
+    const fresh = legs.filter((x) => !stableIds.includes(x));
+    const ls = fresh.length ? fresh : legs;
+    id = ls[Math.floor(rand() * ls.length)];
+  } else {
+    const w = pool.map((x) => RARITY_INFO[rarityOf(x)].weight || 1);
+    let roll = rand() * w.reduce((s, x) => s + x, 0);
+    id = pool[pool.length - 1];
+    for (let i = 0; i < pool.length; i++) { roll -= w[i]; if (roll < 0) { id = pool[i]; break; } }
+  }
+  return { id, rarity: rarityOf(id), isDupe: stableIds.includes(id) };
+}
+
 function useViewport() {
   const [w, setW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1024));
   useEffect(() => {
@@ -2249,6 +2273,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
+  const [summonResults, setSummonResults] = useState(null); // [{id,rarity,isDupe,gainedCores}] — last Summon's pulls
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
   const [targetChoice, setTargetChoice] = useState(null); // who's tentatively selected on the target-pick screen (confirm to commit)
@@ -2684,6 +2709,38 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
+  // SUMMON: spend slag to pull `times` grunlings from the wild roster (shared pity). New →
+  // caught + Core head-start; dupe → that creature's Cores. A five-fold call guarantees a
+  // Rare+. Collection breadth only — no run-power, so it never shortcuts the Wards.
+  function doSummon(times) {
+    const cost = times >= 5 ? SUMMON5_COST : SUMMON_COST;
+    if ((slag || 0) < cost) return;
+    onSlag?.(-cost); sfx.resume();
+    let curStable = [...stable]; let curPity = pity; const results = [];
+    for (let k = 0; k < times; k++) {
+      const p = summonPull(curStable, curPity); if (!p) break;
+      const info = RARITY_INFO[p.rarity]; let gainedCores;
+      if (p.isDupe) { gainedCores = info.dupeCores; awardCores([p.id], info.dupeCores); }
+      else { curStable = [...curStable, p.id]; gainedCores = info.startCores; if (info.startCores > 0) awardCores([p.id], info.startCores); }
+      curPity = p.rarity === 'Legendary' ? 0 : curPity + 1;
+      results.push({ ...p, gainedCores });
+    }
+    // five-fold guarantee: if all five came up Common, lift the last to a Rare.
+    if (times >= 5 && results.length && results.every((r) => r.rarity === 'Common')) {
+      const rares = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id) && rarityOf(id) === 'Rare');
+      if (rares.length) {
+        const rid = rares[Math.floor(Math.random() * rares.length)]; const isDupe = curStable.includes(rid); const info = RARITY_INFO.Rare; let gainedCores;
+        if (isDupe) { gainedCores = info.dupeCores; awardCores([rid], info.dupeCores); }
+        else { curStable = [...curStable, rid]; gainedCores = info.startCores; awardCores([rid], info.startCores); }
+        results[results.length - 1] = { id: rid, rarity: 'Rare', isDupe, gainedCores };
+      }
+    }
+    setStable(curStable); saveStable(curStable);
+    setPity(curPity); savePity(curPity);
+    setSummonResults(results);
+    const bestMult = results.reduce((m, r) => Math.max(m, RARITY_INFO[r.rarity].mult), 0);
+    if (bestMult >= RARITY_INFO.Legendary.mult) setTimeout(() => sfx.caughtCreature(), 200); else sfx.upgradePick();
+  }
   function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
@@ -2986,11 +3043,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   if (runPhase === 'pick') {
     const HOME_TABS = [
       ['raid', '⚔', 'Raid'],
+      ['summon', '✨', 'Summon'],
       ['forge', '⚒', 'Forge'],
       ['relics', '✦', 'Relics'],
       ['holdfast', '🏚', 'Holdfast'],
     ];
-    const tabTitle = { raid: 'Take the Approach', forge: 'The Cracked Forge', relics: 'Relics', holdfast: 'The Holdfast' }[homeTab];
+    const tabTitle = { raid: 'Take the Approach', summon: 'The Wild Call', forge: 'The Cracked Forge', relics: 'Relics', holdfast: 'The Holdfast' }[homeTab];
     return (
       <div style={{ paddingBottom: 84 }}>
         {/* ── Top utility bar: page title + NG+ pill + ⚙ settings ── */}
@@ -3191,6 +3249,65 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             ); })()}
           </>
         )}
+
+        {/* ═══════════════ SUMMON — spend slag to call a wild grunling (gacha) ═══════════════ */}
+        {homeTab === 'summon' && (() => {
+          const toLeg = Math.max(0, PITY_AT - pity); // pulls until a Legendary is guaranteed
+          const rates = [['Common', 60], ['Rare', 28], ['Legendary', 10]];
+          return (
+            <div>
+              {/* The banner */}
+              <div style={{ background: 'radial-gradient(120% 100% at 50% 0%, #1a1430, #0c0a14)', border: '1px solid #4a3a66', borderRadius: 14, padding: '16px 16px 14px', marginBottom: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 30, lineHeight: 1 }}>✨</div>
+                <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', letterSpacing: 0.5, marginTop: 4 }}>The Wild Call</div>
+                <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.5, marginTop: 4, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
+                  Spend slag to wake a grunling from a wild core. A <b style={{ color: '#cba6ff' }}>new</b> one joins your stable; a <b style={{ color: '#cba6ff' }}>dupe</b> melts to that creature's Cores. Calls find <b style={{ color: '#cba6ff' }}>creatures</b>, never run-power — your climb is still yours to earn.
+                </div>
+              </div>
+              {/* Slag + pity */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: T.small, fontWeight: 900, color: '#c9c98a' }}>⚒ {slag} slag</span>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#ffd166' }}>★ guaranteed within {toLeg} call{toLeg !== 1 ? 's' : ''}</span>
+              </div>
+              {/* Call buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                {[['Wild Call', 1, SUMMON_COST, 'one pull'], ['Five-fold Call', 5, SUMMON5_COST, 'guarantees a ◆ Rare+']].map(([label, n, cost, sub]) => {
+                  const afford = slag >= cost;
+                  return (
+                    <button key={label} onClick={() => afford && doSummon(n)} disabled={!afford}
+                      style={{ textAlign: 'center', borderRadius: 12, padding: '13px 10px', cursor: afford ? 'pointer' : 'default', background: afford ? 'linear-gradient(180deg,#1a1430,#140e22)' : PANEL, border: `1.5px solid ${afford ? '#7a5aa0' : LINE}`, opacity: afford ? 1 : 0.55 }}>
+                      <div style={{ fontSize: T.body, fontWeight: 900, color: afford ? '#eadcff' : DIM }}>{n >= 5 ? '✨✨ ' : '✨ '}{label}</div>
+                      <div style={{ fontSize: T.small, fontWeight: 900, color: afford ? '#c9c98a' : DIM, marginTop: 3 }}>{cost} ⚒</div>
+                      <div style={{ fontSize: T.micro, color: '#9a7fc0', marginTop: 2 }}>{sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Results */}
+              {summonResults && summonResults.length > 0 && (
+                <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px', marginBottom: 14 }}>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1, color: '#9a7fc0', marginBottom: 10 }}>✦ THE CALL ANSWERS</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: summonResults.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8 }}>
+                    {summonResults.map((r, i) => {
+                      const c = COMBAT_CREATURES[r.id]; const ti = TYPE_INFO[c.type]; const ri = RARITY_INFO[r.rarity];
+                      return (
+                        <div key={i} style={{ textAlign: 'center', borderRadius: 10, padding: '9px 6px', background: '#100b1a', border: `2px solid ${ri.color}`, boxShadow: `0 0 12px ${ri.color}44` }}>
+                          <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={summonResults.length === 1 ? 76 : 52} />
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: ri.color, marginTop: 4 }}>{ri.pips} {c.name}</div>
+                          <div style={{ fontSize: T.micro, fontWeight: 800, color: r.isDupe ? '#9a7fc0' : WIN }}>{r.isDupe ? `dupe → +${r.gainedCores} ⬡` : (r.gainedCores > 0 ? `NEW! +${r.gainedCores} ⬡` : 'NEW!')}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Rates */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: T.micro, color: DIM }}>
+                {rates.map(([r, pct]) => <span key={r}><b style={{ color: RARITY_INFO[r].color }}>{RARITY_INFO[r].pips} {r}</b> {pct}%</span>)}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ═══════════════ FORGE — spend banked slag on a permanent edge ═══════════════ */}
         {homeTab === 'forge' && (
