@@ -15,6 +15,7 @@ import { useState, useRef, useEffect } from 'react';
 import * as sfx from '../sfx.js';
 import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette, WaysideScene } from './Cutscene.jsx';
 import { WARDS, wardBlocking, activateWard, advanceWardDeeds } from '../data/wards.js';
+import { KEYSTONE_TIERS, shardYield, resolveCraft } from '../data/keystones.js';
 import {
   createBattleState,
   runBattle,
@@ -168,6 +169,7 @@ const RARITY_INFO = {
   Rare:      { mult: 1.2,  weight: 28, color: '#7ec8ff', pips: '◆',   dupeCores: 40,  startCores: 20 },
   Legendary: { mult: 1.45, weight: 10, color: '#ffd166', pips: '★',   dupeCores: 120, startCores: 60 },
   Unique:    { mult: 1.7,  weight: 0,  color: '#ff7ad9', pips: '✦',   dupeCores: 300, startCores: 120 },
+  Keystone:  { mult: 2.0,  weight: 0,  color: '#5ff0d0', pips: '✦',   dupeCores: 0,   startCores: 0 }, // relic-only: forged, never dropped
 };
 const rarityOf = (id) => RARITY_OF[id] || 'Common';
 const rarityMult = (id) => RARITY_INFO[rarityOf(id)].mult;
@@ -402,6 +404,9 @@ function saveCrossing(n) { try { localStorage.setItem(CROSSING_KEY, String(n)); 
 const WARDS_KEY = '8gents_seam_wards'; // {wardId: {active, progress, solved}} — gate-riddle state
 function loadWards() { try { return JSON.parse(localStorage.getItem(WARDS_KEY) || '{}') || {}; } catch { return {}; } }
 function saveWards(w) { try { localStorage.setItem(WARDS_KEY, JSON.stringify(w)); } catch { /* best-effort */ } }
+const SHARDS_KEY = '8gents_seam_shards'; // relic-shards — salvaged from relics, spent forging Keystones
+function loadShards() { try { const n = parseInt(localStorage.getItem(SHARDS_KEY), 10); return Number.isFinite(n) ? Math.max(0, n) : 0; } catch { return 0; } }
+function saveShards(n) { try { localStorage.setItem(SHARDS_KEY, String(n)); } catch { /* best-effort */ } }
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']; // crossing numeral
 const roman = (n) => ROMAN[n] || ('×' + n);
 
@@ -729,8 +734,15 @@ const RELICS = [
   { id: 'r_bramble', img: '/art/relics/r_bramble.jpg',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
   { id: 'r_phoenix',   img: '/art/relics/r_phoenix.jpg',   icon: '🪶', color: '#ffb84d',  name: 'Phoenix Feather', rarity: 'Legendary', desc: 'Each grunling survives one lethal blow per fight (revives at 30% HP).', lore: 'A single bright feather, warm to the touch. It does not burn — it remembers how to come back.', apply: (m) => { m.phoenix = true; } },
   { id: 'r_reservoir', img: '/art/relics/r_reservoir.jpg', icon: '🌀', color: CHG,        name: 'Reservoir Core',  rarity: 'Rare',      desc: 'Every kill banks +2 charge on the grunling that landed it.', lore: 'It drinks the last spark of whatever falls to you, and saves it for the next blow.', apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
+  // ── KEYSTONES (vF-BL) — the top tier you don't FIND, you FORGE (Forge tab → shards + a %).
+  // Build-defining, no random drop or summon. `craftOnly` keeps them out of the loot pool. ──
+  { id: 'k_warden',    icon: '🜸', color: '#9be7ff', name: "Warden's Keystone", rarity: 'Keystone', keystone: true, craftOnly: true, desc: '+28% max HP, +28% shields, +14% damage.', lore: 'Forged in the old way, two cores welded as one — the wall and the spear, finally on the same side.', apply: (m) => { m.hpMult *= 1.28; m.blockMult *= 1.28; m.dmgMult *= 1.14; } },
+  { id: 'k_emberheart',icon: '🔥', color: BURN,      name: 'Emberheart Core',   rarity: 'Keystone', keystone: true, craftOnly: true, desc: 'Burns +3 stacks, +28% damage, start +1 charge.', lore: 'A core that never cooled. It carries the first fire your people lit at the rim, and it is still angry.', apply: (m) => { m.burnBonus += 3; m.dmgMult *= 1.28; m.chargeStart += 1; } },
+  { id: 'k_lifespring',icon: '💧', color: '#6fe0a0', name: 'Lifespring Knot',    rarity: 'Keystone', keystone: true, craftOnly: true, desc: 'Healing +70% stronger, +22% max HP.', lore: 'Knotted from the clean water of the Stillpool, the one mercy the blight never reached.', apply: (m) => { m.healMult *= 1.7; m.hpMult *= 1.22; } },
+  { id: 'k_apex',      icon: '👑', color: ACCENT,    name: 'Drop-Forged Crown',  rarity: 'Keystone', keystone: true, craftOnly: true, desc: '+32% damage, +20% max HP, +20% healing, start +1 charge.', lore: 'Beaten from a splinter of whatever fell. To wear it is to carry a piece of the Drop inward, toward the rest of it.', apply: (m) => { m.dmgMult *= 1.32; m.hpMult *= 1.2; m.healMult *= 1.2; m.chargeStart += 1; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
+const KEYSTONE_IDS = RELICS.filter((r) => r.keystone).map((r) => r.id); // craft-only top tier
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
 const RELIC_KEY = '8gents_seam_relics';          // owned relic ids (the collection)
 const RELIC_LOADOUT_KEY = '8gents_seam_relic_kit'; // equipped subset, capped at RELIC_SLOTS
@@ -771,7 +783,7 @@ function relicMods(equippedIds, m) {
 // A ring boss offers a CHOICE of up to n relics — a weighted draw of DISTINCT relics from
 // what you don't yet own. You pick one on the won screen. Empty = collection full → slag.
 function rollRelicChoices(owned, n = 3) {
-  const work = RELICS.filter((r) => !owned.includes(r.id));
+  const work = RELICS.filter((r) => !owned.includes(r.id) && !r.craftOnly); // keystones are forged, never dropped
   const w = work.map((r) => RELIC_DROP_WEIGHT[r.rarity]);
   const out = [];
   while (out.length < n && work.length) {
@@ -2252,6 +2264,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [relicChoices, setRelicChoices] = useState([]);    // pending boss-drop picks — choose one on the won screen
   const [relicDrop, setRelicDrop] = useState(null);        // the relic you chose this clear (won-screen reveal)
   const [showVault, setShowVault] = useState(false);       // the relic VAULT overlay — the full collection to chase
+  const [shards, setShards] = useState(loadShards);        // relic-shards — salvage relics → forge Keystones
+  const [salvageMode, setSalvageMode] = useState(false);   // Relics tab: tapping a relic melts it for shards
+  const [craftResult, setCraftResult] = useState(null);    // last Keystone craft outcome (reveal on the Forge tab)
   const [showCodex, setShowCodex] = useState(false);       // THE CHRONICLE — a lore codex that fills as you climb
   const [homeTab, setHomeTab] = useState('raid');          // home shell page: raid | forge | relics | holdfast
   const [showSettings, setShowSettings] = useState(false); // ⚙ settings menu overlay (music/auto-pick/beta/reset)
@@ -2693,6 +2708,31 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // SUMMON: spend slag to pull `times` grunlings from the wild roster (shared pity). New →
   // caught + Core head-start; dupe → that creature's Cores. A five-fold call guarantees a
   // Rare+. Collection breadth only — no run-power, so it never shortcuts the Wards.
+  // SALVAGE: melt an owned relic into shards (by rarity). Removes it from the collection +
+  // kit. The shard source that feeds Keystone crafting — a real "give up gear → forge gear".
+  function salvageRelic(id) {
+    const r = RELIC_BY_ID[id]; if (!r || !relics.includes(id)) return;
+    const yld = shardYield(r.rarity);
+    const nr = relics.filter((x) => x !== id); setRelics(nr); saveRelics(nr);
+    if (relicKit.includes(id)) { const nk = relicKit.filter((x) => x !== id); setRelicKit(nk); saveRelicKit(nk); }
+    const ns = shards + yld; setShards(ns); saveShards(ns);
+    sfx.upgradePick();
+  }
+  // CRAFT: gamble shards + slag at a chosen heat for a Keystone (the % is real — see
+  // src/data/keystones.js, proven in scripts/keystones.mjs). Fail → half the shards back.
+  function craftKeystone(tier) {
+    if (shards < tier.shards || (slag || 0) < tier.slag) return;
+    let ns = shards - tier.shards; onSlag?.(-tier.slag); sfx.resume();
+    const owned = relics.filter((id) => KEYSTONE_IDS.includes(id));
+    const res = resolveCraft(tier, owned, KEYSTONE_IDS, Math.random);
+    ns += res.refund || 0;
+    if (res.success && res.granted) {
+      const nr = [...relics, res.granted]; setRelics(nr); saveRelics(nr);
+      setTimeout(() => sfx.caughtCreature(), 150);
+    }
+    setShards(ns); saveShards(ns);
+    setCraftResult({ ...res, tier: tier.id });
+  }
   function doSummon(times) {
     const cost = times >= 5 ? SUMMON5_COST : SUMMON_COST;
     if ((slag || 0) < cost) return;
@@ -3291,7 +3331,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         })()}
 
         {/* ═══════════════ FORGE — spend banked slag on a permanent edge ═══════════════ */}
-        {homeTab === 'forge' && (
+        {homeTab === 'forge' && (<>
           <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ fontSize: T.sub, color: '#cdb6ff', fontWeight: 900, letterSpacing: 0.5 }}>⚒ THE FORGE</div>
@@ -3317,19 +3357,69 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               })}
             </div>
           </div>
-        )}
+          {/* ── FORGE A KEYSTONE — gamble shards + slag for the craft-only top relic tier. ── */}
+          {(() => {
+            const ownedK = KEYSTONE_IDS.filter((id) => relics.includes(id));
+            const allK = ownedK.length >= KEYSTONE_IDS.length;
+            return (
+              <div style={{ background: 'radial-gradient(120% 100% at 50% 0%, #0e211e, #0a1014)', border: '1px solid #2a6a5a', borderRadius: 12, padding: '12px 14px', marginTop: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: T.sub, color: '#5ff0d0', fontWeight: 900, letterSpacing: 0.5 }}>✦ FORGE A KEYSTONE</div>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: '#5ff0d0' }}>⛏ {shards} · ⚒ {slag}</div>
+                </div>
+                <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>The top relic tier isn't found — it's <b style={{ color: '#5ff0d0' }}>forged</b>. Salvage relics into <b style={{ color: '#5ff0d0' }}>shards</b> (Relics tab), then gamble them here. Hotter heat, better odds. A failed pour gives back <b>half</b> the shards. <span style={{ color: '#8aa' }}>{ownedK.length}/{KEYSTONE_IDS.length} keystones forged.</span></div>
+                {allK ? (
+                  <div style={{ fontSize: T.small, color: '#5ff0d0', fontWeight: 800, textAlign: 'center', padding: '10px 0' }}>✦ Every Keystone is yours. The forge has nothing left to give.</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    {KEYSTONE_TIERS.map((t) => {
+                      const afford = shards >= t.shards && slag >= t.slag;
+                      return (
+                        <button key={t.id} onClick={() => afford && craftKeystone(t)} disabled={!afford}
+                          style={{ textAlign: 'center', borderRadius: 10, padding: '11px 6px', cursor: afford ? 'pointer' : 'default', background: afford ? '#0e2420' : PANEL, border: `1.5px solid ${afford ? '#2a6a5a' : LINE}`, opacity: afford ? 1 : 0.5 }}>
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: afford ? '#eafff8' : DIM }}>{t.name}</div>
+                          <div style={{ fontSize: T.sub, fontWeight: 900, color: afford ? '#5ff0d0' : DIM, margin: '2px 0' }}>{Math.round(t.odds * 100)}%</div>
+                          <div style={{ fontSize: T.micro, color: afford ? '#c9c98a' : DIM }}>⛏ {t.shards} · ⚒ {t.slag}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {craftResult && (
+                  <div style={{ marginTop: 12, padding: '11px 13px', borderRadius: 10, textAlign: 'center',
+                    background: craftResult.granted ? '#0e2420' : '#1a1410', border: `1.5px solid ${craftResult.granted ? '#5ff0d0' : '#6a4a3a'}` }}>
+                    {craftResult.granted ? (() => { const k = RELIC_BY_ID[craftResult.granted]; return (
+                      <div>
+                        <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1, color: '#5ff0d0', marginBottom: 4 }}>✦ THE POUR HOLDS</div>
+                        <div style={{ fontSize: T.body, fontWeight: 900, color: k.color }}>{k.icon} {k.name}</div>
+                        <div style={{ fontSize: T.micro, color: '#bfe8df', marginTop: 2 }}>{k.desc}</div>
+                      </div>
+                    ); })() : (
+                      <div style={{ fontSize: T.small, fontWeight: 800, color: '#ffae5a' }}>🜂 The forge-fire guttered. {craftResult.refund > 0 ? `${craftResult.refund} shards recovered.` : 'Shards returned.'}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </>)}
 
         {/* ═══════════════ RELICS — found loot, equip a kit ═══════════════ */}
         {homeTab === 'relics' && (
           <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: T.micro, fontWeight: 800, color: shards > 0 ? '#5ff0d0' : DIM }}>⛏ {shards} shards</span>
+                <button onClick={() => setSalvageMode((v) => !v)} title="Melt relics you don't want into shards (for forging Keystones)"
+                  style={{ fontSize: T.micro, fontWeight: 800, color: salvageMode ? '#5ff0d0' : '#9a7fc0', background: salvageMode ? '#0e2420' : 'transparent', border: `1px solid ${salvageMode ? '#2a6a5a' : LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>{salvageMode ? '⛏ salvaging' : '⛏ salvage'}</button>
                 <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 vault {relics.length}/{RELICS.length}</button>
                 <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
               </div>
             </div>
-            <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</div>
+            <div style={{ fontSize: T.micro, color: salvageMode ? '#5ff0d0' : DIM, marginBottom: 10, lineHeight: 1.4 }}>{salvageMode
+              ? <>⛏ <b>Salvage mode</b> — tap any relic to melt it into shards (Common 1 · Rare 3 · Legendary 7). Spend shards at the Forge to gamble for a <b style={{ color: '#5ff0d0' }}>Keystone</b>.</>
+              : <>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</>}</div>
             {(() => { const sets = activeRelicSets(relicKit); return sets.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
                 {sets.map((s) => (
@@ -3347,17 +3437,18 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   const eq = relicKit.includes(r.id);
                   const full = !eq && relicKit.length >= RELIC_SLOTS;
                   const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
+                  const disabled = !salvageMode && full;
                   return (
-                    <button key={r.id} onClick={() => toggleRelic(r.id)} disabled={full}
-                      title={r.lore}
-                      style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
-                        background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
+                    <button key={r.id} onClick={() => (salvageMode ? salvageRelic(r.id) : toggleRelic(r.id))} disabled={disabled}
+                      title={salvageMode ? `Melt for +${shardYield(r.rarity)} shards` : r.lore}
+                      style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: disabled ? 'default' : 'pointer',
+                        background: salvageMode ? '#16100e' : eq ? '#1a1230' : PANEL, border: `1.5px solid ${salvageMode ? '#6a4a3a' : eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: disabled ? 0.5 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
                         <RelicIcon r={r} size={T.body} />
                         <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: salvageMode ? '#ffae5a' : eq ? '#cba6ff' : full ? DIM : rc }}>{salvageMode ? `⛏ +${shardYield(r.rarity)}` : eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
                       </div>
-                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.keystone ? 'KEYSTONE' : r.rarity.toUpperCase()}</div>
                       <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
                     </button>
                   );
@@ -3542,7 +3633,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                           setRelics([]); saveRelics([]);               // the relic collection,
                           setRelicKit([]); saveRelicKit([]);            // the equipped kit,
                           setCrossing(0); saveCrossing(0);              // the NG+ crossing level,
-                          setWards({}); saveWards({});                  // and every ward riddle.
+                          setWards({}); saveWards({});                  // every ward riddle,
+                          setShards(0); saveShards(0);                  // and the shard bank.
                           setGround('outer-ring'); saveGround('outer-ring');
                           setPicked([]); saveSquad([]);
                         }],

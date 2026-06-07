@@ -19,7 +19,8 @@
     "test:manual-golden-assassin": "node scripts/manual-golden-assassin.mjs",
     "test:themes": "node scripts/theme-modewall.mjs",
     "test:wards": "node scripts/ward-gates.mjs",
-    "test": "npm run test:smoke && npm run test:golden && npm run test:manual-golden && npm run test:manual-golden-bulwark && npm run test:manual-golden-mender && npm run test:manual-golden-booster && npm run test:manual-golden-striker && npm run test:manual-golden-assassin && npm run test:themes && npm run test:wards"
+    "test:keystones": "node scripts/keystones.mjs",
+    "test": "npm run test:smoke && npm run test:golden && npm run test:manual-golden && npm run test:manual-golden-bulwark && npm run test:manual-golden-mender && npm run test:manual-golden-booster && npm run test:manual-golden-striker && npm run test:manual-golden-assassin && npm run test:themes && npm run test:wards && npm run test:keystones"
   },
   "dependencies": {
     "react": "^19.2.6",
