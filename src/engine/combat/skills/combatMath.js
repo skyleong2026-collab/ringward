@@ -66,6 +66,11 @@ export function dealDamage(target, amount, actor) {
   if (killed) target.alive = false;
   // Apex: bank a permanent stack for the kill (read above on future hits).
   if (killed && actor?.mods?.apex) actor.huntStacks = (actor.huntStacks || 0) + 1;
+  // "Vampiric" (relic, vF-AH): the attacker drains a fraction of the wound it deals back
+  // to its own HP. Opt-in — lifesteal defaults 0, so no existing golden ever heals here,
+  // and the heal is silent (like reflect) so the golden turn-shape is untouched.
+  const ls = actor?.mods?.lifesteal || 0;
+  if (ls > 0 && remaining > 0 && actor.alive) actor.hp = Math.min(actor.maxHp, actor.hp + Math.round(remaining * ls));
   // `dmg` reported is damage that reached HP (post-block), so feeds/goldens read
   // the real wound; `blocked` is surfaced separately for UI.
   return { uid: target.uid, name: target.name, dmg: remaining, blocked, killed, hpAfter: target.hp, revived };
