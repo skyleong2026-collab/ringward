@@ -270,15 +270,15 @@ export function EventVignette({ tint = '#b06bff', glyph = '✦', size = 84 }) {
 
 // ── The opening — five beats from the rim to the choice to climb. ──────────────
 export const OPENING_SCENES = [
-  { art: <SceneRim />,    image: '/art/cutscene/scene-rim.png', title: 'The Rim',
+  { art: <SceneRim />,    image: '/art/cutscene/scene-rim.jpg', title: 'The Rim',
     text: "You come up the long road to the rim, where your people have lived at the edge of the rings for seventy-five years. You were born here. Today you climb in." },
-  { art: <SceneCores />,  image: '/art/cutscene/scene-cores.png', title: 'Three Cores',
+  { art: <SceneCores />,  image: '/art/cutscene/scene-cores.jpg', title: 'Three Cores',
     text: "Your mentor left you three cores, humming on the mantel. From them your grunlings wake — earth and old machine, grown into something with a heart. They're yours now. So is what he was doing." },
-  { art: <SceneBlight />, image: '/art/cutscene/scene-blight.png', title: 'What Fell',
+  { art: <SceneBlight />, image: '/art/cutscene/scene-blight.jpg', title: 'What Fell',
     text: "Seventy-five years ago, something fell out of a clear sky. Where it struck, the land went wrong — and it's crept outward ever since, ring by ring. They call the place it landed the Drop." },
-  { art: <SceneRings />,  image: '/art/cutscene/scene-rings.png', title: 'The Rings',
+  { art: <SceneRings />,  image: '/art/cutscene/scene-rings.jpg', title: 'The Rings',
     text: "The blight pools in circles around the Drop. Each ring inward is older, deeper, deadlier — and closer to the truth of what's down there. Your mentor climbed them. He didn't come back." },
-  { art: <SceneDoor />,   image: '/art/cutscene/scene-door.png', title: 'The Climb',
+  { art: <SceneDoor />,   image: '/art/cutscene/scene-door.jpg', title: 'The Climb',
     text: "Everyone else holds the rim and waits it out. You won't. You'll take the rings one at a time, grow your grunlings strong enough for the next, and go where he went — all the way to the Drop." },
 ];
 
