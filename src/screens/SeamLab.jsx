@@ -13,6 +13,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import * as sfx from '../sfx.js';
+import { Cutscene, OPENING_SCENES } from './Cutscene.jsx';
 import {
   createBattleState,
   runBattle,
@@ -468,6 +469,10 @@ function saveAuto(on) { try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } 
 const MUSIC_KEY = '8gents_seam_music';
 function loadMusic() { try { return localStorage.getItem(MUSIC_KEY) !== '0'; } catch { return true; } }
 function saveMusic(on) { try { localStorage.setItem(MUSIC_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
+// The opening cutscene plays once on a fresh save (no flag), then is re-watchable.
+const INTRO_KEY = '8gents_seam_intro';
+function introSeen() { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch { return false; } }
+function saveIntroSeen() { try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* best-effort */ } }
 
 // Progressive Cores: a deeper wave pays more, so pushing the climb funds the tree.
 // Front-loaded so a build forms FAST early: Scouts→4, Pack→5, Warden→6, King→7+10.
@@ -1764,6 +1769,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
   const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
   const [music, setMusic] = useState(loadMusic); // ambient pad on/off (user toggle, persisted)
+  const [showIntro, setShowIntro] = useState(() => !introSeen()); // opening cutscene (first launch + replay)
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
@@ -2222,11 +2228,22 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     );
   }
 
+  // ── The opening cutscene — the story's beginning. Plays once on a fresh save, then
+  // re-watchable from the home screen. A full-screen takeover above every phase. ──
+  if (showIntro) {
+    return <Cutscene scenes={OPENING_SCENES} onDone={() => { setShowIntro(false); saveIntroSeen(); }} />;
+  }
+
   // ── Squad picker ──
   if (runPhase === 'pick') {
     return (
       <div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 8 }}>
+          <button onClick={() => { sfx.resume(); setShowIntro(true); }}
+            title="Watch the opening again"
+            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
+            ❖ The Story
+          </button>
           <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
             title={music ? 'Ambient music on' : 'Ambient music off'}
             style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: `1px solid ${music ? '#4a3a66' : '#33333f'}`, background: music ? '#160f1d' : 'transparent', color: music ? '#cba6ff' : '#777' }}>

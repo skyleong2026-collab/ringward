@@ -195,6 +195,14 @@ export function theDrop() {
   tone(1568.0, 'sine', s + 5.4, s + 7.2, 0.06, 0.05);
 }
 
+// Cutscene page-turn: a soft, low woody knock + breath — turning a page in the tale.
+export function sceneTurn() {
+  const s = now();
+  tone(220, 'sine',     s,        s + 0.18, 0.12, 0.01);
+  tone(330, 'triangle', s + 0.02, s + 0.22, 0.07, 0.02);
+  sweep(520, 300, 'sine', 0.2, 0.06, 0.01);
+}
+
 // ── Ambient pad (vF-Z) — a gentle generative drone for the home screen. ──────
 // A slow, low chord that breathes; reschedules itself on a timer. Kept very quiet.
 // Lives behind a master gain so it can be faded out cleanly. User-toggled.
