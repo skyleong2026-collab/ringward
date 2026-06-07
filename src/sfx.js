@@ -117,6 +117,28 @@ export function waveClear() {
     tone(f, 'sine', s + i * 0.13, s + i * 0.13 + 0.32, 0.24, 0.01));
 }
 
+// ── Node-type stingers (vF-BE) — a distinct sound the moment each kind of stop appears. ──
+export function merchantBell() {
+  // Merchant: a bright shop-bell ding + warm body.
+  const s = now();
+  tone(880,  'sine',     s,        s + 0.5,  0.18, 0.004);
+  tone(1318, 'sine',     s + 0.01, s + 0.45, 0.1,  0.004);
+  tone(660,  'triangle', s + 0.12, s + 0.5,  0.08, 0.01);
+}
+export function treasureChime() {
+  // Treasure: an ascending magical sparkle.
+  const s = now();
+  [784, 988, 1318, 1568].forEach((f, i) => tone(f, 'sine', s + i * 0.06, s + i * 0.06 + 0.4, 0.12, 0.004));
+  tone(2093, 'sine', s + 0.28, s + 0.72, 0.06, 0.004);
+}
+export function eliteGrowl() {
+  // Elite: a low menacing growl + a downward snarl — danger ahead.
+  const s = now();
+  tone(70,  'sawtooth', s, s + 0.7, 0.22, 0.02);
+  tone(105, 'triangle', s, s + 0.6, 0.14, 0.02);
+  sweep(300, 90, 'sawtooth', 0.5, 0.12);
+}
+
 export function ringTaken() {
   // Run won: ascending 4-note fanfare + sustained chord bloom
   const s = now();

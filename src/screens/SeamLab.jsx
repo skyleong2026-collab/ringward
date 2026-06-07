@@ -13,12 +13,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import * as sfx from '../sfx.js';
-import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette } from './Cutscene.jsx';
+import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette, WaysideScene } from './Cutscene.jsx';
 import {
   createBattleState,
   runBattle,
   createAIDriver,
-  createHumanDriver,
   getSkill,
   legalSkills,
   enemiesOf,
@@ -103,6 +102,22 @@ const HUNTING_GROUNDS = [
   { id: 'witherfen',   name: 'The Witherfen',            tag: 'where the blight pools', depth: 7, boss: 'The Blight-Heart', biasIds: ['blightcap', 'hexmoth'] },
   { id: 'frostbound',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', depth: 8, boss: 'The Stillness', biasIds: ['frostwarden', 'rimecaller'] },
 ];
+
+// ── WARD GATES (vF-BI) — some thresholds inward won't open to a boss kill alone. A Ward
+// bars the way and sets a RIDDLE: solve its DEED (a clue you decode) to earn the key and
+// pass. A deed wants a SQUAD SHAPE (e.g. two Types climbing together), not raw power — so
+// you can't out-farm the wall — but it's always doable in rings you've already opened, and
+// beta bypasses wards entirely, so no one ever soft-locks. Pure progression-gating; the
+// combat engine is never touched. More wards + chained clues + crafted keys layer on later.
+const WARDS = [
+  { atDepth: 4, id: 'paired', name: "The Warden's Lock", glyph: '🜸', tint: '#9be7ff',
+    // The story shown the first time you reach the sealed gate — the reason WHY it asks this.
+    story: "The way out of the Storm-Wire ends at a gate older than the blight: two iron sockets where a single core should lock, not one. Your people built it back when the rim was held in pairs — a Warden to hold the line, a Reactor to break what came at it — never one climber alone. The mentor's mark is cut fresh beside the sockets: “It still remembers how we did it. Show it, and it'll let you by.”",
+    clue: 'A shield and a flame, set in the old gate together. Bring a 🛡 Bulwark and a 🔥 Reactor back through the Fallen Gate side by side — twice over — and the lock will know its own.',
+    deed: { ring: 'fallen-gate', types: ['Bulwark', 'Reactor'], count: 2,
+      told: 'Clear the Fallen Gate with a 🛡 Bulwark AND a 🔥 Reactor in your squad' } },
+];
+const WARD_AT = Object.fromEntries(WARDS.map((w) => [w.atDepth, w]));
 const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
 const GROUND_KEY = '8gents_seam_ground';
 
@@ -119,6 +134,22 @@ const RING_INTRO = {
   'lightless': 'Past the Warden the light gives out. You go by the glow of your own grunlings\' hearts. Something down here remembers being looked at.',
   'witherfen': 'The blight stops spreading and starts pooling — thick, patient, almost peaceful. You\'re close now. You can feel it deciding whether to let you by.',
   'frostbound': 'Everything goes still and cold and clear. The rings end ahead. And past the last of them, faint and steady, something is waiting at the Drop.',
+};
+
+// ── RING-CLEAR BEATS (vF-AY): felling a ring's boss is a STORY moment, not just a reward.
+// Each clear is the mentor's trail, one ring deeper — his notes getting shorter, stranger,
+// braver, closing on the Drop. Shown on the won screen (the boss falls → a beat → the
+// spoils). Together with RING_INTRO (entry) they bracket each ring with story; together
+// across the 8 they ARE the mentor's through-line toward what he found at the Drop.
+const RING_CLEAR = {
+  'outer-ring': { boss: 'The Cinder Maw', beat: 'The Cinder Maw goes out like a snuffed coal. The outer ring is yours — the easy country, the part everyone survives. Your mentor barely wrote about it. His note just says: “Past here, start paying attention.”' },
+  'fallen-gate': { boss: 'The Gatebreaker', beat: 'The Gatebreaker falls across the rubble of the gate it was named for. Your people built that gate to hold the blight out, and it didn\'t hold. But you got through where it couldn\'t — the way he must have, climbing alone.' },
+  'green-seam': { boss: 'The Old Grove', beat: 'The Old Grove stills, and the wrong-green light dims with it. Your grunlings\' cores have been humming louder the deeper you go, like they remember something older than you. He felt it here too. He wrote one word, underlined: “Closer.”' },
+  'storm-wire': { boss: 'The Live Wire', beat: 'The Live Wire gutters out, and the old power-lines fall quiet for the first time in seventy-five years. Whatever fell never cut the current — it\'s been calling inward all this time. You\'re following it now. He did too.' },
+  'fast-trails': { boss: 'The Blur', beat: 'The Blur finally holds still. This is as far as most ever come back from, and you\'re still climbing. Past here his notes get shorter, then stranger. The last few aren\'t instructions at all. They\'re just questions he never got to answer.' },
+  'lightless': { boss: 'The Throat-Cutter', beat: 'The Throat-Cutter falls in the dark, and you go on by the light of your own grunlings\' hearts. Something down here has been watching you climb the whole way. He knew it was there. His note: “It remembers being looked at. Don\'t look back. Keep going.”' },
+  'witherfen': { boss: 'The Blight-Heart', beat: 'The Blight-Heart bursts, and the pooled rot goes slack and quiet around you. You\'re nearly there. You can feel the Drop deciding whether to let you pass — the same choice it must have offered him. He chose to go on. You find that you already have.' },
+  'frostbound': { boss: 'The Stillness', beat: 'The Stillness ends. The cold goes silent, and the last ring opens ahead of you. Past it, faint and steady, something waits at the Drop — patient, and somehow familiar. He walked into it and never came back down. Now, finally, you\'re going to find out why.' },
 };
 
 // ── Tiers: ring depth IS character tier. Deeper ring = higher tier = a STRONGER
@@ -267,6 +298,30 @@ function pullFrom(ground, stableIds, accessDepth, pity = 0, rand = Math.random) 
   return { id, rarity: rarityOf(id), isDupe: stableIds.includes(id) };
 }
 
+// ── SUMMON / GACHA (vF-BJ): a deliberate pull you SPEND slag on, drawn from the whole
+// wild roster (not a single ring), weighted by rarity, sharing the same PITY as ring-pulls.
+// New → caught (+ a rarity Core head-start); dupe → melts to that creature's Cores. Gives
+// breadth (creatures + Cores), never a shortcut past the climb. Returns {id,rarity,isDupe}.
+const SUMMON_COST = 50;    // slag for a single Wild Call
+const SUMMON5_COST = 220;  // slag for a five-fold call (a small discount + a guaranteed Rare+)
+function summonPull(stableIds, pity = 0, rand = Math.random) {
+  const pool = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id));
+  if (!pool.length) return null;
+  const legs = pool.filter((x) => rarityOf(x) === 'Legendary');
+  let id;
+  if (legs.length && pity >= PITY_AT) {                 // pity: guarantee a Legendary (prefer an unowned one)
+    const fresh = legs.filter((x) => !stableIds.includes(x));
+    const ls = fresh.length ? fresh : legs;
+    id = ls[Math.floor(rand() * ls.length)];
+  } else {
+    const w = pool.map((x) => RARITY_INFO[rarityOf(x)].weight || 1);
+    let roll = rand() * w.reduce((s, x) => s + x, 0);
+    id = pool[pool.length - 1];
+    for (let i = 0; i < pool.length; i++) { roll -= w[i]; if (roll < 0) { id = pool[i]; break; } }
+  }
+  return { id, rarity: rarityOf(id), isDupe: stableIds.includes(id) };
+}
+
 function useViewport() {
   const [w, setW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1024));
   useEffect(() => {
@@ -299,27 +354,68 @@ function useViewport() {
 // the lever that actually threatens the squad, so it's front-loaded hardest. Feel-check freely.
 const D_HP = (d) => 1 + 0.34 * (d - 1) - 0.017 * (d - 1) ** 2;  // d1 ×1.0, d3 ×1.61, d4 ×1.87, d8 ×2.55
 const D_ATK = (d) => 1 + 0.30 * (d - 1) - 0.018 * (d - 1) ** 2; // d1 ×1.0, d3 ×1.53, d4 ×1.74, d8 ×2.22
-function foe(id, temperament, roleHp, roleAtk, depth, extra = {}) {
-  const hp = Math.round(roleHp * D_HP(depth));
-  return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth)), ...extra };
+// NG+ "crossing" (vF-BA): once you've gone THROUGH the Drop, the rings reform harder. Each
+// crossing multiplies enemy HP+ATK by +30% on top of the depth curve — an ascension dial. 0 =
+// the first climb (×1). Enemy-side only (SeamLab foes, not goldens). Feel-check freely.
+const crossMult = (crossing) => 1 + 0.30 * (crossing || 0);
+function foe(id, temperament, roleHp, roleAtk, depth, extra = {}, cm = 1) {
+  const hp = Math.round(roleHp * D_HP(depth) * cm);
+  return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth) * cm), ...extra };
 }
 // Generate a run's four waves from the chosen ring. Enemy IDENTITY (kit/behavior) comes
-// from the ring's locals; HP/ATK come from the wave role scaled by depth.
-function wavesForGround(g) {
+// from the ring's locals; HP/ATK come from the wave role scaled by depth × the crossing mult.
+function wavesForGround(g, cm = 1) {
   const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
+  const F = (id, temp, hp, atk, extra) => foe(id, temp, hp, atk, d, extra, cm);
   return [
     { name: 'Scouts', seed: 101, blurb: `The edge of ${g.name} — a jumpy pair. Warm up, hit fast.`,
-      enemies: () => [ foe(at(0), 'Cautious', 110, 26, d), foe(at(1), 'Cautious', 105, 26, d) ] },
+      enemies: () => [ F(at(0), 'Cautious', 110, 26), F(at(1), 'Cautious', 105, 26) ] },
     { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back hard.',
-      enemies: () => [ foe(at(0), 'Balanced', 175, 40, d), foe(at(1), 'Balanced', 175, 38, d), foe(at(2), 'Balanced', 165, 40, d) ] },
+      enemies: () => [ F(at(0), 'Balanced', 175, 40), F(at(1), 'Balanced', 175, 38), F(at(2), 'Balanced', 165, 40) ] },
     { name: 'The Pack-Lord', seed: 303, blurb: 'The two meanest things in here, paired up. Break through.',
-      enemies: () => [ foe(at(0), 'Greedy', 300, 50, d), foe(at(1), 'Greedy', 220, 62, d) ] },
+      enemies: () => [ F(at(0), 'Greedy', 300, 50), F(at(1), 'Greedy', 220, 62) ] },
     { name: g.boss, boss: true, seed: 404,
       blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
-      enemies: () => [ foe(at(0), 'Greedy', 540, 68, d, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 240, 24, d, { name: 'Tender' }) ] },
+      enemies: () => [ F(at(0), 'Greedy', 540, 68, { name: g.boss, speed: 7 }), F('mossback', 'Balanced', 240, 24, { name: 'Tender' }) ] },
   ];
 }
 const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
+// ── THE CROSSINGS (vF-BA NG+) — the story past the Drop. Reaching the Drop at crossing N
+// shows beat[N]; STEP THROUGH advances to crossing N+1 (rings reform harder). The mentor's
+// trail continues on the far side and his fate unfolds, crossing by crossing.
+const CROSSING_BEATS = [
+  { title: 'The First Climb', lines: [
+    'You walk the last ring to its end, and the Drop opens — not a pit but a doorway, light spilling up out of the dark.',
+    'Your mentor stood exactly here. Went in. You understand it now: he was never lost. He was the first one through.',
+    'Three cores hum at your chest. Seventy-five years of blight — and the answer to all of it is one step away.',
+  ], take: 'You take it.', step: 'STEP THROUGH →' },
+  { title: 'The Second Crossing', lines: [
+    'Through the door, the rings are still here — but wrong-side-out, reformed harder behind you, the blight thicker and older.',
+    'And there, scratched into the first stone past the threshold, in a hand you know: "Keep climbing. It gets worse. Keep climbing anyway."',
+    'He came this far and kept going. So will you.',
+  ], take: 'You go on.', step: 'DEEPER →' },
+  { title: 'The Third Crossing', lines: [
+    'Deeper than your mentor\'s notes ever reached. The grunlings\' cores burn bright and certain now, leading you, like they\'ve come home.',
+    'You start to understand what he understood: the Drop was never a wound in the world. It was a door someone left open. And someone has to close it — or walk all the way through.',
+  ], take: 'You choose to walk through.', step: 'FARTHER STILL →' },
+  { title: 'The Fourth Crossing', lines: [
+    'You find him at last — or what the climb made of him. Not dead. Changed. Still climbing, somewhere ahead, a light that never quite stops moving.',
+    '"You came," he says, without turning. "I hoped you wouldn\'t. I hoped you would." He hands you nothing. He\'s already given you everything: the cores, the holdfast, the long road up.',
+  ], take: 'You climb on, together now.', step: 'TO THE END →' },
+  { title: 'The Deep Crossing', lines: [
+    'There is no bottom to it. There never was. Just the climb, and the ones you climb it for, and the light you carry into the dark so the next one can follow.',
+    'You stopped counting crossings a while ago. So did he. You just keep going up — which, this far in, is the only way that\'s left.',
+  ], take: 'You keep climbing.', step: 'AGAIN →' },
+];
+const crossingBeat = (c) => CROSSING_BEATS[Math.min(c, CROSSING_BEATS.length - 1)];
+const CROSSING_KEY = '8gents_seam_crossing'; // how many times you've stepped through the Drop (NG+ level)
+function loadCrossing() { try { return Math.max(0, parseInt(localStorage.getItem(CROSSING_KEY), 10) || 0); } catch { return 0; } }
+function saveCrossing(n) { try { localStorage.setItem(CROSSING_KEY, String(n)); } catch { /* best-effort */ } }
+const WARDS_KEY = '8gents_seam_wards'; // {wardId: {active, progress, solved}} — gate-riddle state
+function loadWards() { try { return JSON.parse(localStorage.getItem(WARDS_KEY) || '{}') || {}; } catch { return {}; } }
+function saveWards(w) { try { localStorage.setItem(WARDS_KEY, JSON.stringify(w)); } catch { /* best-effort */ } }
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']; // crossing numeral
+const roman = (n) => ROMAN[n] || ('×' + n);
 
 // ── WAYSIDE EVENTS (vF-AB) — not every step is a fight. Between non-boss waves the
 // trail sometimes offers a CHOICE: a flavored situation + 2-3 options with real stakes
@@ -363,6 +459,155 @@ const WAYSIDE_EVENTS = [
       { label: 'The short, mean way', detail: 'Fast, costly.', apply: (c) => (c.hurt(0.12), c.slag(40), '⚒ Rough going, but you make good time and strip a lot of slag. +40 ⚒, some scrapes.') },
       { label: 'The long, quiet way', detail: 'Slow, restful.', apply: (c) => (c.heal(0.25), '✚ Quiet miles. The squad recovers a little on the long road.') },
     ] },
+  { id: 'stillpool', glyph: '💧', tint: '#7fd6ff', title: 'The Stillpool',
+    text: 'A pool of clear water sits impossibly still amid the blight, untouched. It looks clean. Out here, that is reason enough to be careful.',
+    choices: [
+      { label: 'Drink deep', detail: 'A gamble — clean, or tainted?', apply: (c) => c.rng() < 0.65 ? (c.heal(0.5), '💧 It is clean and cold. The squad drinks deep and recovers well.') : (c.hurt(0.1), '🜲 A wrongness under the sweetness. It turns in your gut — a little blight for your trouble.') },
+      { label: 'Fill the canteens', detail: 'Cautious, smaller.', apply: (c) => (c.heal(0.2), '✚ You skim only the surface and move on. A small mercy on the climb.') },
+    ] },
+  { id: 'forge', glyph: '⚙', tint: '#ffae5a', title: 'The Cracked Forge',
+    text: 'An old field-forge, cold a long time, its anvil split clean down the middle. There is still salvage in it — or a last fire you could coax up.',
+    choices: [
+      { label: 'Strip it for slag', detail: 'Tools, plate, scrap.', apply: (c) => (c.slag(38), '⚒ You break it down for everything worth carrying. +38 ⚒.') },
+      { label: 'Temper your edges', detail: 'Sharpen the whole squad.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.15; }), '⚔️ You wake one last fire and put an edge on every claw and tooth. +15% damage for the rest of the climb.') },
+    ] },
+  { id: 'caged', glyph: '🕸', tint: '#9be7c0', title: 'The Caged Thing',
+    text: 'Something is tangled in a knot of old live-wire by the path — small, half-grown, still alive. Its little core flickers, weak and afraid.',
+    choices: [
+      { label: 'Cut it free', detail: 'Kindness has a price out here.', apply: (c) => c.rng() < 0.6 ? (c.cores(20), c.prime(2), '✦ It bolts into the dark — but leaves its gathered Cores at your feet, and one grunling starts the next fight Primed, emboldened.') : (c.hurt(0.18), '🜲 Cornered and terrified, it lashes out as the wire parts. The squad takes a few wounds freeing it.') },
+      { label: 'Strip the wire', detail: 'Hard, but sure.', apply: (c) => (c.slag(30), '⚒ You leave it and take the wire. Live copper is worth a lot. +30 ⚒.') },
+    ] },
+  { id: 'beacon', glyph: '🔆', tint: '#ffd166', title: 'The Watch-Beacon',
+    text: 'A signal-post from when the rim still watched the rings — a rusted brazier on a pole. From up here, a fire would be seen all the way home.',
+    choices: [
+      { label: 'Light it', detail: 'Fight bold; they can see you.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.1; }), '🔥 The beacon catches. Knowing home can see the light, the squad climbs bolder — Primed, and +10% damage onward.') },
+      { label: 'Take the lamp-oil', detail: 'Slag and a little rest.', apply: (c) => (c.slag(22), c.heal(0.15), '⚒ You drain the old oil and rest a moment in its shelter. +22 ⚒, a little recovered.') },
+    ] },
+  { id: 'mentorcache', glyph: '📜', tint: '#cba6ff', title: "The Mentor's Cache",
+    text: 'A stone cairn, marked the way he marked things. He cached supplies on his own climb — and left this one for whoever came after. For you.',
+    choices: [
+      { label: 'Take the supplies', detail: 'He thought of you.', apply: (c) => (c.heal(0.35), c.cores(15), '✚ Food, salve, a few banked Cores. The squad recovers, and you feel less alone on the trail. +15 ⬡.') },
+      { label: 'Read his last note', detail: 'His climb, sharpened to advice.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.1; m.healMult *= 1.2; }), "📜 Everything he learned going up, in a few hard lines. You climb smarter for it — +10% damage and +20% healing onward.") },
+    ] },
+  { id: 'watcher', glyph: '🔭', tint: '#9be7ff', title: 'The Rim-Watcher',
+    text: "An old watcher keeps a cold vigil here, her scope trained inward at the rings. She doesn't turn as you pass. “You've got his walk,” she says. “He'd stop right here too. Said the rings were listening. Said you could hear the Drop think, if you got quiet enough.”",
+    choices: [
+      { label: 'Ask about him', detail: 'How did he climb?', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.08; }), '👁 She tells it plain: patient, never cornered, never proud. He treated every ring like it could kill him, because it could. You climb a little wiser for the telling. +8% damage onward.') },
+      { label: 'Share the watch', detail: 'Sit a while.', apply: (c) => (c.heal(0.3), '✚ You take an hour at the scope beside her, saying nothing. The squad rests. For one hour the blight holds still, almost respectful.') },
+    ] },
+  { id: 'cairn', glyph: '🪦', tint: '#b8b8c8', title: 'The First Cairn',
+    text: 'A cairn older than the blight, names cut into every stone — the first climbers, from when the Drop was new and the rings were only one ring. None of them came back down. Your mentor’s name is here too, cut fresh, in his own hand, the day before he went up for the last time.',
+    choices: [
+      { label: 'Add your name', detail: 'Say you were here.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.05; }), "🪦 You cut your name beneath his. Whatever waits at the Drop, it will know you came on purpose. The squad climbs with that purpose in them — Primed, +5% damage.") },
+      { label: 'Take a stone for luck', detail: 'Carry them with you.', apply: (c) => (c.cores(20), '✦ You pocket one small stone, still warm from the sun. +20 ⬡ — and something steadier sitting in your chest for the climb ahead.') },
+    ] },
+  // ── BRANCHING TALES (vF-BG): multi-step choose-your-own-path passages. A `steps` map
+  // (start → step ids) replaces the single text/choices. A choice with `goto` advances to
+  // another step (running any `apply` for effects on the way); a choice with no `goto` is
+  // terminal — its `apply(ctx)` returns the outcome line, same as a one-shot event. `scene`
+  // names a WaysideScene backdrop. Per-choice `icon` shows a glyph on the button. Pure
+  // run-meta like every wayside — never touches the engine. ──
+  { id: 'tale_fire', kind: 'story', glyph: '🔥', tint: '#ffae5a', title: 'The Fire and the Stranger', scene: 'camp', start: 'meet',
+    steps: {
+      meet: {
+        text: "A fire burns low off the trail, and a figure sits beside it — another climber, older, hands scarred. They lift a hand, unhurried. “Long way to come alone,” they say. “Sit. The fire’s warm and I’ve talked to no one in days.”",
+        choices: [
+          { icon: '🔥', label: 'Sit with them', detail: 'Trust costs nothing yet.', apply: (c) => c.heal(0.2), goto: 'sit' },
+          { icon: '👁', label: 'Hang back in the dark', detail: 'Watch before you trust.', goto: 'watch' },
+          { icon: '🚶', label: 'Nod and keep walking', detail: 'No time for fires.', apply: (c) => (c.slag(14), '🚶 You raise a hand and pass on. They don’t call after you. You strip a little slag from the trailside as you go. +14 ⚒.') },
+        ] },
+      sit: {
+        text: "You sit. They share dried meat and a tin of something bitter and good, and the squad eases by the warmth. After a while the stranger studies you. “You’ve got a mentor’s look. I knew one like that — went up and didn’t come down.” They turn a small worn token over in their hands. “I can tell you what he taught me, or I can give you this. Not both. A body’s got to keep something back.”",
+        choices: [
+          { icon: '📜', label: 'Hear what he taught', detail: '+12% damage onward.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.12; }), '📜 They talk low into the fire — how he read a ring, where he never stepped twice. You climb sharper for it. +12% damage onward.') },
+          { icon: '🎴', label: 'Take the token', detail: 'A found relic.', apply: (c) => { const r = c.relic(); if (r) return `🎴 They press it into your hand — ${r.name}. “He’d want it moving,” they say. Yours now.`; c.cores(30); return '🎴 You reach for it — but it’s a thing you already carry the like of. They give you Cores from their own pack instead. +30 ⬡.'; } },
+        ] },
+      watch: {
+        text: "You stay in the dark and watch. The stranger only sits, feeding the fire twig by twig, talking quiet — to a grunling’s cold grey core set in the dirt beside them, you realize. Grieving it. After a while they bank the fire and sleep, their pack lying open and unguarded.",
+        choices: [
+          { icon: '🤝', label: 'Step into the light anyway', detail: 'Share the watch. Heal well.', apply: (c) => (c.heal(0.34), '🤝 You sit across the fire. They don’t startle — maybe they knew. You keep the watch together till dawn, saying little. The squad rests deep.') },
+          { icon: '🎒', label: 'Take from the pack, slip away', detail: 'Slag, no thanks owed.', apply: (c) => (c.slag(34), '🎒 You lift what won’t be missed and go. It’s the trail’s way, you tell yourself. +34 ⚒ — and a small weight that isn’t slag.') },
+        ] },
+    } },
+  { id: 'tale_door', kind: 'story', glyph: '🚪', tint: '#b06bff', title: 'The Sealed Door', scene: 'ruin', start: 'door',
+    steps: {
+      door: {
+        text: "Set into a ruined wall is a vault door, blight-eaten at the hinges but whole. Behind it something hums — low and patient, the sound a charged core makes. Sealed this deep in, it was sealed for a reason. Or sealed to keep it safe.",
+        choices: [
+          { icon: '💪', label: 'Force it with the squad', detail: 'Hard work, some wounds.', apply: (c) => c.hurt(0.14), goto: 'forced' },
+          { icon: '🔍', label: 'Find the mechanism', detail: 'Slower, careful.', goto: 'mech' },
+          { icon: '🚫', label: 'Leave it sealed', detail: 'Some doors stay shut.', apply: (c) => (c.buff((m) => { m.healMult *= 1.15; }), '🚫 You leave it be. Caution has kept you alive this far, and the discipline of walking away steadies the squad. +15% healing onward.') },
+        ] },
+      forced: {
+        text: "The grunlings set their shoulders and the door grinds inward, rust raining down. The wounds were worth it: a dry vault, untouched, the hum coming from a core-casing on a stone shelf — and beside it a climber’s kit, long abandoned.",
+        choices: [
+          { icon: '🎴', label: 'Take the humming casing', detail: 'A found relic.', apply: (c) => { const r = c.relic(); if (r) return `🎴 You pry the casing open — ${r.name} inside, still warm. Yours.`; c.cores(42); return '🎴 The casing holds only spent Cores — but plenty of them. +42 ⬡.'; } },
+          { icon: '⬡', label: 'Strip the whole vault', detail: 'Cores and scrap.', apply: (c) => (c.cores(28), c.slag(20), '⬡ You take everything not bolted down — banked Cores, good scrap. +28 ⬡, +20 ⚒.') },
+        ] },
+      mech: {
+        text: "You don’t force it. You trace the door’s edge until you find it — a core-lock, the kind your people built before the blight, made to open for a living core and no other key. Your grunlings carry exactly that. You could power it clean… or pry the lock for parts and never know what hummed inside.",
+        choices: [
+          { icon: '⚡', label: 'Power the lock with a core', detail: 'It opens clean. A relic.', apply: (c) => { const r = c.relic(); if (r) return `⚡ The lock drinks the charge and the door sighs open — ${r.name} on the shelf within, left for someone who knew the old way. Yours.`; c.cores(46); return '⚡ The door opens on a stripped vault — but a good cache of Cores remains. +46 ⬡.'; } },
+          { icon: '🔧', label: 'Pry the lock for parts', detail: 'Sure slag, no risk.', apply: (c) => (c.slag(40), '🔧 You take the lock apart for its old, good metal and leave the door to its humming. +40 ⚒ — and you’ll wonder, later, what was behind it.') },
+        ] },
+    } },
+  { id: 'tale_tree', kind: 'story', glyph: '🌳', tint: '#7ec88a', title: 'The Hollow Tree', scene: 'grove', start: 'tree',
+    steps: {
+      tree: {
+        text: "In a stand of pale dead trees, one trunk has grown wrong — half-fused to a grunling that wandered in years ago and never left, the two grown into each other. Its little core still flickers in the hollow of the wood: weak, alive, afraid of you.",
+        choices: [
+          { icon: '✂️', label: 'Try to free its core', detail: 'Careful, costly work.', apply: (c) => c.hurt(0.12), goto: 'free' },
+          { icon: '📜', label: 'Read the carvings on the bark', detail: 'Someone marked this place.', goto: 'carve' },
+          { icon: '🔥', label: 'Burn it clean, move on', detail: 'A hard mercy.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.06; }), '🔥 You give it the only kindness left and set the hollow alight. The squad watches it go quiet and climbs on harder-eyed. Primed, +6% damage onward.') },
+        ] },
+      free: {
+        text: "You work the core loose splinter by splinter, the wood fighting you, your own hands torn for it. At last it comes free — a small, frightened, living thing pulsing in your palm. It looks at you. It has a choice to make too, and so do you.",
+        choices: [
+          { icon: '⚡', label: 'Let it ride with the squad', detail: 'It imprints. Primed + edge.', apply: (c) => (c.prime(3), c.buff((m) => { m.dmgMult *= 1.05; }), '⚡ It settles against your grunlings like it always belonged. The squad climbs Primed and a little bolder for the company. +5% damage onward.') },
+          { icon: '✚', label: 'Set it loose toward home', detail: 'Send it down. Its gift.', apply: (c) => (c.cores(30), c.heal(0.2), '✚ You point it downhill and it goes — but not before its core sheds what it gathered over those long years. +30 ⬡, and the squad eases watching it run.') },
+        ] },
+      carve: {
+        text: "Cut into the bark, weathered but clear, is a mark you know — your mentor’s, the same hand as the cairn. He stood here. Below it, more cuts: a few hard lines of advice, and an arrow pointing to a flat stone at the roots.",
+        choices: [
+          { icon: '📜', label: 'Follow his lines', detail: '+10% dmg & +15% heal.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.10; m.healMult *= 1.15; }), '📜 What he learned this deep, cut where only someone climbing would find it. You climb smarter and gentler on the squad. +10% damage, +15% healing onward.') },
+          { icon: '🪨', label: 'Lift the stone at the roots', detail: 'He cached something.', apply: (c) => (c.cores(24), c.heal(0.3), '🪨 Under it, wrapped against the rot: rations, salve, a handful of banked Cores he left for whoever came after. For you. +24 ⬡, the squad recovers.') },
+        ] },
+    } },
+  // ── MERCHANT nodes (vF-BB): spend the slag you'd otherwise hoard for the Forge on an
+  // immediate edge for THIS run. A real trade — power now vs. a permanent perk later. ──
+  { id: 'trader', kind: 'merchant', glyph: '🛒', tint: '#c9c98a', title: 'The Wayside Trader',
+    text: 'A trader has set a blanket of wares across a flat stone — salves, whetstones, odd bright things. "Long climb ahead," she says. "I take slag. You won\'t carry it through the door anyway."',
+    choices: [
+      { label: 'Buy a mending', cost: 25, detail: 'Patch the whole squad up.', apply: (c) => (c.heal(0.5), '🛒 She works salve into every crack and wound. The squad stands easier. (−25 ⚒)') },
+      { label: 'Buy a whetted edge', cost: 35, detail: '+15% damage, rest of the climb.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.15; }), '🛒 She hones every claw and tooth to a wicked point. +15% damage onward. (−35 ⚒)') },
+      { label: 'Just passing', detail: 'Keep your slag.', apply: () => '🛒 You nod and move on, slag still in your pocket.' },
+    ] },
+  { id: 'dealer', kind: 'merchant', glyph: '🛒', tint: '#c9c98a', title: 'The Scrap-Dealer',
+    text: 'A wiry dealer crouches over a hoard of salvage, sorting cores from junk by feel. "Everyone\'s broke this deep in," he mutters, not looking up. "But everyone needs something. What\'s it gonna be?"',
+    choices: [
+      { label: 'Buy a jolt', cost: 20, detail: 'Start the next fights Primed.', apply: (c) => (c.prime(3), '🛒 He cracks a spare core against yours and the squad lights up — well Primed for what\'s coming. (−20 ⚒)') },
+      { label: 'Buy a found charm', cost: 50, detail: 'A relic, sight unseen.', apply: (c) => { const r = c.relic(); if (r) return `🛒 He digs it out of the pile — ${r.name}. Yours now. (−50 ⚒)`; c.slag(50); return '🛒 He roots through the lot and comes up empty — you already own everything worth selling. Your slag, returned.'; } },
+      { label: 'Walk on', detail: 'Save it for the Forge.', apply: () => '🛒 You leave him to his sorting and keep your slag for home.' },
+    ] },
+  // ── TREASURE nodes (vF-BB): a generous cache — no cost, just a good choice. ──
+  { id: 'cache2', kind: 'treasure', glyph: '💎', tint: '#7fd6ff', title: 'A Hidden Cache',
+    text: 'Tucked into a hollow off the trail, sealed and dry against the blight: a climber\'s cache, forgotten or left on purpose. Whoever stowed it isn\'t coming back for it.',
+    choices: [
+      { label: 'Take the relic', detail: 'Gear for the collection.', apply: (c) => { const r = c.relic(); if (r) return `💎 Wrapped in oilcloth — a relic, ${r.name}. It's yours.`; c.cores(40); return '💎 You own every relic it could hold — so you take the Cores stashed beside them instead. +40 ⬡.'; } },
+      { label: 'Take the supplies', detail: 'Cores and a good rest.', apply: (c) => (c.cores(25), c.heal(0.35), '💎 Food, salve, a handful of banked Cores. The squad recovers and you climb on heavier in the pack. +25 ⬡.') },
+    ] },
+  { id: 'hoard', kind: 'treasure', glyph: '💎', tint: '#7fd6ff', title: "The Climber's Hoard",
+    text: 'A whole shelf of stone, stacked with what the lost left behind — cores in little cairns, gear gone green at the edges, a lifetime of climbs that ended here. You can carry only so much.',
+    choices: [
+      { label: 'Pocket the cores', detail: 'A big haul of Cores.', apply: (c) => (c.cores(50), '💎 You fill your pack with banked Cores — a fortune by rim standards. +50 ⬡.') },
+      { label: 'Take the best relic', detail: 'One good piece of gear.', apply: (c) => { const r = c.relic(); if (r) return `💎 You pick the finest piece — ${r.name}.`; c.cores(50); return '💎 Nothing here you don\'t already own — so you take the Cores. +50 ⬡.'; } },
+    ] },
+  // ── ELITE node (vF-BC): an OPTIONAL extra fight. A marked hunter blocks the trail —
+  // fight it (harder than a normal pack) for a GUARANTEED relic, or slip past and lose
+  // nothing but the prize. Lose the fight and the run ends, like any wipe. Handled by a
+  // dedicated render + startEliteFight (no `choices` — it's fight-or-flee). ──
+  { id: 'elite_hunter', kind: 'elite', glyph: '💀', tint: '#ff6b6b', title: 'A Marked Hunter', foeId: 'veilclaw',
+    text: 'Something has been pacing you for the last mile — bigger than the locals, scarred, unhurried. It steps into the trail ahead and simply waits, the way a thing waits when it has done this before and the climbers always ran. There is a way around. There is always a way around.' },
 ];
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
@@ -418,6 +663,13 @@ const UPGRADES = [
   { id: 'thickhide',  scope: 'squad', icon: '❤️', color: '#ff6b6b',  name: 'Thick Hide',     desc: '+20% max HP for the whole squad.',           apply: (m) => { m.hpMult    *= 1.2; } },
   { id: 'wildfire',   scope: 'squad', icon: '🔥', color: BURN,       name: 'Wildfire',       desc: 'Your Burns land +1 extra stack.',            apply: (m) => { m.burnBonus += 1; } },
   { id: 'overhype',   scope: 'squad', icon: '✦',  color: AMP,        name: 'Overhype',       desc: 'Your Amp lands +1 extra stack.',             apply: (m) => { m.ampBonus  += 1; } },
+  // ── Verb upgrades: squad-wide RULES (not flat stats), via the universal combat verbs.
+  //    Mid-run access to the same mechanics relics grant, so a draft can pivot your build. ──
+  { id: 'firststrike', scope: 'squad', icon: '🎯', color: '#ffd166', name: 'Opening Strike', desc: 'First hit on a full-HP enemy: +25% damage.',  apply: (m) => { m.opener = true; } },
+  { id: 'leech',       scope: 'squad', icon: '🩸', color: '#c83a5a', name: 'Leeching Strikes', desc: 'Heal 12% of all damage you deal.',           apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.12; } },
+  { id: 'killingblow', scope: 'squad', icon: '☠️', color: '#c0c0d8', name: 'Killing Blow',   desc: '+30% damage to enemies already below half HP.', apply: (m) => { m.executioner = (m.executioner || 0) + 0.3; } },
+  { id: 'secondwind',  scope: 'squad', icon: '🪶', color: WIN,        name: 'Second Wind',    desc: 'Each grunling cheats death once per fight — survives a lethal blow at 30% HP.', apply: (m) => { m.phoenix = true; } },
+  { id: 'bloodrush',   scope: 'squad', icon: '🌀', color: CHG,        name: 'Bloodrush',      desc: 'Every kill banks +2 charge on the grunling that landed it.', apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
   // ── Move-bend upgrades: scope:'unit' — you PICK which creature gets this, so
   // bends define your carry rather than spreading thin across the squad. Only
   // offered when you brought the matching Type (no dead drafts). ──
@@ -462,33 +714,33 @@ function savePerks(ids) {
 // channel (same opt-in path as perks/Holdfast), so the engine + goldens stay byte-identical.
 const RELICS = [
   // Commons — one clean stat, the bread-and-butter of a loadout.
-  { id: 'r_ironwood',  img: '/art/relics/r_ironwood.jpg',  icon: '🌰', color: '#c9a06a', name: 'Ironwood Charm', rarity: 'Common', desc: '+18% max HP.',                       lore: 'Blight-hardened heartwood. Heavy — and it makes you heavy too.',  apply: (m) => { m.hpMult *= 1.18; } },
+  { id: 'r_ironwood', img: '/art/relics/r_ironwood.jpg',  icon: '🌰', color: '#c9a06a', name: 'Ironwood Charm', rarity: 'Common', desc: '+18% max HP.',                       lore: 'Blight-hardened heartwood. Heavy — and it makes you heavy too.',  apply: (m) => { m.hpMult *= 1.18; } },
   { id: 'r_quickcore', img: '/art/relics/r_quickcore.jpg', icon: '⚡', color: CHG,       name: 'Quick Core',     rarity: 'Common', desc: 'Start every fight +2 charge.',       lore: 'Still warm to the touch. It wants to go.',                       apply: (m) => { m.chargeStart += 2; } },
-  { id: 'r_menderknot',img: '/art/relics/r_menderknot.jpg',icon: '💚', color: WIN,       name: "Mender's Knot",  rarity: 'Common', desc: 'Healing is +50% stronger.',          lore: 'Tied by a healer who climbed these rings before you.',           apply: (m) => { m.healMult *= 1.5; } },
+  { id: 'r_menderknot', img: '/art/relics/r_menderknot.jpg',icon: '💚', color: WIN,       name: "Mender's Knot",  rarity: 'Common', desc: 'Healing is +50% stronger.',          lore: 'Tied by a healer who climbed these rings before you.',           apply: (m) => { m.healMult *= 1.5; } },
   // Rares — bigger, most with a small second edge.
-  { id: 'r_whetfang',   img: '/art/relics/r_whetfang.jpg',  icon: '⚔️', color: '#ff8a4a', name: 'Whetstone Fang', rarity: 'Rare', desc: '+35% damage.',                        lore: 'A tooth filed to an edge that never seems to dull.',             apply: (m) => { m.dmgMult *= 1.35; } },
-  { id: 'r_emberbrand', img: '/art/relics/r_emberbrand.jpg',icon: '🔥', color: BURN,      name: 'Ember Brand',    rarity: 'Rare', desc: 'Burns +2 stacks, +10% damage.',       lore: 'It smoulders against the cold of the deep rings.',              apply: (m) => { m.burnBonus += 2; m.dmgMult *= 1.1; } },
-  { id: 'r_bulwark',    img: '/art/relics/r_bulwark.jpg',   icon: '🛡️', color: '#7fd6ff', name: 'Bulwark Stone',  rarity: 'Rare', desc: '+30% max HP and +30% shields.',       lore: 'A shard of the Fallen Gate that still remembers holding.',       apply: (m) => { m.hpMult *= 1.3; m.blockMult *= 1.3; } },
-  { id: 'r_reckless',   img: '/art/relics/r_reckless.jpg',  icon: '🩸', color: '#ff6b6b', name: 'Reckless Charm', rarity: 'Rare', desc: '+55% damage, −18% max HP.',           lore: 'Climb angry, climb fast — and mind the long way down.',         apply: (m) => { m.dmgMult *= 1.55; m.hpMult *= 0.82; } },
+  { id: 'r_whetfang', img: '/art/relics/r_whetfang.jpg',   icon: '⚔️', color: '#ff8a4a', name: 'Whetstone Fang', rarity: 'Rare', desc: '+35% damage.',                        lore: 'A tooth filed to an edge that never seems to dull.',             apply: (m) => { m.dmgMult *= 1.35; } },
+  { id: 'r_emberbrand', img: '/art/relics/r_emberbrand.jpg', icon: '🔥', color: BURN,      name: 'Ember Brand',    rarity: 'Rare', desc: 'Burns +2 stacks, +10% damage.',       lore: 'It smoulders against the cold of the deep rings.',              apply: (m) => { m.burnBonus += 2; m.dmgMult *= 1.1; } },
+  { id: 'r_bulwark', img: '/art/relics/r_bulwark.jpg',    icon: '🛡️', color: '#7fd6ff', name: 'Bulwark Stone',  rarity: 'Rare', desc: '+30% max HP and +30% shields.',       lore: 'A shard of the Fallen Gate that still remembers holding.',       apply: (m) => { m.hpMult *= 1.3; m.blockMult *= 1.3; } },
+  { id: 'r_reckless', img: '/art/relics/r_reckless.jpg',   icon: '🩸', color: '#ff6b6b', name: 'Reckless Charm', rarity: 'Rare', desc: '+55% damage, −18% max HP.',           lore: 'Climb angry, climb fast — and mind the long way down.',         apply: (m) => { m.dmgMult *= 1.55; m.hpMult *= 0.82; } },
   // Legendaries — run-defining, with a real trade.
   { id: 'r_bloodpact', img: '/art/relics/r_bloodpact.jpg', icon: '❤️‍🔥', color: '#ff4d6d', name: 'Bloodpact',    rarity: 'Legendary', desc: '+30% damage, +40% healing, −10% HP.', lore: 'What you pour out comes back doubled. Some of you stays behind.', apply: (m) => { m.dmgMult *= 1.3; m.healMult *= 1.4; m.hpMult *= 0.9; } },
   { id: 'r_glassedge', img: '/art/relics/r_glassedge.jpg', icon: '🗡️', color: '#e8e2ff', name: 'Glass Edge',     rarity: 'Legendary', desc: '+70% damage, −30% max HP.',          lore: 'It cuts through anything. Including the hand that holds it.',     apply: (m) => { m.dmgMult *= 1.7; m.hpMult *= 0.7; } },
   { id: 'r_dropshard', img: '/art/relics/r_dropshard.jpg', icon: '✦',  color: ACCENT,    name: 'Drop-Shard',     rarity: 'Legendary', desc: '+18% damage, +18% HP, +1 charge.',   lore: 'A splinter of whatever fell. It hums in tune with your cores.',   apply: (m) => { m.dmgMult *= 1.18; m.hpMult *= 1.18; m.chargeStart += 1; } },
   // VERB relics (vF-AF) — not a stat, a RULE. Conditional and build-defining; they hook
   // the shared combat path (opener/apex/shatter) so the whole squad gets the verb.
-  { id: 'r_ambush',    img: '/art/relics/r_ambush.jpg',    icon: '🎯', color: '#ffd166',  name: "Ambusher's Edge",rarity: 'Rare',      desc: 'First hit on a full-HP enemy: +25% damage.', lore: 'Strike before they know you are even there.',                  apply: (m) => { m.opener = true; } },
+  { id: 'r_ambush', img: '/art/relics/r_ambush.jpg',    icon: '🎯', color: '#ffd166',  name: "Ambusher's Edge",rarity: 'Rare',      desc: 'First hit on a full-HP enemy: +25% damage.', lore: 'Strike before they know you are even there.',                  apply: (m) => { m.opener = true; } },
   { id: 'r_frostbite', img: '/art/relics/r_frostbite.jpg', icon: '❄️', color: '#7fd6ff',  name: 'Frostbite Charm',rarity: 'Rare',      desc: 'Hits on a FROZEN enemy deal +50%. Pairs with a Warden.',     lore: 'Cold makes a thing brittle. Then you break it.',               apply: (m) => { m.shatter = true; } },
-  { id: 'r_totem',     img: '/art/relics/r_totem.jpg',     icon: '🐺', color: '#ff7a9c',  name: "Hunter's Totem", rarity: 'Legendary', desc: 'Every kill sharpens that grunling +8% damage — stacks all fight.', lore: 'Blood remembers. The pack grows keener with every fall.',     apply: (m) => { m.apex = true; } },
-  { id: 'r_vampiric',  img: '/art/relics/r_vampiric.jpg',  icon: '🩸', color: '#c83a5a',  name: 'Vampiric Edge',  rarity: 'Legendary', desc: 'Heal 15% of all damage you deal.',             lore: 'It takes a little life each time it bites — and gives it to you.', apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.15; } },
+  { id: 'r_totem', img: '/art/relics/r_totem.jpg',     icon: '🐺', color: '#ff7a9c',  name: "Hunter's Totem", rarity: 'Legendary', desc: 'Every kill sharpens that grunling +8% damage — stacks all fight.', lore: 'Blood remembers. The pack grows keener with every fall.',     apply: (m) => { m.apex = true; } },
+  { id: 'r_vampiric', img: '/art/relics/r_vampiric.jpg',  icon: '🩸', color: '#c83a5a',  name: 'Vampiric Edge',  rarity: 'Legendary', desc: 'Heal 15% of all damage you deal.',             lore: 'It takes a little life each time it bites — and gives it to you.', apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.15; } },
   // More stat/trade relics — widen the build space (a healer kit, a berserker kit, tempo).
-  { id: 'r_stoneblood',img: '/art/relics/r_stoneblood.jpg',icon: '🪨', color: '#a89070',  name: 'Stoneblood',     rarity: 'Common',    desc: '+22% max HP.',                               lore: 'Slow to bleed, slower to fall.',                              apply: (m) => { m.hpMult *= 1.22; } },
+  { id: 'r_stoneblood', img: '/art/relics/r_stoneblood.jpg',icon: '🪨', color: '#a89070',  name: 'Stoneblood',     rarity: 'Common',    desc: '+22% max HP.',                               lore: 'Slow to bleed, slower to fall.',                              apply: (m) => { m.hpMult *= 1.22; } },
   { id: 'r_wrathcore', img: '/art/relics/r_wrathcore.jpg', icon: '😤', color: '#ff5a3c',  name: 'Wrathcore',      rarity: 'Rare',      desc: '+42% damage, −12% healing.',                 lore: 'All forward. Mending is for after — if there is an after.',    apply: (m) => { m.dmgMult *= 1.42; m.healMult *= 0.88; } },
-  { id: 'r_surgeon',   img: '/art/relics/r_surgeon.jpg',   icon: '🧰', color: '#7be0a0',  name: "Surgeon's Kit",  rarity: 'Rare',      desc: '+70% healing, −12% damage.',                 lore: 'Keep everyone standing and the rest sorts itself out.',        apply: (m) => { m.healMult *= 1.7; m.dmgMult *= 0.88; } },
-  { id: 'r_frenzy',    img: '/art/relics/r_frenzy.jpg',    icon: '🔆', color: '#ffb84d',  name: 'Frenzy Totem',   rarity: 'Legendary', desc: '+20% damage and start every fight +1 charge.', lore: 'It will not let you wait. Neither will what is coming.',       apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
-  { id: 'r_reaper',    img: '/art/relics/r_reaper.jpg',    icon: '☠️', color: '#c0c0d8',  name: "Reaper's Mark",  rarity: 'Legendary', desc: '+40% damage to enemies already below half HP.', lore: 'Finish what the climb started. Leave nothing standing.',      apply: (m) => { m.executioner = (m.executioner || 0) + 0.4; } },
-  { id: 'r_bramble',   img: '/art/relics/r_bramble.jpg',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
-  { id: 'r_reservoir', img: '/art/relics/r_reservoir.jpg', icon: '⚗️', color: CHG,        name: 'Reservoir Core', rarity: 'Rare',      desc: 'Each kill grants the killer +1 charge.',         lore: 'A spark caught in glass. It wants to be more.',               apply: (m) => { m.onKillCharge = true; } },
-  { id: 'r_phoenix',   img: '/art/relics/r_phoenix.jpg',   icon: '🪶', color: '#ffb347',  name: 'Phoenix Feather',rarity: 'Legendary', desc: 'Once per run: survive a lethal hit at 1 HP.',    lore: 'The ash at its edges never quite catches. Not yet.',           apply: (m) => { m.phoenix = true; } },
+  { id: 'r_surgeon', img: '/art/relics/r_surgeon.jpg',   icon: '🧰', color: '#7be0a0',  name: "Surgeon's Kit",  rarity: 'Rare',      desc: '+70% healing, −12% damage.',                 lore: 'Keep everyone standing and the rest sorts itself out.',        apply: (m) => { m.healMult *= 1.7; m.dmgMult *= 0.88; } },
+  { id: 'r_frenzy', img: '/art/relics/r_frenzy.jpg',    icon: '🔆', color: '#ffb84d',  name: 'Frenzy Totem',   rarity: 'Legendary', desc: '+20% damage and start every fight +1 charge.', lore: 'It will not let you wait. Neither will what is coming.',       apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
+  { id: 'r_reaper', img: '/art/relics/r_reaper.jpg',    icon: '☠️', color: '#c0c0d8',  name: "Reaper's Mark",  rarity: 'Legendary', desc: '+40% damage to enemies already below half HP.', lore: 'Finish what the climb started. Leave nothing standing.',      apply: (m) => { m.executioner = (m.executioner || 0) + 0.4; } },
+  { id: 'r_bramble', img: '/art/relics/r_bramble.jpg',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
+  { id: 'r_phoenix',   img: '/art/relics/r_phoenix.jpg',   icon: '🪶', color: '#ffb84d',  name: 'Phoenix Feather', rarity: 'Legendary', desc: 'Each grunling survives one lethal blow per fight (revives at 30% HP).', lore: 'A single bright feather, warm to the touch. It does not burn — it remembers how to come back.', apply: (m) => { m.phoenix = true; } },
+  { id: 'r_reservoir', img: '/art/relics/r_reservoir.jpg', icon: '🌀', color: CHG,        name: 'Reservoir Core',  rarity: 'Rare',      desc: 'Every kill banks +2 charge on the grunling that landed it.', lore: 'It drinks the last spark of whatever falls to you, and saves it for the next blow.', apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
@@ -499,8 +751,35 @@ function loadRelics() { try { return JSON.parse(localStorage.getItem(RELIC_KEY) 
 function saveRelics(ids) { try { localStorage.setItem(RELIC_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
 function loadRelicKit() { try { return JSON.parse(localStorage.getItem(RELIC_LOADOUT_KEY) || '[]') || []; } catch { return []; } }
 function saveRelicKit(ids) { try { localStorage.setItem(RELIC_LOADOUT_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
-// Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe).
-function relicMods(equippedIds, m) { (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) r.apply(m); }); }
+// ── RELIC SETS (vF-AT) — thematic synergies. Equip 2+ relics from a set into your kit and
+// it activates a bonus on top of the relics themselves. With only RELIC_SLOTS=3 to spend,
+// this makes the loadout a real decision: chase a set synergy, or just take your best three.
+// Relics can belong to more than one set, so some kits light up two at once. Opt-in mods.
+const RELIC_SETS = [
+  { id: 'berserker', name: 'Berserker', icon: '🔥', need: 2, desc: '+12% damage',
+    members: ['r_whetfang', 'r_reckless', 'r_wrathcore', 'r_glassedge', 'r_bloodpact', 'r_frenzy'],
+    apply: (m) => { m.dmgMult *= 1.12; } },
+  { id: 'warden', name: 'Warden', icon: '🛡️', need: 2, desc: '+12% max HP',
+    members: ['r_ironwood', 'r_stoneblood', 'r_bulwark', 'r_bramble'],
+    apply: (m) => { m.hpMult *= 1.12; } },
+  { id: 'lifeblood', name: 'Lifeblood', icon: '🩸', need: 2, desc: '+8% lifesteal',
+    members: ['r_vampiric', 'r_bloodpact', 'r_menderknot', 'r_surgeon', 'r_reckless'],
+    apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.08; } },
+  { id: 'tempo', name: 'Tempo', icon: '⚡', need: 2, desc: 'Start every fight +1 charge',
+    members: ['r_quickcore', 'r_reservoir', 'r_frenzy', 'r_dropshard'],
+    apply: (m) => { m.chargeStart += 1; } },
+];
+// Which sets are active for an equipped kit (>= the set's `need` members present).
+function activeRelicSets(equippedIds) {
+  const ids = equippedIds || [];
+  return RELIC_SETS.filter((s) => s.members.filter((id) => ids.includes(id)).length >= s.need);
+}
+// Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe) — the
+// relics themselves, then any active SET bonuses on top.
+function relicMods(equippedIds, m) {
+  (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) r.apply(m); });
+  activeRelicSets(equippedIds).forEach((s) => s.apply(m));
+}
 // A ring boss offers a CHOICE of up to n relics — a weighted draw of DISTINCT relics from
 // what you don't yet own. You pick one on the won screen. Empty = collection full → slag.
 function rollRelicChoices(owned, n = 3) {
@@ -592,6 +871,12 @@ const AUTO_SPEEDS = [1, 2, 4];
 const AUTO_SPEED_KEY = '8gents_seam_autospeed';
 function loadAutoSpeed() { try { const n = parseInt(localStorage.getItem(AUTO_SPEED_KEY), 10); return AUTO_SPEEDS.includes(n) ? n : 2; } catch { return 2; } }
 function saveAutoSpeed(n) { try { localStorage.setItem(AUTO_SPEED_KEY, String(n)); } catch { /* best-effort */ } }
+// AUTO-PICK (vF-AZ) — on rings you've ALREADY cleared (farming), auto-resolve the upgrade
+// draft + wayside events instead of prompting, so re-clears are a true fast-forward. It NEVER
+// fires on a fresh/deeper ring (depth > reclaimed) — the climb stays a hands-on decision.
+const AUTO_PICK_KEY = '8gents_seam_autopick';
+function loadAutoPick() { try { return localStorage.getItem(AUTO_PICK_KEY) === '1'; } catch { return false; } }
+function saveAutoPick(on) { try { localStorage.setItem(AUTO_PICK_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
 // Ambient music toggle — default ON, but only ever sounds after a user gesture (the
 // AudioContext stays suspended until then), so nothing autoplays uninvited.
 const MUSIC_KEY = '8gents_seam_music';
@@ -969,7 +1254,7 @@ function playerDef(member, squadMods, perm) {
       cinderskin:      p.cinderskin || false,
       backdraftShield: p.backdraftShield || false,
       smolder:         p.smolder || false,
-      phoenix:         p.phoenix || false,
+      phoenix:         (squadMods?.phoenix || false) || p.phoenix || false, // squad route = "Second Wind" upgrade (vF-AQ)
       // Keystones (deep tree, opt-in flags):
       singularity:    p.singularity    || false,
       overloadRefund: p.overloadRefund || false,
@@ -986,6 +1271,7 @@ function playerDef(member, squadMods, perm) {
       lifesteal:      (squadMods?.lifesteal ?? 0) + (p.lifesteal ?? 0), // relic-sourced drain-on-hit
       executioner:    (squadMods?.executioner ?? 0) || (p.executioner ?? 0), // relic — bonus vs low-HP
       thorns:         (squadMods?.thorns ?? 0) || (p.thorns ?? 0),           // relic — reflect when struck
+      killCharge:     (squadMods?.killCharge ?? 0) + (p.killCharge ?? 0),     // upgrade — bank charge on a kill
       doomAll:        p.doomAll        || false, // Hexer tree — Doom curses the line
       jinxSpread:     p.jinxSpread     || false, // Hexer tree — Jinx curses a 2nd enemy
       // per-creature bends (run-scoped) + permanent tree, combined:
@@ -1956,13 +2242,19 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [sigils, setSigils] = useState(loadSigils); // {apexId: count} — gathered toward a challenge
   const [unlocked, setUnlocked] = useState(loadUnlocked); // deepest ring earned (strict inward)
   const [unlockedNow, setUnlockedNow] = useState(null); // ring depth just opened (won-screen beat)
+  const [wards, setWards] = useState(loadWards);        // {wardId: {active, progress, solved}} — gate riddles
+  const [wardBlock, setWardBlock] = useState(null);     // a Ward just barred the way (won-screen reveal)
+  const [wardSolvedNow, setWardSolvedNow] = useState(null); // a Ward's riddle just completed (won-screen reveal)
   const [beta, setBeta] = useState(loadBeta); // test switch — fast-forwards the gate
   const accessDepth = beta ? 8 : unlocked; // the deepest ring you may enter right now
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
   const [reclaimed, setReclaimed] = useState(loadReclaimed); // deepest ring boss ever beaten (0..8) = Holdfast reclaim depth
+  const [crossing, setCrossing] = useState(loadCrossing);    // NG+ level — times stepped through the Drop (0 = first climb)
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
   const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
   const [pendingEvent, setPendingEvent] = useState(null); // a wayside event awaiting a choice (or null)
+  const [eventStep, setEventStep] = useState(null); // current step id within a branching TALE (null = start / not a tale)
+  const [pendingElite, setPendingElite] = useState(null); // an ELITE node awaiting fight-or-flee (or null)
   const [eventOutcome, setEventOutcome] = useState(null); // the outcome line after a choice is made
   const eventsSeenRef = useRef([]); // event ids already shown THIS run — no repeats within a run
   const [music, setMusic] = useState(loadMusic); // ambient pad on/off (user toggle, persisted)
@@ -1972,12 +2264,16 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [relicChoices, setRelicChoices] = useState([]);    // pending boss-drop picks — choose one on the won screen
   const [relicDrop, setRelicDrop] = useState(null);        // the relic you chose this clear (won-screen reveal)
   const [showVault, setShowVault] = useState(false);       // the relic VAULT overlay — the full collection to chase
+  const [showCodex, setShowCodex] = useState(false);       // THE CHRONICLE — a lore codex that fills as you climb
+  const [homeTab, setHomeTab] = useState('raid');          // home shell page: raid | forge | relics | holdfast
+  const [showSettings, setShowSettings] = useState(false); // ⚙ settings menu overlay (music/auto-pick/beta/reset)
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
+  const [summonResults, setSummonResults] = useState(null); // [{id,rarity,isDupe,gainedCores}] — last Summon's pulls
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
   const [targetChoice, setTargetChoice] = useState(null); // who's tentatively selected on the target-pick screen (confirm to commit)
@@ -1990,6 +2286,51 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
   const [auto, setAutoState] = useState(loadAuto); // AUTO: let the AI fight your squad
   const setAuto = (on) => { setAutoState(on); saveAuto(on); };
+  const [autoPick, setAutoPickState] = useState(loadAutoPick); // auto-resolve upgrade/event screens on FARMED rings
+  const setAutoPick = (on) => { setAutoPickState(on); saveAutoPick(on); };
+  const farmedRef = useRef(false); // is THIS run a re-clear of an already-beaten ring? (set at run start)
+  const apTimer = useRef(null);    // the single pending auto-pick action timer
+  const apSig = useRef(null);      // signature of the actionable state we've already scheduled for
+  // AUTO-PICK: on a farmed ring (already cleared), auto-resolve the upgrade draft + wayside
+  // events with a brief beat (so you can still SEE each pick fly by) instead of prompting.
+  // NOTE: this screen re-renders rapidly, so we DON'T clear the timer on every effect run —
+  // we only (re)schedule when the actionable STATE changes (tracked by `apSig`). Otherwise a
+  // self-cancelling setTimeout would be wiped before its delay elapsed and never fire.
+  useEffect(() => {
+    let sig = null, act = null;
+    if (autoPick && farmedRef.current) {
+      if (runPhase === 'upgrade' && offer.length && !upgradeChoice) {
+        sig = 'u' + waveIdx;
+        // `offer` holds upgrade IDS — resolve to objects, prefer a squad-scope one (no target detour).
+        const pick = offer.map((id) => UPGRADE_BY_ID[id]).find((u) => u && u.scope === 'squad') || UPGRADE_BY_ID[offer[0]];
+        if (pick) act = () => applyUpgrade(pick);
+      } else if (runPhase === 'pick-target' && pendingUpgrade) {
+        sig = 'pt' + waveIdx;
+        const tgt = squad.find((m) => m.hp > 0) || squad[0];
+        if (tgt) act = () => pickTarget(tgt.id);
+      } else if (runPhase === 'event' && pendingElite && !eventOutcome) {
+        sig = 'el' + waveIdx;
+        act = () => eventPressOn(); // farming: slip past elites (don't risk the run on auto)
+      } else if (runPhase === 'event' && pendingEvent && !eventOutcome) {
+        const ev = pendingEvent;
+        const step = ev.steps ? ev.steps[eventStep || ev.start] : ev; // TALE: the live step
+        sig = 'ev' + ev.id + (eventStep || ''); // include step so auto re-fires through a branching tale
+        const choices = step.choices || [];
+        // farming: prefer a FREE TERMINAL choice (ends the tale fast, no auto-spend); else a
+        // free advancing choice; else the first available.
+        const ch = choices.find((c) => !c.cost && !c.goto) || choices.find((c) => !c.cost) || choices[0];
+        if (ch) act = () => chooseEvent(ch);
+      } else if (runPhase === 'event' && eventOutcome) {
+        sig = 'eo' + waveIdx;
+        act = () => eventPressOn();
+      }
+    }
+    if (sig === apSig.current) return; // same actionable state (incl. both null) — let any pending timer ride
+    apSig.current = sig;
+    if (apTimer.current) { clearTimeout(apTimer.current); apTimer.current = null; }
+    if (act) apTimer.current = setTimeout(() => { apTimer.current = null; act(); }, sig && sig.startsWith('eo') ? 650 : 320);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPick, runPhase, offer, upgradeChoice, pendingUpgrade, pendingEvent, eventStep, eventOutcome, squad, waveIdx]);
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
@@ -2112,16 +2453,24 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   // Roll a wayside event for this between-waves step (~55%), never repeating one in a run.
   function maybeWaysideEvent() {
-    if (Math.random() > 0.55) return null;
-    const pool = WAYSIDE_EVENTS.filter((e) => !eventsSeenRef.current.includes(e.id));
-    if (!pool.length) return null;
-    const ev = pool[Math.floor(Math.random() * pool.length)];
+    if (Math.random() > 0.7) return null; // ~70% of non-boss steps are a NODE, not just a fight
+    const unseen = WAYSIDE_EVENTS.filter((e) => !eventsSeenRef.current.includes(e.id));
+    if (!unseen.length) return null;
+    // Roll a node KIND (weighted), then an unseen node of that kind; fall back to any unseen.
+    const kindOf = (e) => e.kind || 'story';
+    const roll = Math.random() * 100;
+    const kind = roll < 50 ? 'story' : roll < 69 ? 'merchant' : roll < 88 ? 'treasure' : 'elite';
+    const ofKind = unseen.filter((e) => kindOf(e) === kind);
+    const pickPool = ofKind.length ? ofKind : unseen;
+    const ev = pickPool[Math.floor(Math.random() * pickPool.length)];
     eventsSeenRef.current = [...eventsSeenRef.current, ev.id];
     return ev;
   }
   // Apply a chosen option's effect via a ctx bound to the live run state, then show the outcome.
   function chooseEvent(choice) {
     if (eventOutcome) return; // already chosen — wait for PRESS ON
+    if (choice.cost && slag < choice.cost) return; // can't afford this ware (button is also disabled)
+    if (choice.cost) onSlag?.(-choice.cost); // merchant: pay before the goods
     const aliveIds = squad.filter((m) => m.hp > 0).map((m) => m.id);
     const ctx = {
       rng: Math.random,
@@ -2131,11 +2480,41 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       hurt: (frac) => setSquad((sq) => sq.map((m) => m.hp > 0 ? { ...m, hp: Math.max(1, Math.round(m.hp - maxHpOf(m, runMods) * frac)) } : m)),
       buff: (fn) => setRunMods((rm) => { const n = { ...rm }; fn(n); return n; }),
       prime: (n = 2) => setRunMods((rm) => ({ ...rm, chargeStart: (rm.chargeStart || 0) + n })),
+      // grant a relic into the permanent collection (a weighted unowned draw); null if full.
+      relic: () => { const rd = rollRelicChoices(relics, 1)[0]; if (!rd) return null; const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); return rd; },
     };
     sfx.upgradePick();
-    setEventOutcome(choice.apply(ctx) || 'You press on.');
+    const res = choice.apply ? choice.apply(ctx) : null; // run effects (terminal choices also return the outcome line)
+    if (choice.goto) setEventStep(choice.goto);          // a TALE continues — advance to the next step, no outcome yet
+    else setEventOutcome(res || 'You press on.');         // terminal — show the outcome + PRESS ON
   }
-  function eventPressOn() { setPendingEvent(null); setEventOutcome(null); setRunPhase('upgrade'); }
+  function eventPressOn() { setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicDrop(null); setRunPhase('upgrade'); }
+  // ELITE node: an optional standalone fight vs a marked hunter (tough: depth × crossing ×
+  // an elite bump). Win → a guaranteed relic + a brief reveal; lose → the run ends like any
+  // wipe. Squad HP carries in and out. Reuses the run's auto/manual mode.
+  function startEliteFight() {
+    if (!pendingElite) return;
+    const elite = pendingElite, sq = squad, mods = runMods;
+    const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
+    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
+    const base = COMBAT_CREATURES[elite.foeId], cm = crossMult(crossing);
+    const eHp = Math.round(base.hp * D_HP(runDepth) * cm * 2.0), eAtk = Math.round(base.atk * D_ATK(runDepth) * cm * 1.4);
+    const foeDef = { ...makeUnitDef(elite.foeId, 'Greedy'), name: elite.title, hp: eHp, maxHp: eHp, atk: eAtk, speed: 7 };
+    setPendingElite(null);
+    fight.begin(aDefs, [foeDef], 555, auto ? 'auto' : 'play', (res, finalState) => {
+      const next = sq.map((m) => ({ ...m }));
+      fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
+      const won = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0) && res.winner !== 'B';
+      if (!won) { const got = lossSlag(waveIdx); onSlag?.(got); setEarned(got); setSquad(next); sfx.squadDown(); setRunPhase('lost'); return; }
+      setSquad(next);
+      const rd = rollRelicChoices(relics, 1)[0]; // guaranteed relic for felling the hunter
+      if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); setRelicDrop(rd); } else { onSlag?.(40); }
+      sfx.ringTaken();
+      setEventOutcome('💀 The Marked Hunter falls. It will not pace anyone again. You take its prize.');
+      setPendingElite(elite); setRunPhase('event'); // back to the node screen to show the spoils
+    });
+    setRunPhase('fighting');
+  }
 
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
@@ -2155,21 +2534,48 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       }
       // Progressive Cores: each surviving fielded creature banks ⬡ for clearing this wave.
       const clearedIds = fielded.filter((mi) => next[mi].hp > 0).map((mi) => next[mi].id);
-      awardCores(clearedIds, Math.max(1, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth) * runRepeat)));
+      awardCores(clearedIds, Math.max(1, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth) * runRepeat * (1 + 0.25 * crossing))));
       // Patch survivors up a little for the next push.
       const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
       setSquad(patched);
       if (idx === WAVE_COUNT - 1) {
-        onSlag?.(WIN_SLAG); setEarned(WIN_SLAG);
+        const winSlag = Math.round(WIN_SLAG * (1 + 0.25 * crossing)); // deeper crossings pay more
+        onSlag?.(winSlag); setEarned(winSlag);
         const hunted = accessibleGround(ground, accessDepth); // the ring you actually raided
         setCaughtFrom(hunted);
         // Record the clear — repeats of this ring pay diminishing Cores from here on.
         setClears((c) => { const n = { ...c, [hunted.id]: (c[hunted.id] || 0) + 1 }; saveClears(n); return n; });
-        // Strict inward: beating a ring's boss at your current frontier opens the next ring
-        // (and its higher tier). Beta mode skips the gate, so it never re-unlocks.
-        if (!beta && hunted.depth === unlocked && unlocked < 8) {
+        // Strict inward + WARD GATES: beating a ring's boss at your frontier opens the next
+        // ring — UNLESS a Ward bars that threshold. A sealed Ward reveals its riddle and the
+        // way stays shut until its deed is done. Beta skips wards (and the gate) entirely.
+        const frontierWin = !beta && hunted.depth === unlocked && unlocked < 8;
+        const ward = WARD_AT[unlocked];
+        if (frontierWin && ward && !wards[ward.id]?.solved) {
+          setWards((w) => { const cur = w[ward.id] || {}; const n = { ...w, [ward.id]: { active: true, progress: cur.progress || 0, solved: false } }; saveWards(n); return n; });
+          setWardBlock(ward); setUnlockedNow(null);
+        } else if (frontierWin) {
           const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); setUnlockedNow(nd);
         } else setUnlockedNow(null);
+        // WARD DEEDS: any clear can advance an ACTIVE ward's riddle — the right ring with the
+        // right squad shape (e.g. a Bulwark + a Reactor fielded together). Complete it and the
+        // ward opens (its gated ring unlocks) + drops a key relic. Never touches the engine.
+        setWardSolvedNow(null);
+        WARDS.forEach((wd) => {
+          const ws = wards[wd.id];
+          if (!ws?.active || ws.solved) return;
+          const d = wd.deed;
+          const ringOk = hunted.id === d.ring;
+          const typesOk = (d.types || [d.type]).every((t) => squad.some((m) => COMBAT_CREATURES[m.id]?.type === t));
+          if (!ringOk || !typesOk) return;
+          const progress = (ws.progress || 0) + 1;
+          const solved = progress >= d.count;
+          setWards((w) => { const n = { ...w, [wd.id]: { ...(w[wd.id] || {}), active: true, progress, solved } }; saveWards(n); return n; });
+          if (solved) {
+            setWardSolvedNow(wd);
+            if (unlocked === wd.atDepth && unlocked < 8) { const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); }
+            const rd = rollRelicChoices(relics, 1)[0]; if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); } // the key, made manifest
+          }
+        });
         // THE HOLDFAST reclaims a stage the first time you beat a ring's boss (works in
         // beta too — pushing deeper heals more of the home + drips the next story beat).
         if (hunted.depth > reclaimed) {
@@ -2200,10 +2606,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           setSigils(nextSig); saveSigils(nextSig);
           setSigilGain({ id: apexId, count, ready: count >= APEX_SIGILS });
         } else setSigilGain(null);
-        // THE DROP — clearing the final ring for the first time is the ending. The whole
-        // climb has pointed here; play the theme and run the ceremony instead of the
-        // ordinary won-screen. (reclaimed still holds the PRE-clear value here.)
-        if (hunted.depth === HOLDFAST_MAX && reclaimed < HOLDFAST_MAX) {
+        // THE DROP — clearing the final ring reaches the Drop. The first time it's the ending;
+        // after that (in NG+) every ring-8 clear returns you to the door, with this crossing's
+        // beat + the choice to STEP THROUGH into a harder crossing. Ceremony instead of won-screen.
+        if (hunted.depth === HOLDFAST_MAX) {
           sfx.theDrop(); setRunPhase('drop'); return;
         }
         // RELIC DROP — every ring boss offers a CHOICE of relics (the loot chase). You
@@ -2222,7 +2628,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       // (Offer is already rolled, so the event sits in front of the upgrade screen.)
       const nextIsBoss = (idx + 1) === WAVE_COUNT - 1;
       const ev = nextIsBoss ? null : maybeWaysideEvent();
-      if (ev) { setPendingEvent(ev); setEventOutcome(null); sfx.upgradePick(); setRunPhase('event'); }
+      if (ev && ev.kind === 'elite') { setPendingElite(ev); setEventOutcome(null); sfx.eliteGrowl(); setRunPhase('event'); }
+      else if (ev) { setPendingEvent(ev); setEventOutcome(null); setEventStep(null); (ev.kind === 'merchant' ? sfx.merchantBell() : ev.kind === 'treasure' ? sfx.treasureChime() : sfx.upgradePick()); setRunPhase('event'); }
       else setRunPhase('upgrade');
     });
     setWaveIdx(idx);
@@ -2232,13 +2639,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startRun() {
     sfx.resume(); // unlock AudioContext on first user gesture (browser autoplay policy)
     const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
-    setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
+    setRunWaves(wavesForGround(g, crossMult(crossing))); setRunDepth(g.depth);
     setEnteredRing(g); sfx.ringThreshold(g.depth); // crossing the threshold — a beat + a deepening swell
+    farmedRef.current = g.depth <= reclaimed; // a re-clear of an already-beaten ring → auto-pick eligible
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
     const base = perkBaseMods(owned, reclaimed, relicKit); // perks + Holdfast boons + equipped relics set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
-    eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); // fresh wayside-event pool per run
+    eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); setEventStep(null); // fresh wayside-event pool per run
     rollOffer(); setRunPhase('upgrade');
   }
   // ── Apex challenge: a one-off fight against a gathered apex creature. Win → recruit. ──
@@ -2293,7 +2701,6 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       if (mem.id !== memberId) return mem;
       const unitMods = { ...(mem.unitMods ?? EMPTY_UNIT_MODS) };
       up.apply(unitMods); // mutates the copy; original is unaffected
-      const targetName = COMBAT_CREATURES[memberId].name;
       return { ...mem, unitMods, bends: [...(mem.bends ?? []), { id: up.id, icon: up.icon, name: up.name, color: up.color }] };
     });
     const targetName = COMBAT_CREATURES[memberId].name;
@@ -2302,7 +2709,39 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setEventOutcome(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  // SUMMON: spend slag to pull `times` grunlings from the wild roster (shared pity). New →
+  // caught + Core head-start; dupe → that creature's Cores. A five-fold call guarantees a
+  // Rare+. Collection breadth only — no run-power, so it never shortcuts the Wards.
+  function doSummon(times) {
+    const cost = times >= 5 ? SUMMON5_COST : SUMMON_COST;
+    if ((slag || 0) < cost) return;
+    onSlag?.(-cost); sfx.resume();
+    let curStable = [...stable]; let curPity = pity; const results = [];
+    for (let k = 0; k < times; k++) {
+      const p = summonPull(curStable, curPity); if (!p) break;
+      const info = RARITY_INFO[p.rarity]; let gainedCores;
+      if (p.isDupe) { gainedCores = info.dupeCores; awardCores([p.id], info.dupeCores); }
+      else { curStable = [...curStable, p.id]; gainedCores = info.startCores; if (info.startCores > 0) awardCores([p.id], info.startCores); }
+      curPity = p.rarity === 'Legendary' ? 0 : curPity + 1;
+      results.push({ ...p, gainedCores });
+    }
+    // five-fold guarantee: if all five came up Common, lift the last to a Rare.
+    if (times >= 5 && results.length && results.every((r) => r.rarity === 'Common')) {
+      const rares = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id) && rarityOf(id) === 'Rare');
+      if (rares.length) {
+        const rid = rares[Math.floor(Math.random() * rares.length)]; const isDupe = curStable.includes(rid); const info = RARITY_INFO.Rare; let gainedCores;
+        if (isDupe) { gainedCores = info.dupeCores; awardCores([rid], info.dupeCores); }
+        else { curStable = [...curStable, rid]; gainedCores = info.startCores; awardCores([rid], info.startCores); }
+        results[results.length - 1] = { id: rid, rarity: 'Rare', isDupe, gainedCores };
+      }
+    }
+    setStable(curStable); saveStable(curStable);
+    setPity(curPity); savePity(curPity);
+    setSummonResults(results);
+    const bestMult = results.reduce((m, r) => Math.max(m, RARITY_INFO[r.rarity].mult), 0);
+    if (bestMult >= RARITY_INFO.Legendary.mult) setTimeout(() => sfx.caughtCreature(), 200); else sfx.upgradePick();
+  }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2495,6 +2934,52 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     return <Cutscene scenes={OPENING_SCENES} onDone={() => { setShowIntro(false); saveIntroSeen(); }} />;
   }
 
+  // ── THE CHRONICLE (vF-AZ) — a lore codex that fills in as you climb. Every story fragment
+  // in the game — the opening, each ring, the Holdfast, the Drop, the grunlings — gathered in
+  // one re-readable place. Entries unlock as you reach them, so it's a record of YOUR climb. ──
+  if (showCodex) {
+    const cEntry = (key, title, text, unlocked) => (
+      <div key={key} style={{ borderRadius: 10, padding: '10px 12px', marginBottom: 8, background: unlocked ? '#0e0b16' : '#0a0a0e', border: `1px solid ${unlocked ? '#2a2438' : LINE}`, opacity: unlocked ? 1 : 0.5 }}>
+        <div style={{ fontSize: T.small, fontWeight: 900, color: unlocked ? '#d8cfe6' : '#54506a' }}>{unlocked ? title : '? ? ?'}</div>
+        <div style={{ fontSize: T.micro, color: unlocked ? '#b0a8c4' : '#454056', lineHeight: 1.6, fontStyle: 'italic', marginTop: 4 }}>{unlocked ? text : 'Not yet reached on the climb.'}</div>
+      </div>
+    );
+    const cHead = (txt) => <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff', letterSpacing: 1.5, margin: '18px 0 8px' }}>{txt}</div>;
+    const dropText = 'You walk the last ring to its end, and the Drop opens — not a pit but a doorway, light spilling up out of the dark. Your mentor stood exactly here. Went in. You understand it now: he was never lost. He was the first one through. Three cores hum at your chest. Seventy-five years of blight — and the answer to all of it is one step away. You take it.';
+    // count discovered
+    let found = OPENING_SCENES.length; let total = OPENING_SCENES.length;
+    HUNTING_GROUNDS.forEach((g) => { total += 2; if (g.depth <= unlocked) found++; if (g.depth <= reclaimed) found++; });
+    HOLDFAST_STAGES.forEach((s) => { total++; if (s.depth <= reclaimed) found++; });
+    total++; if (reclaimed >= HOLDFAST_MAX) found++; // the Drop
+    COMBAT_ROSTER.forEach((c) => { total++; if (stable.includes(c.id)) found++; });
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ fontSize: T.huge, fontWeight: 900, color: '#cba6ff', letterSpacing: 0.5 }}>❖ THE CHRONICLE</div>
+          <button onClick={() => setShowCodex(false)} style={{ fontSize: T.small, fontWeight: 800, color: DIM, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 13px', cursor: 'pointer' }}>← back</button>
+        </div>
+        <div style={{ fontSize: T.small, color: DIM, marginBottom: 6 }}>The story so far — <b style={{ color: '#cba6ff' }}>{found}</b> of <b style={{ color: '#cba6ff' }}>{total}</b> remembered. It fills as you climb.</div>
+        {cHead('THE OPENING')}
+        {OPENING_SCENES.map((s, i) => cEntry('op' + i, s.title, s.text, true))}
+        {cHead('THE RINGS')}
+        {HUNTING_GROUNDS.map((g) => [
+          cEntry('ri' + g.id, `${g.name} — you cross in`, RING_INTRO[g.id], g.depth <= unlocked),
+          RING_CLEAR[g.id] && cEntry('rc' + g.id, `${RING_CLEAR[g.id].boss} falls`, RING_CLEAR[g.id].beat, g.depth <= reclaimed),
+        ])}
+        {cHead('THE HOLDFAST')}
+        {HOLDFAST_STAGES.map((s) => cEntry('hf' + s.depth, s.part, s.beat, s.depth <= reclaimed))}
+        {cHead('THE DROP')}
+        {cEntry('drop', 'The First Climb', dropText, reclaimed >= HOLDFAST_MAX)}
+        {(crossing > 0 || reclaimed >= HOLDFAST_MAX) && cHead('THE CROSSINGS')}
+        {(crossing > 0 || reclaimed >= HOLDFAST_MAX) && CROSSING_BEATS.map((b, i) =>
+          cEntry('cx' + i, b.title, b.lines.join(' ') + ' ' + b.take, crossing > i || (i === 0 && reclaimed >= HOLDFAST_MAX))
+        )}
+        {cHead('THE GRUNLINGS')}
+        {COMBAT_ROSTER.map((c) => cEntry('cr' + c.id, c.name, CREATURE_LORE[c.id] ? `${CREATURE_LORE[c.id].rumor} (Said to roam ${CREATURE_LORE[c.id].where}.)` : '', stable.includes(c.id)))}
+      </div>
+    );
+  }
+
   // ── THE RELIC VAULT (vF-AK) — the whole collection to chase. Owned relics show in full;
   // the rest are undiscovered silhouettes with just a rarity tease. A full-screen overlay. ──
   if (showVault) {
@@ -2532,324 +3017,553 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             </div>
           );
         })}
+        {/* ── SETS reference — what synergies exist to chase ── */}
+        <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${LINE}` }}>
+          <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffd166', letterSpacing: 1, marginBottom: 7 }}>⚜ SETS <span style={{ color: DIM, fontWeight: 700, letterSpacing: 0 }}>· equip {RELIC_SETS[0].need}+ from a set to activate its bonus</span></div>
+          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
+            {RELIC_SETS.map((s) => (
+              <div key={s.id} style={{ borderRadius: 10, padding: '9px 11px', background: '#161204', border: '1px solid #4a3f1c' }}>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffe08a', marginBottom: 1 }}>{s.icon} {s.name}</div>
+                <div style={{ fontSize: T.micro, color: '#c9b87a', marginBottom: 5 }}>{s.desc}</div>
+                <div style={{ fontSize: T.micro, color: DIM, lineHeight: 1.5 }}>
+                  {s.members.map((id, k) => {
+                    const r = RELIC_BY_ID[id]; const have = relics.includes(id);
+                    return <span key={id} style={{ color: have ? (RELIC_BY_ID[id].color) : '#54506a' }}>{r ? r.name : id}{k < s.members.length - 1 ? ' · ' : ''}</span>;
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
+    const HOME_TABS = [
+      ['raid', '⚔', 'Raid'],
+      ['summon', '✨', 'Summon'],
+      ['forge', '⚒', 'Forge'],
+      ['relics', '✦', 'Relics'],
+      ['holdfast', '🏚', 'Holdfast'],
+    ];
+    const tabTitle = { raid: 'Take the Approach', summon: 'The Wild Call', forge: 'The Cracked Forge', relics: 'Relics', holdfast: 'The Holdfast' }[homeTab];
     return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 8 }}>
-          <button onClick={() => { sfx.resume(); setShowIntro(true); }}
-            title="Watch the opening again"
-            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
-            ❖ The Story
-          </button>
-          <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
-            title={music ? 'Ambient music on' : 'Ambient music off'}
-            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: `1px solid ${music ? '#4a3a66' : '#33333f'}`, background: music ? '#160f1d' : 'transparent', color: music ? '#cba6ff' : '#777' }}>
-            {music ? '🔊 Music' : '🔇 Music'}
+      <div style={{ paddingBottom: 84 }}>
+        {/* ── Top utility bar: page title + NG+ pill + ⚙ settings ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', letterSpacing: 0.5 }}>{tabTitle}</span>
+          {crossing > 0 && (
+            <span title={`The Deep Crossing — every ring +${Math.round((crossMult(crossing) - 1) * 100)}% stronger`}
+              style={{ fontSize: T.micro, fontWeight: 900, color: '#cba6ff', background: '#1a0f2a', border: '1px solid #6a4a9a', borderRadius: 999, padding: '3px 9px' }}>
+              ✦ Crossing {roman(crossing)}
+            </span>
+          )}
+          <button onClick={() => setShowSettings(true)} title="Settings — music, auto-pick, dev tools"
+            style={{ marginLeft: 'auto', fontSize: T.body, lineHeight: 1, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, cursor: 'pointer', border: `1px solid ${LINE}`, background: PANEL, color: '#cfcfda' }}>
+            ⚙
           </button>
         </div>
-        {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
-        {(() => {
-          const ringsToDrop = HOLDFAST_MAX - reclaimed;
-          const latest = stageAtDepth(reclaimed);   // most recent beat (null before any clear)
-          const next = stageAtDepth(reclaimed + 1);  // the part still under the blight
-          const boons = HOLDFAST_STAGES.filter((s) => s.depth <= reclaimed);
-          return (
-            <div style={{ background: 'linear-gradient(180deg,#160f1d,#0e0a14)', border: '1px solid #4a3a66', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>🏚 THE HOLDFAST</span>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#9a7fc0' }}>
-                  {reclaimed === 0 ? 'half-swallowed by the blight' : reclaimed >= HOLDFAST_MAX ? 'reclaimed — you stand at the Drop' : `reclaimed ${reclaimed}/${HOLDFAST_MAX}`}
-                </span>
+
+        {/* ═══════════════ RAID — the play loop ═══════════════ */}
+        {homeTab === 'raid' && (
+          <>
+            {/* Compact Holdfast progress strip → taps through to the full Holdfast page. */}
+            {(() => {
+              const ringsToDrop = HOLDFAST_MAX - reclaimed;
+              return (
+                <button onClick={() => setHomeTab('holdfast')}
+                  style={{ width: '100%', textAlign: 'left', background: 'linear-gradient(180deg,#160f1d,#0e0a14)', border: '1px solid #4a3a66', borderRadius: 10, padding: '8px 12px', marginBottom: 14, cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 13 }}>🏚</span>
+                    {HOLDFAST_STAGES.map((s) => {
+                      const done = s.depth <= reclaimed;
+                      const frontier = s.depth === reclaimed + 1;
+                      return (
+                        <div key={s.depth} style={{ flex: 1, height: 7, borderRadius: 3,
+                          background: done ? '#b06bff' : frontier ? '#3a2a52' : '#1c1726',
+                          border: frontier ? '1px solid #7a5aa0' : '1px solid transparent',
+                          boxShadow: done ? '0 0 6px #b06bff88' : 'none' }} />
+                      );
+                    })}
+                    <span style={{ fontSize: 13 }}>✦</span>
+                  </div>
+                  <div style={{ fontSize: T.micro, color: '#9a7fc0', fontWeight: 700, marginTop: 5 }}>
+                    {ringsToDrop > 0
+                      ? <>The Drop lies <b style={{ color: '#eadcff' }}>{ringsToDrop} ring{ringsToDrop !== 1 ? 's' : ''}</b> inward · tap for the Holdfast →</>
+                      : <span style={{ color: '#eadcff' }}>The door is open — and waiting. Tap for the Holdfast →</span>}
+                  </div>
+                </button>
+              );
+            })()}
+            <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>
+              Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span>
+              <span style={{ float: 'right', fontSize: T.micro, color: DIM, fontWeight: 700, lineHeight: '22px' }}>{stable.length}/{COMBAT_ROSTER.length} caught</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+              {COMBAT_ROSTER.filter((c) => stable.includes(c.id)).map((c) => {
+                const ti = TYPE_INFO[c.type];
+                const rar = rarityOf(c.id); const tnf = RARITY_INFO[rar]; const tm = tnf.mult; // rarity power
+                const on = picked.includes(c.id);
+                const full = !on && picked.length >= 3;
+                const cBal = cores[c.id] || 0;
+                const nodeCount = (treeAlloc[c.id] || []).length;
+                const hasTree = !!treeForCreature(c.id);
+                return (
+                  <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button onClick={() => toggle(c.id)} disabled={full}
+                      style={{ flex: 1, textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
+                        background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+                      <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+                        <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
+                            <span style={{ fontSize: 9, fontWeight: 900, color: tnf.color, letterSpacing: 0.3 }} title={`${rar}`}>{tnf.pips}</span>
+                            {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
+                          </div>
+                          <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: tnf.color, fontWeight: 700 }}>· {rar}</span></div>
+                          <div style={{ fontSize: T.micro, color: DIM }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: tnf.color, fontWeight: 800 }}> · ×{tm.toFixed(2)}</span>}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''}</span>}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
+                    </button>
+                    <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
+                        background: cBal > 0 ? '#101a22' : '#0c0c14', border: `1px solid ${cBal > 0 ? '#2a4a5a' : LINE}`, opacity: hasTree ? 1 : 0.4 }}>
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: hasTree ? '#9be7ff' : DIM }}>🌳 PATHS</span>
+                      {hasTree && <span style={{ fontSize: T.micro, fontWeight: 800, color: cBal > 0 ? '#9be7ff' : DIM }}>{cBal} ⬡{cBal > 0 ? ' to spend' : ''}</span>}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {/* ── Active WARD riddles — the wall ahead + how to solve it (always visible). ── */}
+            {WARDS.filter((w) => wards[w.id]?.active && !wards[w.id]?.solved).map((w) => (
+              <div key={w.id} style={{ borderRadius: 10, border: `1px solid ${w.tint}66`, background: 'linear-gradient(180deg,#0c1620,#0a0e16)', padding: '11px 13px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 15 }}>{w.glyph}</span>
+                  <span style={{ fontSize: T.small, fontWeight: 900, color: w.tint }}>{w.name} <span style={{ color: DIM, fontWeight: 700 }}>· bars the way inward</span></span>
+                  <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 900, color: '#9be7ff' }}>{(wards[w.id]?.progress) || 0}/{w.deed.count}</span>
+                </div>
+                <div style={{ fontSize: T.micro, color: '#bcd0e0', lineHeight: 1.45 }}>{w.deed.told}. <span style={{ color: DIM, fontStyle: 'italic' }}>Solve the riddle and the gate opens.</span></div>
               </div>
-              {/* destination bar: the rim → 8 rings inward → the Drop */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '10px 0 6px' }}>
-                <span style={{ fontSize: 13 }} title="The rim — your home">🏚</span>
-                {HOLDFAST_STAGES.map((s) => {
-                  const done = s.depth <= reclaimed;
-                  const frontier = s.depth === reclaimed + 1;
-                  return (
-                    <div key={s.depth} title={done ? `${s.part} — reclaimed` : `${s.part} — still blighted`}
-                      style={{ flex: 1, height: 9, borderRadius: 3,
-                        background: done ? '#b06bff' : frontier ? '#3a2a52' : '#1c1726',
-                        border: frontier ? '1px solid #7a5aa0' : '1px solid transparent',
-                        boxShadow: done ? '0 0 6px #b06bff88' : 'none' }} />
-                  );
-                })}
-                <span style={{ fontSize: 13 }} title="The Drop — the destination">✦</span>
-              </div>
-              <div style={{ fontSize: T.small, color: '#bfa8da', fontWeight: 700 }}>
-                {ringsToDrop > 0
-                  ? <>The Drop lies <b style={{ color: '#eadcff' }}>{ringsToDrop} ring{ringsToDrop !== 1 ? 's' : ''}</b> inward. {next && <span style={{ color: '#8f78b0' }}>Take {next.part === "The Drop's Edge" ? 'the last ring' : `ring ${next.depth}`} to reclaim <b style={{ color: '#cba6ff' }}>{next.part}</b>.</span>}</>
-                  : <span style={{ color: '#eadcff' }}>The rings are walked. The door is open — and waiting.</span>}
-              </div>
-              {latest && <div style={{ fontSize: T.micro, color: '#9a7fc0', fontStyle: 'italic', lineHeight: 1.5, marginTop: 6 }}>“{latest.beat.replace(/^"|"$/g, '')}”</div>}
-              {boons.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
-                  {boons.map((s) => (
-                    <span key={s.depth} title={s.boon.desc} style={{ fontSize: T.micro, fontWeight: 800, color: '#cba6ff', background: '#0e0a14', border: '1px solid #4a3a66', borderRadius: 7, padding: '3px 7px' }}>
-                      {s.boon.icon} {s.boon.name}
-                    </span>
+            ))}
+            {(() => {
+              // The ring picker is the RUN selector — it always shows (even with everything
+              // caught, you still pick a ring to raid for Cores + boss clears that open the
+              // way inward). It just stops being a "hunt" once the catch pool is empty.
+              const lockedIds = COMBAT_ROSTER.map((c) => c.id).filter((id) => !stable.includes(id));
+              const lockedSet = new Set(lockedIds);
+              // Uncaught creatures this ground leans toward — what you're hunting for.
+              const targetsOf = (g) => g.biasIds.filter((id) => lockedSet.has(id));
+              // The ring you'll actually hunt — clamped to what you've unlocked (strict inward).
+              const sel = accessibleGround(ground, accessDepth);
+              const selTargets = targetsOf(sel);
+              return (
+                <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>🧭</span>
+                    <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO RAID</div>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length > 0 ? `${lockedIds.length} grunling${lockedIds.length !== 1 ? 's' : ''} still out there` : 'all grunlings caught'}</span>
+                  </div>
+                  {/* The map — tap a ring to select where you raid. */}
+                  <RingMap accessDepth={accessDepth} selectedId={sel.id} clears={clears}
+                    onSelect={(id) => { setGround(id); saveGround(id); }} />
+                  {/* The selected ring, spelled out (the map shows state by colour; this is the detail). */}
+                  {(() => {
+                    const diff = diffOf(sel.depth + crossing); // crossing-aware: rings read harder in NG+
+                    const n = clears[sel.id] || 0; const m = repeatMult(n);
+                    const ringRars = [...new Set(sel.biasIds.map(rarityOf))].sort((a, b) => RARITY_INFO[b].mult - RARITY_INFO[a].mult);
+                    return (
+                      <div style={{ background: '#10131c', border: `1px solid ${SEL}33`, borderRadius: 10, padding: '9px 11px', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: T.small, fontWeight: 900, color: '#eaf2ff' }}>{sel.name}</span>
+                          <span style={{ fontSize: 10 }}>{ringRars.map((r) => <span key={r} title={r} style={{ color: RARITY_INFO[r].color, fontWeight: 900, marginRight: 1 }}>{RARITY_INFO[r].pips}</span>)}</span>
+                          <span style={{ fontSize: T.micro, fontWeight: 800, color: diff.color }}>· {diff.label}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `farmed ×${n} — Cores ×${m.toFixed(2)}`}</span>
+                        </div>
+                        <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
+                          Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {selTargets.map((id) => CREATURE_LORE[id] && (
+                    <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
+                      <span style={{ color: '#cdd', fontWeight: 700 }}>{COMBAT_CREATURES[id].name}:</span>{' '}
+                      <span style={{ color: '#a99' }}>“{CREATURE_LORE[id].rumor}”</span>
+                    </div>
                   ))}
                 </div>
+              );
+            })()}
+            {(() => {
+              // Apex quarry — creatures you're gathering sigils toward. Full bar → challenge.
+              const gathering = [...APEX_IDS].filter((id) => !stable.includes(id) && (sigils[id] || 0) > 0);
+              if (gathering.length === 0) return null;
+              const ringOf = (id) => HUNTING_GROUNDS.find((g) => g.biasIds.includes(id));
+              return (
+                <div style={{ borderRadius: 10, border: `1px solid #2a3a5a`, background: '#0a1018', padding: '12px 14px', marginBottom: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>★</span>
+                    <div style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>APEX QUARRY</div>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>gather sigils, then win it over</span>
+                  </div>
+                  {gathering.map((id) => {
+                    const ac = COMBAT_CREATURES[id]; const ati = TYPE_INFO[ac.type];
+                    const have = Math.min(APEX_SIGILS, sigils[id] || 0);
+                    const ready = have >= APEX_SIGILS;
+                    const ring = ringOf(id);
+                    return (
+                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: `1px solid #18203044` }}>
+                        <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={40} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {ac.type}</span></div>
+                          <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800 }}>{'✦'.repeat(have)}{'·'.repeat(APEX_SIGILS - have)} <span style={{ color: DIM, fontWeight: 600 }}>{have}/{APEX_SIGILS}{!ready && ring ? ` — hunt ${ring.name}` : ''}</span></div>
+                        </div>
+                        {ready && (
+                          <button onClick={() => picked.length >= 2 && startChallenge(id)} disabled={picked.length < 2}
+                            title={picked.length < 2 ? 'Pick at least 2 creatures first' : `Challenge ${ac.name}`}
+                            style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 9, border: `1.5px solid ${picked.length >= 2 ? ati.accent : LINE}`,
+                              background: picked.length >= 2 ? `${ati.accent}22` : '#111', color: picked.length >= 2 ? ati.accent : DIM,
+                              fontSize: T.small, fontWeight: 900, cursor: picked.length >= 2 ? 'pointer' : 'default', letterSpacing: 0.5 }}>
+                            ⚔ CHALLENGE
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {gathering.some((id) => (sigils[id] || 0) >= APEX_SIGILS) && picked.length < 2 && (
+                    <div style={{ fontSize: T.micro, color: ACCENT, marginTop: 8, fontWeight: 700 }}>Pick a squad above, then call out your challenge.</div>
+                  )}
+                </div>
+              );
+            })()}
+            {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth + crossing); return (
+            <button onClick={startRun} disabled={picked.length < 2}
+              style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
+              {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
+            </button>
+            ); })()}
+          </>
+        )}
+
+        {/* ═══════════════ SUMMON — spend slag to call a wild grunling (gacha) ═══════════════ */}
+        {homeTab === 'summon' && (() => {
+          const toLeg = Math.max(0, PITY_AT - pity); // pulls until a Legendary is guaranteed
+          const rates = [['Common', 60], ['Rare', 28], ['Legendary', 10]];
+          return (
+            <div>
+              {/* The banner */}
+              <div style={{ background: 'radial-gradient(120% 100% at 50% 0%, #1a1430, #0c0a14)', border: '1px solid #4a3a66', borderRadius: 14, padding: '16px 16px 14px', marginBottom: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 30, lineHeight: 1 }}>✨</div>
+                <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', letterSpacing: 0.5, marginTop: 4 }}>The Wild Call</div>
+                <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.5, marginTop: 4, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
+                  Spend slag to wake a grunling from a wild core. A <b style={{ color: '#cba6ff' }}>new</b> one joins your stable; a <b style={{ color: '#cba6ff' }}>dupe</b> melts to that creature's Cores. Calls find <b style={{ color: '#cba6ff' }}>creatures</b>, never run-power — your climb is still yours to earn.
+                </div>
+              </div>
+              {/* Slag + pity */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: T.small, fontWeight: 900, color: '#c9c98a' }}>⚒ {slag} slag</span>
+                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#ffd166' }}>★ guaranteed within {toLeg} call{toLeg !== 1 ? 's' : ''}</span>
+              </div>
+              {/* Call buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                {[['Wild Call', 1, SUMMON_COST, 'one pull'], ['Five-fold Call', 5, SUMMON5_COST, 'guarantees a ◆ Rare+']].map(([label, n, cost, sub]) => {
+                  const afford = slag >= cost;
+                  return (
+                    <button key={label} onClick={() => afford && doSummon(n)} disabled={!afford}
+                      style={{ textAlign: 'center', borderRadius: 12, padding: '13px 10px', cursor: afford ? 'pointer' : 'default', background: afford ? 'linear-gradient(180deg,#1a1430,#140e22)' : PANEL, border: `1.5px solid ${afford ? '#7a5aa0' : LINE}`, opacity: afford ? 1 : 0.55 }}>
+                      <div style={{ fontSize: T.body, fontWeight: 900, color: afford ? '#eadcff' : DIM }}>{n >= 5 ? '✨✨ ' : '✨ '}{label}</div>
+                      <div style={{ fontSize: T.small, fontWeight: 900, color: afford ? '#c9c98a' : DIM, marginTop: 3 }}>{cost} ⚒</div>
+                      <div style={{ fontSize: T.micro, color: '#9a7fc0', marginTop: 2 }}>{sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Results */}
+              {summonResults && summonResults.length > 0 && (
+                <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px', marginBottom: 14 }}>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1, color: '#9a7fc0', marginBottom: 10 }}>✦ THE CALL ANSWERS</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: summonResults.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8 }}>
+                    {summonResults.map((r, i) => {
+                      const c = COMBAT_CREATURES[r.id]; const ti = TYPE_INFO[c.type]; const ri = RARITY_INFO[r.rarity];
+                      return (
+                        <div key={i} style={{ textAlign: 'center', borderRadius: 10, padding: '9px 6px', background: '#100b1a', border: `2px solid ${ri.color}`, boxShadow: `0 0 12px ${ri.color}44` }}>
+                          <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={summonResults.length === 1 ? 76 : 52} />
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: ri.color, marginTop: 4 }}>{ri.pips} {c.name}</div>
+                          <div style={{ fontSize: T.micro, fontWeight: 800, color: r.isDupe ? '#9a7fc0' : WIN }}>{r.isDupe ? `dupe → +${r.gainedCores} ⬡` : (r.gainedCores > 0 ? `NEW! +${r.gainedCores} ⬡` : 'NEW!')}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
+              {/* Rates */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: T.micro, color: DIM }}>
+                {rates.map(([r, pct]) => <span key={r}><b style={{ color: RARITY_INFO[r].color }}>{RARITY_INFO[r].pips} {r}</b> {pct}%</span>)}
+              </div>
             </div>
           );
         })()}
-        <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-          <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
-          <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
-            Four trials guard each ring — clear them in one push and the approach is yours. Beat a ring's boss and the next ring <b style={{ color: '#9be7ff' }}>inward</b> opens, with stronger, higher-tier creatures to win over. Wounds carry between fights; you only patch up a little. Choose who goes in.
-          </div>
-        </div>
-        {/* ── β BETA: a removable dev switch — fast-forward the gate for content testing. ── */}
-        {BETA_AVAILABLE && (
-          <div style={{ border: `1px dashed ${beta ? '#ff5cf0' : '#33333f'}`, background: beta ? '#190a17' : '#0b0b11', borderRadius: 10, padding: '9px 12px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => { const b = !beta; setBeta(b); saveBeta(b); }}
-                style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 7, cursor: 'pointer',
-                  border: `1.5px solid ${beta ? '#ff5cf0' : '#444'}`, background: beta ? '#ff5cf022' : 'transparent', color: beta ? '#ff9cf5' : '#888' }}>
-                β BETA · {beta ? 'ON' : 'OFF'}
-              </button>
-              <span style={{ fontSize: T.micro, color: beta ? '#ff9cf5' : '#777', fontWeight: 700 }}>
-                {beta ? '⚠ TEST MODE — every ring open. Turn off to play the real gated build.' : 'Dev fast-forward — unlock all rings + grants for content testing.'}
-              </span>
+
+        {/* ═══════════════ FORGE — spend banked slag on a permanent edge ═══════════════ */}
+        {homeTab === 'forge' && (
+          <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: T.sub, color: '#cdb6ff', fontWeight: 900, letterSpacing: 0.5 }}>⚒ THE FORGE</div>
+              <div style={{ fontSize: T.small, fontWeight: 800, color: '#c9c98a' }}>⚒ {slag} slag</div>
             </div>
-            {beta && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                {[
-                  ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
-                  ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
-                  ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
-                  ['Reset ALL progress', () => {
-                    const st = [...STARTER_IDS];
-                    setUnlocked(1); saveUnlocked(1);
-                    setReclaimed(0); saveReclaimed(0);           // the Holdfast falls back to the blight
-                    setStable(st); saveStable(st);
-                    setClears({}); saveClears({});
-                    setSigils({}); saveSigils({});
-                    setPity(0); savePity(0);
-                    setCores({}); saveCores({});                 // wipe the OP trees — Cores,
-                    setTreeAlloc({}); saveTreeAlloc({});          // unlocked nodes,
-                    setTreeEquip({}); saveEquip({});              // equipped loadout,
-                    setTreeRanks({}); saveRanks({});              // and node ranks.
-                    setOwned([]); savePerks([]);                 // Forge perks too.
-                    setGround('outer-ring'); saveGround('outer-ring');
-                    setPicked([]); saveSquad([]);
-                  }],
-                ].map(([label, fn]) => (
-                  <button key={label} onClick={fn} style={{ fontSize: T.micro, fontWeight: 800, padding: '5px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #5a3a5a', background: '#1f0f1d', color: '#ff9cf5' }}>{label}</button>
+            <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Slag you bank from runs buys a <b style={{ color: '#cdb6ff' }}>permanent</b> edge — it carries into every run from here on. This is what a run leaves behind.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+              {PERKS.map((p) => {
+                const have = owned.includes(p.id);
+                const afford = slag >= p.cost;
+                return (
+                  <button key={p.id} onClick={() => buyPerk(p)} disabled={have || !afford}
+                    style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: have || !afford ? 'default' : 'pointer',
+                      background: have ? '#10231a' : PANEL, border: `1.5px solid ${have ? WIN : afford ? `${p.color}99` : LINE}`, opacity: !have && !afford ? 0.5 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                      <span style={{ fontSize: T.body }}>{p.icon}</span>
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: have ? WIN : p.color }}>{p.name}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: have ? WIN : afford ? '#c9c98a' : DIM }}>{have ? '✓ OWNED' : `${p.cost} ⚒`}</span>
+                    </div>
+                    <div style={{ fontSize: T.micro, color: have ? '#bfe8cf' : '#9a9aaa', lineHeight: 1.35 }}>{p.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════ RELICS — found loot, equip a kit ═══════════════ */}
+        {homeTab === 'relics' && (
+          <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 vault {relics.length}/{RELICS.length}</button>
+                <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</div>
+            {(() => { const sets = activeRelicSets(relicKit); return sets.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {sets.map((s) => (
+                  <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: T.micro, fontWeight: 800, color: '#ffe08a', background: '#231d0e', border: '1px solid #6a5a2a', borderRadius: 999, padding: '3px 9px' }}>
+                    ⚜ {s.icon} {s.name} set — {s.desc}
+                  </span>
                 ))}
+              </div>
+            ); })()}
+            {relics.length === 0 ? (
+              <div style={{ fontSize: T.small, color: DIM, fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>No relics yet. Beat a ring's boss to find your first.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+                {RELICS.filter((r) => relics.includes(r.id)).map((r) => {
+                  const eq = relicKit.includes(r.id);
+                  const full = !eq && relicKit.length >= RELIC_SLOTS;
+                  const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
+                  return (
+                    <button key={r.id} onClick={() => toggleRelic(r.id)} disabled={full}
+                      title={r.lore}
+                      style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
+                        background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                        <RelicIcon r={r} size={T.body} />
+                        <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
+                      </div>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
+                      <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
-        {/* ── THE FORGE: spend slag banked from past runs on a permanent edge ── */}
-        <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={{ fontSize: T.sub, color: '#cdb6ff', fontWeight: 900, letterSpacing: 0.5 }}>⚒ THE FORGE</div>
-            <div style={{ fontSize: T.small, fontWeight: 800, color: '#c9c98a' }}>⚒ {slag} slag</div>
-          </div>
-          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Slag you bank from runs buys a <b style={{ color: '#cdb6ff' }}>permanent</b> edge — it carries into every run from here on. This is what a run leaves behind.</div>
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
-            {PERKS.map((p) => {
-              const have = owned.includes(p.id);
-              const afford = slag >= p.cost;
+
+        {/* ═══════════════ HOLDFAST — home, progress, lore ═══════════════ */}
+        {homeTab === 'holdfast' && (
+          <>
+            {/* ── NG+ banner: which crossing you're on (rings reform harder past the Drop). ── */}
+            {crossing > 0 && (
+              <div style={{ background: 'linear-gradient(90deg, #1a0f2a, #150d22)', border: '1.5px solid #6a4a9a', borderRadius: 12, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>✦</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff', letterSpacing: 0.5 }}>THE DEEP CROSSING · {roman(crossing)}</div>
+                  <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.4 }}>You stepped through the Drop {crossing === 1 ? 'once' : `${crossing} times`}. Every ring is reformed <b style={{ color: '#cba6ff' }}>+{Math.round((crossMult(crossing) - 1) * 100)}% stronger</b>. Reach the Drop again to climb deeper into his story.</div>
+                </div>
+              </div>
+            )}
+            {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
+            {(() => {
+              const ringsToDrop = HOLDFAST_MAX - reclaimed;
+              const latest = stageAtDepth(reclaimed);   // most recent beat (null before any clear)
+              const next = stageAtDepth(reclaimed + 1);  // the part still under the blight
+              const boons = HOLDFAST_STAGES.filter((s) => s.depth <= reclaimed);
               return (
-                <button key={p.id} onClick={() => buyPerk(p)} disabled={have || !afford}
-                  style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: have || !afford ? 'default' : 'pointer',
-                    background: have ? '#10231a' : PANEL, border: `1.5px solid ${have ? WIN : afford ? `${p.color}99` : LINE}`, opacity: !have && !afford ? 0.5 : 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                    <span style={{ fontSize: T.body }}>{p.icon}</span>
-                    <span style={{ fontSize: T.small, fontWeight: 900, color: have ? WIN : p.color }}>{p.name}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: have ? WIN : afford ? '#c9c98a' : DIM }}>{have ? '✓ OWNED' : `${p.cost} ⚒`}</span>
+                <div style={{ background: 'linear-gradient(180deg,#160f1d,#0e0a14)', border: '1px solid #4a3a66', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>🏚 THE HOLDFAST</span>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#9a7fc0' }}>
+                      {reclaimed === 0 ? 'half-swallowed by the blight' : reclaimed >= HOLDFAST_MAX ? 'reclaimed — you stand at the Drop' : `reclaimed ${reclaimed}/${HOLDFAST_MAX}`}
+                    </span>
                   </div>
-                  <div style={{ fontSize: T.micro, color: have ? '#bfe8cf' : '#9a9aaa', lineHeight: 1.35 }}>{p.desc}</div>
+                  {/* destination bar: the rim → 8 rings inward → the Drop */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, margin: '10px 0 6px' }}>
+                    <span style={{ fontSize: 13 }} title="The rim — your home">🏚</span>
+                    {HOLDFAST_STAGES.map((s) => {
+                      const done = s.depth <= reclaimed;
+                      const frontier = s.depth === reclaimed + 1;
+                      return (
+                        <div key={s.depth} title={done ? `${s.part} — reclaimed` : `${s.part} — still blighted`}
+                          style={{ flex: 1, height: 9, borderRadius: 3,
+                            background: done ? '#b06bff' : frontier ? '#3a2a52' : '#1c1726',
+                            border: frontier ? '1px solid #7a5aa0' : '1px solid transparent',
+                            boxShadow: done ? '0 0 6px #b06bff88' : 'none' }} />
+                      );
+                    })}
+                    <span style={{ fontSize: 13 }} title="The Drop — the destination">✦</span>
+                  </div>
+                  <div style={{ fontSize: T.small, color: '#bfa8da', fontWeight: 700 }}>
+                    {ringsToDrop > 0
+                      ? <>The Drop lies <b style={{ color: '#eadcff' }}>{ringsToDrop} ring{ringsToDrop !== 1 ? 's' : ''}</b> inward. {next && <span style={{ color: '#8f78b0' }}>Take {next.part === "The Drop's Edge" ? 'the last ring' : `ring ${next.depth}`} to reclaim <b style={{ color: '#cba6ff' }}>{next.part}</b>.</span>}</>
+                      : <span style={{ color: '#eadcff' }}>The rings are walked. The door is open — and waiting.</span>}
+                  </div>
+                  {latest && <div style={{ fontSize: T.micro, color: '#9a7fc0', fontStyle: 'italic', lineHeight: 1.5, marginTop: 6 }}>“{latest.beat.replace(/^"|"$/g, '')}”</div>}
+                  {boons.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                      {boons.map((s) => (
+                        <span key={s.depth} title={s.boon.desc} style={{ fontSize: T.micro, fontWeight: 800, color: '#cba6ff', background: '#0e0a14', border: '1px solid #4a3a66', borderRadius: 7, padding: '3px 7px' }}>
+                          {s.boon.icon} {s.boon.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            <div style={{ background: '#15100a', border: `1px solid ${ACCENT}55`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ fontSize: T.sub, color: ACCENT, fontWeight: 900, letterSpacing: 0.5 }}>⛰ TAKE THE APPROACH</div>
+              <div style={{ fontSize: T.small, color: '#d8c4a8', lineHeight: 1.5, marginTop: 4 }}>
+                Four trials guard each ring — clear them in one push and the approach is yours. Beat a ring's boss and the next ring <b style={{ color: '#9be7ff' }}>inward</b> opens, with stronger, higher-tier creatures to win over. Wounds carry between fights; you only patch up a little. Choose who goes in.
+              </div>
+            </div>
+            {/* Story + Chronicle — the lore, in one place. */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { sfx.resume(); setShowIntro(true); }}
+                style={{ flex: 1, fontSize: T.small, fontWeight: 800, padding: '11px 0', borderRadius: 10, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
+                ❖ The Story
+              </button>
+              <button onClick={() => setShowCodex(true)}
+                style={{ flex: 1, fontSize: T.small, fontWeight: 800, padding: '11px 0', borderRadius: 10, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
+                📖 The Chronicle
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════════ FIXED BOTTOM NAV ═══════════════ */}
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 10001, background: 'rgba(10,10,16,0.97)', borderTop: `1px solid ${LINE}`, backdropFilter: 'blur(8px)' }}>
+          <div style={{ maxWidth: 920, margin: '0 auto', display: 'flex' }}>
+            {HOME_TABS.map(([key, glyph, label]) => {
+              const on = homeTab === key;
+              return (
+                <button key={key} onClick={() => { sfx.resume(); setHomeTab(key); }}
+                  style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '9px 0 11px', background: on ? '#16202e' : 'transparent', border: 'none', borderTop: `2px solid ${on ? ACCENT : 'transparent'}`, cursor: 'pointer', color: on ? '#eaf2ff' : '#888' }}>
+                  <span style={{ fontSize: 19, lineHeight: 1, opacity: on ? 1 : 0.75 }}>{glyph}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.3 }}>{label}</span>
                 </button>
               );
             })}
           </div>
         </div>
-        {/* ── RELICS: the loot you find on the climb. Equip up to RELIC_SLOTS into a run. ── */}
-        <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 vault {relics.length}/{RELICS.length}</button>
-              <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
-            </div>
-          </div>
-          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>.</div>
-          {relics.length === 0 ? (
-            <div style={{ fontSize: T.small, color: DIM, fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>No relics yet. Beat a ring's boss to find your first.</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
-              {RELICS.filter((r) => relics.includes(r.id)).map((r) => {
-                const eq = relicKit.includes(r.id);
-                const full = !eq && relicKit.length >= RELIC_SLOTS;
-                const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
-                return (
-                  <button key={r.id} onClick={() => toggleRelic(r.id)} disabled={full}
-                    title={r.lore}
-                    style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
-                      background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                      <RelicIcon r={r} size={T.body} />
-                      <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
-                    </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
-                    <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>
-          Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span>
-          <span style={{ float: 'right', fontSize: T.micro, color: DIM, fontWeight: 700, lineHeight: '22px' }}>{stable.length}/{COMBAT_ROSTER.length} caught</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
-          {COMBAT_ROSTER.filter((c) => stable.includes(c.id)).map((c) => {
-            const ti = TYPE_INFO[c.type];
-            const rar = rarityOf(c.id); const tnf = RARITY_INFO[rar]; const tm = tnf.mult; // rarity power
-            const on = picked.includes(c.id);
-            const full = !on && picked.length >= 3;
-            const cBal = cores[c.id] || 0;
-            const nodeCount = (treeAlloc[c.id] || []).length;
-            const hasTree = !!treeForCreature(c.id);
-            return (
-              <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <button onClick={() => toggle(c.id)} disabled={full}
-                  style={{ flex: 1, textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
-                    background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
-                  <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
-                    <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {ti.nick}</span>
-                        <span style={{ fontSize: 9, fontWeight: 900, color: tnf.color, letterSpacing: 0.3 }} title={`${rar}`}>{tnf.pips}</span>
-                        {on && <span style={{ marginLeft: 'auto', fontSize: T.body, color: SEL, fontWeight: 800 }}>✓</span>}
-                      </div>
-                      <div style={{ fontSize: T.small, color: on ? '#eaf2ff' : '#cfcfda', fontWeight: 700, margin: '1px 0 3px' }}>{c.name} <span style={{ fontSize: T.micro, color: tnf.color, fontWeight: 700 }}>· {rar}</span></div>
-                      <div style={{ fontSize: T.micro, color: DIM }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: tnf.color, fontWeight: 800 }}> · ×{tm.toFixed(2)}</span>}{nodeCount > 0 && <span style={{ color: WIN, fontWeight: 800 }}> · {nodeCount} path{nodeCount !== 1 ? 's' : ''}</span>}</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
-                </button>
-                <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
-                    background: cBal > 0 ? '#101a22' : '#0c0c14', border: `1px solid ${cBal > 0 ? '#2a4a5a' : LINE}`, opacity: hasTree ? 1 : 0.4 }}>
-                  <span style={{ fontSize: T.small, fontWeight: 900, color: hasTree ? '#9be7ff' : DIM }}>🌳 PATHS</span>
-                  {hasTree && <span style={{ fontSize: T.micro, fontWeight: 800, color: cBal > 0 ? '#9be7ff' : DIM }}>{cBal} ⬡{cBal > 0 ? ' to spend' : ''}</span>}
-                </button>
+
+        {/* ═══════════════ ⚙ SETTINGS overlay ═══════════════ */}
+        {showSettings && (
+          <div onClick={() => setShowSettings(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(4,4,8,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 400, maxHeight: '86vh', overflowY: 'auto', background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 16, padding: '18px 18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', letterSpacing: 0.5 }}>⚙ Settings</span>
+                <button onClick={() => setShowSettings(false)} style={{ marginLeft: 'auto', fontSize: T.body, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer', border: `1px solid ${LINE}`, background: PANEL, color: DIM }}>✕</button>
               </div>
-            );
-          })}
-        </div>
-        {(() => {
-          // The ring picker is the RUN selector — it always shows (even with everything
-          // caught, you still pick a ring to raid for Cores + boss clears that open the
-          // way inward). It just stops being a "hunt" once the catch pool is empty.
-          const lockedIds = COMBAT_ROSTER.map((c) => c.id).filter((id) => !stable.includes(id));
-          const lockedSet = new Set(lockedIds);
-          // Uncaught creatures this ground leans toward — what you're hunting for.
-          const targetsOf = (g) => g.biasIds.filter((id) => lockedSet.has(id));
-          // The ring you'll actually hunt — clamped to what you've unlocked (strict inward).
-          const sel = accessibleGround(ground, accessDepth);
-          const selTargets = targetsOf(sel);
-          return (
-            <div style={{ borderRadius: 10, border: `1px dashed ${LINE}`, padding: '12px 14px', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 16, lineHeight: 1 }}>🧭</span>
-                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ddd' }}>WHERE TO RAID</div>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>{lockedIds.length > 0 ? `${lockedIds.length} grunling${lockedIds.length !== 1 ? 's' : ''} still out there` : 'all grunlings caught'}</span>
-              </div>
-              {/* The map — tap a ring to select where you raid. */}
-              <RingMap accessDepth={accessDepth} selectedId={sel.id} clears={clears}
-                onSelect={(id) => { setGround(id); saveGround(id); }} />
-              {/* The selected ring, spelled out (the map shows state by colour; this is the detail). */}
-              {(() => {
-                const diff = diffOf(sel.depth);
-                const n = clears[sel.id] || 0; const m = repeatMult(n);
-                const ringRars = [...new Set(sel.biasIds.map(rarityOf))].sort((a, b) => RARITY_INFO[b].mult - RARITY_INFO[a].mult);
-                return (
-                  <div style={{ background: '#10131c', border: `1px solid ${SEL}33`, borderRadius: 10, padding: '9px 11px', marginBottom: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: T.small, fontWeight: 900, color: '#eaf2ff' }}>{sel.name}</span>
-                      <span style={{ fontSize: 10 }}>{ringRars.map((r) => <span key={r} title={r} style={{ color: RARITY_INFO[r].color, fontWeight: 900, marginRight: 1 }}>{RARITY_INFO[r].pips}</span>)}</span>
-                      <span style={{ fontSize: T.micro, fontWeight: 800, color: diff.color }}>· {diff.label}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `farmed ×${n} — Cores ×${m.toFixed(2)}`}</span>
-                    </div>
-                    <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
-                      Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
-                    </div>
-                  </div>
-                );
-              })()}
-              {selTargets.map((id) => CREATURE_LORE[id] && (
-                <div key={id} style={{ fontSize: T.micro, color: '#8a8a76', lineHeight: 1.45, padding: '3px 0 3px 24px' }}>
-                  <span style={{ color: '#cdd', fontWeight: 700 }}>{COMBAT_CREATURES[id].name}:</span>{' '}
-                  <span style={{ color: '#a99' }}>“{CREATURE_LORE[id].rumor}”</span>
+              {/* Music toggle */}
+              <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, marginBottom: 8, cursor: 'pointer', textAlign: 'left',
+                  border: `1px solid ${music ? '#4a3a66' : LINE}`, background: music ? '#160f1d' : PANEL }}>
+                <span style={{ fontSize: T.sub }}>{music ? '🔊' : '🔇'}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: music ? '#cba6ff' : '#bbb' }}>Ambient Music</div>
+                  <div style={{ fontSize: T.micro, color: DIM }}>A low pad under the climb.</div>
                 </div>
-              ))}
-            </div>
-          );
-        })()}
-        {(() => {
-          // Apex quarry — creatures you're gathering sigils toward. Full bar → challenge.
-          const gathering = [...APEX_IDS].filter((id) => !stable.includes(id) && (sigils[id] || 0) > 0);
-          if (gathering.length === 0) return null;
-          const ringOf = (id) => HUNTING_GROUNDS.find((g) => g.biasIds.includes(id));
-          return (
-            <div style={{ borderRadius: 10, border: `1px solid #2a3a5a`, background: '#0a1018', padding: '12px 14px', marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 16, lineHeight: 1 }}>★</span>
-                <div style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>APEX QUARRY</div>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>gather sigils, then win it over</span>
-              </div>
-              {gathering.map((id) => {
-                const ac = COMBAT_CREATURES[id]; const ati = TYPE_INFO[ac.type];
-                const have = Math.min(APEX_SIGILS, sigils[id] || 0);
-                const ready = have >= APEX_SIGILS;
-                const ring = ringOf(id);
-                return (
-                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: `1px solid #18203044` }}>
-                    <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={40} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: T.small, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {ac.type}</span></div>
-                      <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800 }}>{'✦'.repeat(have)}{'·'.repeat(APEX_SIGILS - have)} <span style={{ color: DIM, fontWeight: 600 }}>{have}/{APEX_SIGILS}{!ready && ring ? ` — hunt ${ring.name}` : ''}</span></div>
-                    </div>
-                    {ready && (
-                      <button onClick={() => picked.length >= 2 && startChallenge(id)} disabled={picked.length < 2}
-                        title={picked.length < 2 ? 'Pick at least 2 creatures first' : `Challenge ${ac.name}`}
-                        style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 9, border: `1.5px solid ${picked.length >= 2 ? ati.accent : LINE}`,
-                          background: picked.length >= 2 ? `${ati.accent}22` : '#111', color: picked.length >= 2 ? ati.accent : DIM,
-                          fontSize: T.small, fontWeight: 900, cursor: picked.length >= 2 ? 'pointer' : 'default', letterSpacing: 0.5 }}>
-                        ⚔ CHALLENGE
-                      </button>
-                    )}
+                <span style={{ fontSize: T.micro, fontWeight: 900, color: music ? '#9be7ff' : '#777' }}>{music ? 'ON' : 'OFF'}</span>
+              </button>
+              {/* Auto-pick toggle */}
+              <button onClick={() => setAutoPick(!autoPick)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, marginBottom: 8, cursor: 'pointer', textAlign: 'left',
+                  border: `1px solid ${autoPick ? '#2a5a8a' : LINE}`, background: autoPick ? '#0d1622' : PANEL }}>
+                <span style={{ fontSize: T.sub }}>⏩</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: autoPick ? '#9be7ff' : '#bbb' }}>Auto-pick (farming)</div>
+                  <div style={{ fontSize: T.micro, color: DIM, lineHeight: 1.35 }}>Auto-resolve upgrades & events on rings you've <b>already cleared</b>. Never on a fresh ring — the climb stays hands-on.</div>
+                </div>
+                <span style={{ fontSize: T.micro, fontWeight: 900, color: autoPick ? '#9be7ff' : '#777' }}>{autoPick ? 'ON' : 'OFF'}</span>
+              </button>
+              {/* ── β BETA: a removable dev switch — fast-forward the gate for content testing. ── */}
+              {BETA_AVAILABLE && (
+                <div style={{ border: `1px dashed ${beta ? '#ff5cf0' : '#33333f'}`, background: beta ? '#190a17' : '#0b0b11', borderRadius: 10, padding: '10px 12px', marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => { const b = !beta; setBeta(b); saveBeta(b); }}
+                      style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 7, cursor: 'pointer',
+                        border: `1.5px solid ${beta ? '#ff5cf0' : '#444'}`, background: beta ? '#ff5cf022' : 'transparent', color: beta ? '#ff9cf5' : '#888' }}>
+                      β BETA · {beta ? 'ON' : 'OFF'}
+                    </button>
+                    <span style={{ fontSize: T.micro, color: beta ? '#ff9cf5' : '#777', fontWeight: 700 }}>
+                      {beta ? '⚠ TEST MODE — every ring open. Turn off to play the real gated build.' : 'Dev fast-forward — unlock all rings + grants for content testing.'}
+                    </span>
                   </div>
-                );
-              })}
-              {gathering.some((id) => (sigils[id] || 0) >= APEX_SIGILS) && picked.length < 2 && (
-                <div style={{ fontSize: T.micro, color: ACCENT, marginTop: 8, fontWeight: 700 }}>Pick a squad above, then call out your challenge.</div>
+                  {beta && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {[
+                        ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
+                        ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
+                        ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
+                        ['Reset ALL progress', () => {
+                          const st = [...STARTER_IDS];
+                          setUnlocked(1); saveUnlocked(1);
+                          setReclaimed(0); saveReclaimed(0);           // the Holdfast falls back to the blight
+                          setStable(st); saveStable(st);
+                          setClears({}); saveClears({});
+                          setSigils({}); saveSigils({});
+                          setPity(0); savePity(0);
+                          setCores({}); saveCores({});                 // wipe the OP trees — Cores,
+                          setTreeAlloc({}); saveTreeAlloc({});          // unlocked nodes,
+                          setTreeEquip({}); saveEquip({});              // equipped loadout,
+                          setTreeRanks({}); saveRanks({});              // and node ranks.
+                          setOwned([]); savePerks([]);                 // Forge perks too.
+                          setRelics([]); saveRelics([]);               // the relic collection,
+                          setRelicKit([]); saveRelicKit([]);            // the equipped kit,
+                          setCrossing(0); saveCrossing(0);              // the NG+ crossing level,
+                          setWards({}); saveWards({});                  // and every ward riddle.
+                          setGround('outer-ring'); saveGround('outer-ring');
+                          setPicked([]); saveSquad([]);
+                        }],
+                      ].map(([label, fn]) => (
+                        <button key={label} onClick={fn} style={{ fontSize: T.micro, fontWeight: 800, padding: '5px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #5a3a5a', background: '#1f0f1d', color: '#ff9cf5' }}>{label}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          );
-        })()}
-        <div style={{ marginBottom: 18 }} />
-        {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth); return (
-        <button onClick={startRun} disabled={picked.length < 2}
-          style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
-          {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
-        </button>
-        ); })()}
+          </div>
+        )}
       </div>
     );
   }
@@ -2917,28 +3631,99 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
 
   // ── Wayside event: a choice on the trail between waves (vF-AB). ──
+  if (runPhase === 'event' && pendingElite) {
+    const el = pendingElite;
+    return (
+      <div>
+        <div style={{ animation: 'seam-threshold .9s ease-out', maxWidth: 560, margin: '8px auto 0', background: 'linear-gradient(180deg,#1a0e0e,#0b0808)', border: `1px solid ${el.tint}66`, borderRadius: 14, padding: narrow ? '16px 15px' : '20px 22px' }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
+            <EventVignette tint={el.tint} glyph={el.glyph} size={narrow ? 70 : 88} />
+            <div>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: el.tint }}>💀 AN ELITE BARS THE TRAIL</div>
+              <div style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff', marginTop: 2 }}>{el.title}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{el.text}</div>
+          {!eventOutcome ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              <button onClick={startEliteFight}
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 11, padding: '13px 15px', background: '#1f1010', border: `1.5px solid ${el.tint}` }}>
+                <div style={{ fontSize: T.body, fontWeight: 900, color: '#ffd0d0' }}>⚔ Fight it</div>
+                <div style={{ fontSize: T.small, color: '#c89a9a', marginTop: 2 }}>Tougher than a pack. Win for a <b style={{ color: '#ffd0d0' }}>guaranteed relic</b> — but a loss ends the run.</div>
+              </button>
+              <button onClick={eventPressOn}
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${LINE}` }}>
+                <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff' }}>↩ Slip past</div>
+                <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2 }}>Take the way around. No prize, no risk.</div>
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: T.body, color: '#cfe8c0', lineHeight: 1.6, marginBottom: 12 }}>{eventOutcome}</div>
+              {relicDrop && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#150d22', border: '1.5px solid #b06bff', borderRadius: 11, padding: '11px 13px', marginBottom: 14 }}>
+                  <RelicIcon r={relicDrop} size={30} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC WON</div>
+                    <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff' }}>{relicDrop.name} <span style={{ fontSize: T.micro, fontWeight: 800, color: (RARITY_INFO[relicDrop.rarity] || {}).color }}>· {relicDrop.rarity}</span></div>
+                    <div style={{ fontSize: T.small, color: '#cba6ff', fontWeight: 700 }}>{relicDrop.desc}</div>
+                  </div>
+                </div>
+              )}
+              <button onClick={eventPressOn} style={{ width: '100%', padding: '12px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>PRESS ON →</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
   if (runPhase === 'event' && pendingEvent) {
     const ev = pendingEvent;
+    const step = ev.steps ? (ev.steps[eventStep || ev.start] || ev.steps[ev.start]) : ev; // TALE: the live step, else the one-shot
+    const sceneKey = step.scene || ev.scene; // a branching tale shows a full illustrated backdrop
+    const text = step.text;
+    const choices = step.choices || [];
+    const multi = !!ev.steps; // a multi-step tale (longer, illustrated)
     return (
       <div>
         <div style={{ animation: 'seam-threshold .9s ease-out', maxWidth: 560, margin: '8px auto 0', background: 'linear-gradient(180deg,#120e1a,#0b0810)', border: `1px solid ${ev.tint}55`, borderRadius: 14, padding: narrow ? '16px 15px' : '20px 22px' }}>
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
-            <EventVignette tint={ev.tint} glyph={ev.glyph} size={narrow ? 70 : 88} />
-            <div>
-              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: ev.tint }}>⋯ A WAYSIDE</div>
-              <div style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff', marginTop: 2 }}>{ev.title}</div>
+          {/* A tale gets a wide illustrated banner + a title bar; one-shots keep the medallion. */}
+          {sceneKey ? (
+            <>
+              <div style={{ marginBottom: 12 }}><WaysideScene scene={sceneKey} tint={ev.tint} image={ev.image} /></div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: ev.tint }}>⋯ A WAYSIDE</span>
+                <span style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff' }}>{ev.glyph} {ev.title}</span>
+                {multi && !eventOutcome && (() => { const ids = Object.keys(ev.steps); const at = ids.indexOf(eventStep || ev.start);
+                  return <span style={{ marginLeft: 'auto', display: 'flex', gap: 5, alignSelf: 'center' }}>{ids.map((_, i) => <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i <= at ? ev.tint : '#2a2435' }} />)}</span>; })()}
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
+              <EventVignette tint={ev.tint} glyph={ev.glyph} size={narrow ? 70 : 88} />
+              <div>
+                <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: ev.tint }}>⋯ A WAYSIDE</div>
+                <div style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff', marginTop: 2 }}>{ev.title}</div>
+              </div>
             </div>
-          </div>
-          <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{ev.text}</div>
+          )}
+          <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{text}</div>
           {!eventOutcome ? (
             <div style={{ display: 'grid', gap: 10 }}>
-              {ev.choices.map((ch, k) => (
-                <button key={k} onClick={() => chooseEvent(ch)}
-                  style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${ev.tint}66` }}>
-                  <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff' }}>{ch.label}</div>
-                  <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2 }}>{ch.detail}</div>
-                </button>
-              ))}
+              {choices.map((ch, k) => {
+                const tooPoor = ch.cost && slag < ch.cost;
+                return (
+                  <button key={k} onClick={() => chooseEvent(ch)} disabled={tooPoor}
+                    style={{ textAlign: 'left', cursor: tooPoor ? 'not-allowed' : 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${tooPoor ? LINE : `${ev.tint}66`}`, opacity: tooPoor ? 0.5 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {ch.icon && <span style={{ fontSize: T.sub, flexShrink: 0 }}>{ch.icon}</span>}
+                      <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff', flex: 1 }}>{ch.label}{ch.goto ? <span style={{ color: ev.tint, fontWeight: 800 }}> →</span> : null}</div>
+                      {ch.cost ? <div style={{ fontSize: T.small, fontWeight: 900, color: tooPoor ? '#a85a5a' : '#c9c98a' }}>{ch.cost} ⚒</div> : null}
+                    </div>
+                    <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2, paddingLeft: ch.icon ? 28 : 0 }}>{tooPoor ? 'Not enough slag.' : ch.detail}</div>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div>
@@ -2961,7 +3746,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       <div>
         {/* THE THRESHOLD (vF-Z): stepping into a ring is a story beat, not a menu. */}
         {waveIdx === 0 && enteredRing && RING_INTRO[enteredRing.id] && (() => {
-          const di = diffOf(enteredRing.depth);
+          const di = diffOf(enteredRing.depth + crossing);
           return (
             <div style={{ animation: 'seam-threshold 1s ease-out', display: 'flex', gap: 13, alignItems: 'stretch', background: 'linear-gradient(180deg,#0e1320,#0b0d16)', border: `1px solid ${SEL}44`, borderLeft: `3px solid ${di.color}`, borderRadius: 12, padding: '12px 15px', marginBottom: 14 }}>
               <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 84} />
@@ -3062,11 +3847,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // ring falls for the first time: the door, the mentor's last truth, the step through. ──
   if (runPhase === 'drop') {
     const motes = [{ l: 10, d: 0 }, { l: 22, d: 1.1 }, { l: 35, d: 0.5 }, { l: 48, d: 1.7 }, { l: 60, d: 0.3 }, { l: 72, d: 1.3 }, { l: 84, d: 0.8 }, { l: 92, d: 2.0 }];
-    const lines = [
-      'You walk the last ring to its end, and the Drop opens — not a pit but a doorway, light spilling up out of the dark.',
-      'Your mentor stood exactly here. Went in. You understand it now: he was never lost. He was the first one through.',
-      'Three cores hum at your chest. The grunlings press close and warm. Seventy-five years of blight — and the answer to all of it is one step away.',
-    ];
+    const beat = crossingBeat(crossing); // this crossing's story; STEP THROUGH advances to crossing+1
+    const lines = beat.lines;
+    const stepThrough = () => { const n = crossing + 1; setCrossing(n); saveCrossing(n); newRun(); };
     return (
       <div style={{ textAlign: 'center', padding: '6px 0 4px' }}>
         {/* the portal stage */}
@@ -3079,13 +3862,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <span key={i} style={{ position: 'absolute', bottom: 0, left: `${m.l}%`, width: 5, height: 5, borderRadius: '50%', background: '#e8dcff', boxShadow: '0 0 6px 1px #cba6ff', animation: `seam-mote ${3.2 + m.d}s linear ${m.d}s infinite` }} />
           ))}
         </div>
-        <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2.5, color: '#cba6ff', animation: 'seam-drop-text .8s ease-out both' }}>✦ YOU REACHED THE DROP ✦</div>
-        <div style={{ fontSize: T.huge, fontWeight: 900, color: '#eadcff', margin: '6px 0 18px', animation: 'seam-drop-text .8s ease-out .2s both' }}>The First Climb</div>
+        <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2.5, color: '#cba6ff', animation: 'seam-drop-text .8s ease-out both' }}>{crossing === 0 ? '✦ YOU REACHED THE DROP ✦' : `✦ THE DROP — CROSSING ${roman(crossing)} ✦`}</div>
+        <div style={{ fontSize: T.huge, fontWeight: 900, color: '#eadcff', margin: '6px 0 18px', animation: 'seam-drop-text .8s ease-out .2s both' }}>{beat.title}</div>
         <div style={{ maxWidth: 470, margin: '0 auto', textAlign: 'left' }}>
           {lines.map((ln, i) => (
             <div key={i} style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.62, fontStyle: 'italic', marginBottom: 10, animation: `seam-drop-text 1s ease-out ${0.5 + i * 0.6}s both` }}>{ln}</div>
           ))}
-          <div style={{ fontSize: T.sub, fontWeight: 900, color: '#fff', textAlign: 'center', letterSpacing: 1, margin: '14px 0', animation: `seam-drop-text 1s ease-out ${0.5 + lines.length * 0.6}s both` }}>You take it.</div>
+          <div style={{ fontSize: T.sub, fontWeight: 900, color: '#fff', textAlign: 'center', letterSpacing: 1, margin: '14px 0', animation: `seam-drop-text 1s ease-out ${0.5 + lines.length * 0.6}s both` }}>{beat.take}</div>
         </div>
         {pullNow && (() => {
           const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
@@ -3099,8 +3882,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           );
         })()}
         <div style={{ maxWidth: 470, margin: '20px auto 0', animation: `seam-drop-text 1s ease-out ${0.9 + (lines.length + 1) * 0.6}s both` }}>
-          <div style={{ fontSize: T.small, color: '#9a7fc0', lineHeight: 1.55, marginBottom: 12 }}>The way is yours now. The Drop will keep — come again, stronger. There&apos;s more here than one crossing can hold.</div>
-          <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: '#b06bff', color: '#160f1d', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>↩ CARRY IT HOME</button>
+          <div style={{ fontSize: T.small, color: '#9a7fc0', lineHeight: 1.55, marginBottom: 12 }}>Step through, and the rings reform <b style={{ color: '#cba6ff' }}>harder</b> — the next crossing, the next of his story. Or carry it home and come again when you're ready.</div>
+          <button onClick={stepThrough} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: '#b06bff', color: '#160f1d', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer', marginBottom: 8 }}>{beat.step}</button>
+          <button onClick={newRun} style={{ width: '100%', padding: '11px 0', borderRadius: 10, background: 'transparent', border: '1px solid #4a3a66', color: '#9a7fc0', fontSize: T.small, fontWeight: 800, cursor: 'pointer' }}>↩ carry it home {crossing > 0 ? `(stay on Crossing ${roman(crossing)})` : ''}</button>
         </div>
       </div>
     );
@@ -3113,6 +3897,17 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
           <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
           <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You cleared <b>{caughtFrom ? caughtFrom.name : 'the ring'}</b> to its heart.</div>
+          {enteredRing && RING_CLEAR[enteredRing.id] && (
+            <div style={{ background: '#0a0f14', border: '1px solid #2a3f2a', borderRadius: 12, padding: '13px 14px', margin: '0 0 14px', textAlign: 'left' }}>
+              <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
+                <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 82} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#9ad0a0' }}>✦ {RING_CLEAR[enteredRing.id].boss.toUpperCase()} FALLS</div>
+                  <div style={{ fontSize: T.small, color: '#cbd8cb', lineHeight: 1.6, fontStyle: 'italic', marginTop: 5 }}>{RING_CLEAR[enteredRing.id].beat}</div>
+                </div>
+              </div>
+            </div>
+          )}
           {pullNow && (() => {
             const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
             return (
@@ -3157,6 +3952,28 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ margin: '12px 0', padding: '12px 14px', borderRadius: 12, background: '#1a1407', border: `2px solid ${ACCENT}` }}>
               <div style={{ fontSize: T.small, fontWeight: 900, color: ACCENT, letterSpacing: 0.5 }}>🔓 THE WAY INWARD OPENS</div>
               <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open, with rarer creatures to pull within.</div>
+            </div>
+          ); })()}
+          {wardBlock && (
+            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: 'linear-gradient(180deg,#0c1620,#0a0e16)', border: `2px solid ${wardBlock.tint}`, boxShadow: `0 0 16px ${wardBlock.tint}33`, textAlign: 'left' }}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: wardBlock.tint }}>{wardBlock.glyph} THE WAY IS SEALED</div>
+              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', margin: '3px 0 6px' }}>{wardBlock.name}</div>
+              <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.55, fontStyle: 'italic', marginBottom: 10 }}>{wardBlock.story}</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 11px', borderRadius: 9, background: '#0a0e16', border: `1px solid ${wardBlock.tint}55` }}>
+                <span style={{ fontSize: T.body }}>🜲</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: wardBlock.tint }}>The riddle</div>
+                  <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.5 }}>{wardBlock.clue}</div>
+                  <div style={{ fontSize: T.micro, fontWeight: 800, color: '#9be7ff', marginTop: 6 }}>→ {wardBlock.deed.told} · {(wards[wardBlock.id]?.progress) || 0}/{wardBlock.deed.count}</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {wardSolvedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === wardSolvedNow.atDepth + 1); return (
+            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: 'linear-gradient(180deg,#10231a,#0c1812)', border: `2px solid ${WIN}`, boxShadow: `0 0 16px ${WIN}44`, textAlign: 'left' }}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: WIN }}>{wardSolvedNow.glyph} THE LOCK KNOWS ITS OWN</div>
+              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eafff2', margin: '3px 0 6px' }}>{wardSolvedNow.name} opens</div>
+              <div style={{ fontSize: T.small, color: '#bfe8cf', lineHeight: 1.5 }}>You did as the old gate asked. It grinds open — the way inward to <b>{g?.name || 'the deep'}</b> lies clear, and a key relic is yours for the solving.</div>
             </div>
           ); })()}
           {holdfastNow && (
@@ -3383,7 +4200,7 @@ function LearnMode({ narrow, onGraduate }) {
   return <FightView fight={fight} narrow={narrow} banner={banner} hintSkill={hintSkill} />;
 }
 
-export function SeamLab({ onClose, slag = 0, onSlag, version }) {
+export function SeamLab({ slag = 0, onSlag, version }) {
   const vw = useViewport();
   const narrow = vw < 760;
   const [tab, setTab] = useState('run'); // 'learn' | 'run' | 'sandbox'
