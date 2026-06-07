@@ -497,14 +497,20 @@ function loadRelicKit() { try { return JSON.parse(localStorage.getItem(RELIC_LOA
 function saveRelicKit(ids) { try { localStorage.setItem(RELIC_LOADOUT_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
 // Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe).
 function relicMods(equippedIds, m) { (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) r.apply(m); }); }
-// A ring boss drops a relic: a weighted draw from what you DON'T yet own. null = collection full.
-function rollRelicDrop(owned) {
-  const pool = RELICS.filter((r) => !owned.includes(r.id));
-  if (!pool.length) return null;
-  const total = pool.reduce((s, r) => s + RELIC_DROP_WEIGHT[r.rarity], 0);
-  let x = Math.random() * total;
-  for (const r of pool) { x -= RELIC_DROP_WEIGHT[r.rarity]; if (x <= 0) return r; }
-  return pool[pool.length - 1];
+// A ring boss offers a CHOICE of up to n relics — a weighted draw of DISTINCT relics from
+// what you don't yet own. You pick one on the won screen. Empty = collection full → slag.
+function rollRelicChoices(owned, n = 3) {
+  const work = RELICS.filter((r) => !owned.includes(r.id));
+  const w = work.map((r) => RELIC_DROP_WEIGHT[r.rarity]);
+  const out = [];
+  while (out.length < n && work.length) {
+    const total = w.reduce((s, x) => s + x, 0);
+    let x = Math.random() * total, i = 0;
+    for (; i < work.length; i++) { x -= w[i]; if (x <= 0) break; }
+    if (i >= work.length) i = work.length - 1;
+    out.push(work[i]); work.splice(i, 1); w.splice(i, 1);
+  }
+  return out;
 }
 
 // ── Stable: the creatures you've caught — grows every time you clear the ring. ──
@@ -1915,7 +1921,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [showIntro, setShowIntro] = useState(() => !introSeen()); // opening cutscene (first launch + replay)
   const [relics, setRelics] = useState(loadRelics);        // owned relic ids (the collection — found from boss clears)
   const [relicKit, setRelicKit] = useState(loadRelicKit);  // equipped relic loadout (subset, capped at RELIC_SLOTS)
-  const [relicDrop, setRelicDrop] = useState(null);        // a relic just found this clear (won-screen reveal)
+  const [relicChoices, setRelicChoices] = useState([]);    // pending boss-drop picks — choose one on the won screen
+  const [relicDrop, setRelicDrop] = useState(null);        // the relic you chose this clear (won-screen reveal)
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
@@ -1956,6 +1963,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       else next = [...cur, id];
       saveRelicKit(next); sfx.upgradePick(); return next;
     });
+  }
+
+  // Take one of the boss-drop relic choices into the permanent collection (won screen).
+  function chooseRelic(r) {
+    if (!r || relics.includes(r.id)) return;
+    const nr = [...relics, r.id]; setRelics(nr); saveRelics(nr);
+    setRelicDrop(r); setRelicChoices([]); sfx.caughtCreature();
   }
 
   // Award Cores to each listed creature (banked permanently + tracked for the recap).
@@ -2137,17 +2151,18 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           setSigils(nextSig); saveSigils(nextSig);
           setSigilGain({ id: apexId, count, ready: count >= APEX_SIGILS });
         } else setSigilGain(null);
-        // RELIC DROP — every ring boss yields a relic (the loot chase). A weighted draw
-        // from what you don't own yet; once the collection is full, it pays slag instead.
-        const rd = rollRelicDrop(relics);
-        if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); setRelicDrop(rd); }
-        else { onSlag?.(35); setRelicDrop(null); }
         // THE DROP — clearing the final ring for the first time is the ending. The whole
         // climb has pointed here; play the theme and run the ceremony instead of the
         // ordinary won-screen. (reclaimed still holds the PRE-clear value here.)
         if (hunted.depth === HOLDFAST_MAX && reclaimed < HOLDFAST_MAX) {
           sfx.theDrop(); setRunPhase('drop'); return;
         }
+        // RELIC DROP — every ring boss offers a CHOICE of relics (the loot chase). You
+        // pick one on the won screen; a weighted draw of distinct unowned relics. Once the
+        // collection is full, there's nothing left to offer, so it pays slag instead.
+        const choices = rollRelicChoices(relics, 3);
+        if (choices.length) { setRelicChoices(choices); setRelicDrop(null); }
+        else { onSlag?.(35); setRelicChoices([]); setRelicDrop(null); }
         sfx.ringTaken();
         setRunPhase('won'); return;
       }
@@ -2238,7 +2253,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setEventOutcome(null); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setEventOutcome(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -3070,12 +3085,33 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               </div>
             </div>
           )}
+          {relicChoices.length > 0 && (
+            <div style={{ background: '#120a1e', border: '1.5px solid #b06bff', borderRadius: 11, padding: '12px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff', marginBottom: 8 }}>✦ CHOOSE A RELIC <span style={{ color: DIM, fontWeight: 700, letterSpacing: 0 }}>— the boss leaves spoils. Take one.</span></div>
+              <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
+                {relicChoices.map((r) => {
+                  const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
+                  return (
+                    <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
+                      style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1.5px solid ${r.color}88` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: T.body }}>{r.icon}</span>
+                        <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
+                      </div>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
+                      <div style={{ fontSize: T.micro, color: '#bfb0d6', lineHeight: 1.35 }}>{r.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {relicDrop && (
             <div style={{ background: '#150d22', border: '1.5px solid #b06bff', borderRadius: 11, padding: '11px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                 <span style={{ fontSize: 30 }}>{relicDrop.icon}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC FOUND</div>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC TAKEN</div>
                   <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '2px 0' }}>{relicDrop.name} <span style={{ fontSize: T.micro, fontWeight: 800, color: (RARITY_INFO[relicDrop.rarity] || {}).color }}>· {relicDrop.rarity}</span></div>
                   <div style={{ fontSize: T.small, color: '#cba6ff', fontWeight: 700 }}>{relicDrop.desc}</div>
                   <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.45, fontStyle: 'italic', marginTop: 3 }}>{relicDrop.lore} <span style={{ color: DIM, fontStyle: 'normal' }}>— equip it in ✦ RELICS before your next run.</span></div>
