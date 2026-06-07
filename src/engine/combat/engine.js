@@ -1,4 +1,4 @@
-import { ROUND_CAP, BURN, REGEN, AMP, VULN } from './dials.js';
+import { ROUND_CAP, BURN, REGEN, AMP, VULN, POISON, DOOM } from './dials.js';
 import { getSkill } from './skills/index.js';
 import { phoenixSave } from './skills/combatMath.js';
 import {
@@ -45,6 +45,7 @@ function applyDecision(state, actor, decision, emit) {
     note: result.note,
     amplifiedByBurn: result.amplifiedByBurn || false,
   });
+  return result; // the turn loop reads this (e.g. Quickstep checks for a kill)
 }
 
 // ─── End of round: Burn ticks, then decays ──────────────────────────────────────
@@ -84,7 +85,9 @@ function tickRegen(state, emit) {
       const amount = stacks * REGEN.tickHeal;
       const before = u.hp;
       u.hp = Math.min(u.maxHp, u.hp + amount);
-      u.statuses.regen = Math.max(0, stacks - REGEN.decayPerRound);
+      // "Evergreen" (Mender VERDANT keystone): regen never fades. Opt-in — without the
+      // mod it decays exactly as before, so every existing golden is byte-identical.
+      u.statuses.regen = u.mods?.evergreen ? stacks : Math.max(0, stacks - REGEN.decayPerRound);
       emit({
         type: 'regen',
         round: state.round,
@@ -93,6 +96,77 @@ function tickRegen(state, emit) {
         hpAfter: u.hp,
         stacksLeft: u.statuses.regen,
       });
+    }
+  }
+}
+
+// ─── End of round: Poison ticks (a ramping DoT). Mirrors Burn, but by default it does
+// NOT decay (POISON.decayPerRound = 0) — the VENOM identity is a stack that lingers and
+// ramps. Guarded so a unit with no poison emits nothing; no golden carries poison, so
+// every current transcript is byte-identical. ──
+function tickPoison(state, emit) {
+  for (const side of ['A', 'B']) {
+    for (const u of livingOnSide(state, side)) {
+      const stacks = u.statuses.poison || 0;
+      if (stacks <= 0) continue;
+      const dmg = stacks * POISON.tickDmg;
+      const before = u.hp;
+      u.hp = Math.max(0, u.hp - dmg);
+      let killed = before > 0 && u.hp === 0;
+      if (killed && phoenixSave(u)) killed = false;
+      if (killed) u.alive = false;
+      u.statuses.poison = Math.max(0, stacks - POISON.decayPerRound);
+      emit({ type: 'poison', round: state.round, target: { uid: u.uid, name: u.name, side: u.side }, dmg, killed, hpAfter: u.hp, stacksLeft: u.statuses.poison });
+    }
+  }
+}
+
+// ─── End of round: Doom timers count down; an expired brand detonates for a multiple of
+// the brander's punch, ignoring block (it is inevitable). On a `doomSplash` brand the
+// blast also washes a curse over the rest of the line. Guarded — no golden carries doom,
+// so this is a complete no-op for every existing transcript. ──
+function tickDoom(state, emit) {
+  for (const side of ['A', 'B']) {
+    for (const u of livingOnSide(state, side)) {
+      if ((u.statuses.doom || 0) <= 0) continue;
+      u.statuses.doom -= 1;
+      if (u.statuses.doom > 0) continue;
+      const dmg = Math.round((u.doomPunch || 0) * DOOM.dmgMult);
+      const before = u.hp;
+      u.hp = Math.max(0, u.hp - dmg);
+      let killed = before > 0 && u.hp === 0;
+      if (killed && phoenixSave(u)) killed = false;
+      if (killed) u.alive = false;
+      if (u.doomSplash) { // "Death Sentence": the eruption brands the rest of the line
+        for (const e of livingOnSide(state, side)) {
+          if (e.uid === u.uid) continue;
+          e.statuses.vuln = Math.min(VULN.maxStacks, (e.statuses.vuln || 0) + 2);
+        }
+      }
+      emit({ type: 'doom', round: state.round, target: { uid: u.uid, name: u.name, side: u.side }, dmg, killed, hpAfter: u.hp });
+    }
+  }
+}
+
+// ─── Start of round: seed the deep-tree effects that read the whole board (guardian HP
+// floor, recurring control, the conductor's gift). Every branch is gated on a mod no
+// golden unit carries, so this whole pass is a no-op for existing transcripts. ──
+function seedRoundStart(state) {
+  for (const side of ['A', 'B']) {
+    const living = livingOnSide(state, side);
+    // "Unbreakable" (Bulwark GUARDIAN keystone): a live guardian props every ally at ≥1 HP.
+    const guardian = living.find((u) => u.mods?.unbreakable);
+    for (const u of living) u._guardian = guardian || undefined;
+    const foes = livingOnSide(state, otherSide(side));
+    // "Time Lock" (Warden BLIZZARD keystone): each round the weakest foe is held in stasis.
+    if (foes.length && living.some((u) => u.mods?.timeLock)) {
+      const weak = foes.reduce((w, u) => (u.hp / u.maxHp < w.hp / w.maxHp ? u : w), foes[0]);
+      weak.statuses.freeze = Math.min(3, (weak.statuses.freeze || 0) + 1);
+    }
+    // "Maestro" (Booster CONDUCTOR keystone): each round, gift the carry a stack of amp.
+    if (living.some((u) => u.mods?.maestro)) {
+      const carry = living.reduce((b, u) => (u.atk > b.atk ? u : b), living[0]);
+      carry.statuses.amp = Math.min(AMP.maxStacks, (carry.statuses.amp || 0) + 1);
     }
   }
 }
@@ -106,6 +180,9 @@ function decayAmp(state) {
     for (const u of livingOnSide(state, side)) {
       const stacks = u.statuses.amp || 0;
       if (stacks <= 0) continue;
+      // "Crescendo" (Booster RESONANCE keystone): amp never fades — every round the team
+      // only hits harder. Opt-in — without the mod it decays exactly as before.
+      if (u.mods?.crescendo) continue;
       u.statuses.amp = Math.max(0, stacks - AMP.decayPerRound);
     }
   }
@@ -130,10 +207,12 @@ function decayVuln(state) {
 async function runRound(state, drivers, emit) {
   const first = sideInitiative(state);
   emit({ type: 'round-start', round: state.round, firstSide: first });
+  seedRoundStart(state); // deep-tree board effects (no-op without the mods)
 
   for (const side of [first, otherSide(first)]) {
     const driver = drivers[side];
     const acted = new Set();
+    const quickstepped = new Set(); // Striker "Quickstep" — one bonus action per unit/round
     // Recompute the living pool each step: a creature that died mid-block (e.g. to
     // a Backdraft) is gone, and one already acted this round never acts twice.
     let pool = livingOnSide(state, side).filter((u) => !acted.has(u.uid));
@@ -149,9 +228,16 @@ async function runRound(state, drivers, emit) {
         continue;
       }
       const decision = await driver.decide(actor, state);
-      applyDecision(state, actor, decision, emit);
+      const result = applyDecision(state, actor, decision, emit);
       acted.add(actor.uid);
       state.firstActionDone = true;
+      // "Quickstep" (Striker TEMPO): land a kill, act once more this round. Opt-in — no
+      // golden unit carries the mod, so no fight ever re-acts and the loop is untouched.
+      if (actor.mods?.actAgainOnKill && actor.alive && !quickstepped.has(actor.uid)
+          && (result?.hits || []).some((h) => h.killed) && !battleOver(state)) {
+        quickstepped.add(actor.uid);
+        acted.delete(actor.uid); // eligible to be chosen again, exactly once
+      }
       pool = livingOnSide(state, side).filter((u) => !acted.has(u.uid));
     }
     if (battleOver(state)) break;
@@ -161,7 +247,9 @@ async function runRound(state, drivers, emit) {
   // enemy). But if the action phase already wiped a side, the fight is decided —
   // don't let a post-victory burn tick scratch the winner.
   if (!battleOver(state)) tickBurns(state, emit);
+  if (!battleOver(state)) tickPoison(state, emit); // VENOM / rot DoT (no-op without poison)
   if (!battleOver(state)) tickRegen(state, emit);
+  if (!battleOver(state)) tickDoom(state, emit); // DOOM detonations (no-op without a brand)
   decayAmp(state); // always: a buff fades whether or not the round was decisive
   decayVuln(state); // a curse fades too (no-op unless a Hexer is in play)
   state.round += 1;

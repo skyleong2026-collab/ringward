@@ -25,7 +25,11 @@ function initUnit(creature, side, slot) {
     speed: creature.speed,
     charge: creature.charge ?? 0, // a run "Primed" upgrade can start a unit charged
     maxCharge: creature.maxCharge ?? MAX_CHARGE,
-    statuses: { burn: 0, block: 0, regen: 0, amp: 0 }, // burn=DoT, block=absorb, regen=heal-over-time, amp=dmg buff
+    // burn=DoT, block=absorb, regen=heal-over-time, amp=dmg buff. The deep-tree
+    // statuses below all default to 0/absent, so any unit that never has them touched
+    // (every golden) reads exactly as before: poison=ramping DoT, freeze=skip-turn,
+    // vuln=damage-taken curse, reflect=block-counter %, doom=delayed detonation timer.
+    statuses: { burn: 0, block: 0, regen: 0, amp: 0, poison: 0, reflect: 0, doom: 0 },
     alive: true,
     skillIds: creature.skillIds.slice(),
     temperament: creature.temperament ?? 'Balanced', // only the AI side reads this
@@ -82,6 +86,11 @@ export function battleOver(state) {
 // §23.1: speed decides ONLY which side's block resolves first. Never extra turns,
 // never damage. Ties broken by the seeded RNG so replays are identical.
 export function sideInitiative(state) {
+  // "Blur" (Striker TEMPO keystone): a side fielding a Blur unit always moves first.
+  // Opt-in — no golden unit carries the mod, so both sides read false and this falls
+  // straight through to the speed compare below, byte-identical.
+  const hasBlur = (side) => livingOnSide(state, side).some((u) => u.mods?.blur);
+  if (hasBlur('A') !== hasBlur('B')) return hasBlur('A') ? 'A' : 'B';
   const sum = (side) => livingOnSide(state, side).reduce((s, u) => s + u.speed, 0);
   const a = sum('A');
   const b = sum('B');

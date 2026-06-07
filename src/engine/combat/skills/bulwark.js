@@ -1,6 +1,9 @@
 import { BULWARK } from '../dials.js';
 import { alliesOf } from '../state.js';
-import { dealDamage, addBlock, applyRegen } from './combatMath.js';
+import { dealDamage, addBlock, applyRegen, seedReflect } from './combatMath.js';
+
+// The most-wounded living ally (by HP fraction) — the natural cover target.
+const mostWounded = (allies) => allies.reduce((w, a) => (a.hp / a.maxHp < w.hp / w.maxHp ? a : w), allies[0]);
 
 // ─── Bulwark — "the wall: charge into shields, not damage" (§23) ────────────────
 // Same charge spine as Reactor, but the payoff is DEFENSE: it banks charge and
@@ -23,9 +26,17 @@ export const BULWARK_SKILLS = {
       // with no mod the recipient list is just [actor], byte-identical to before.
       const recipients = (actor.mods?.braceTeam && state) ? alliesOf(state, actor) : [actor];
       const shields = recipients.map((a) => addBlock(a, BULWARK.brace.blockGain, actor));
+      recipients.forEach((a) => seedReflect(a, actor)); // RETRIBUTION: shielded allies counter
+      // "Intercept" (GUARDIAN): also slam cover onto the most-wounded ally — take the blow.
+      if (actor.mods?.intercept && state) {
+        const hurt = mostWounded(alliesOf(state, actor));
+        if (hurt && !recipients.includes(hurt)) { shields.push(addBlock(hurt, BULWARK.brace.blockGain, actor)); seedReflect(hurt, actor); }
+      }
       // "Iron Bastion" upgrade: Brace also seeds regen on everyone it shields.
       const regens = (actor.mods?.braceRegen) ? recipients.map((a) => applyRegen(a, 1)) : [];
-      const hits = target ? [dealDamage(target, actor.atk * BULWARK.brace.chipMult, actor)] : [];
+      // "Heavy Hold" (RETRIBUTION): the chip bites harder the more block you're holding.
+      const heavy = actor.mods?.heavyHold ? (1 + Math.min(1, (actor.statuses.block || 0) / 200)) : 1;
+      const hits = target ? [dealDamage(target, actor.atk * BULWARK.brace.chipMult * heavy, actor)] : [];
       return { hits, chargeGained: gain, shields, regens };
     },
   },
@@ -42,8 +53,13 @@ export const BULWARK_SKILLS = {
       const spent = actor.charge;
       actor.charge = 0;
       const line = alliesOf(state, actor);
-      const shields = line.map((a) => addBlock(a, BULWARK.aegis.blockPerCharge * spent, actor));
-      return { hits: [], chargeSpent: spent, shields };
+      // "Bastion Wall" keystone hardens every shield by half again.
+      const mult = actor.mods?.bastion ? 1.5 : 1;
+      const shields = line.map((a) => addBlock(a, BULWARK.aegis.blockPerCharge * spent * mult, actor));
+      line.forEach((a) => seedReflect(a, actor));
+      // "Overbank": the wall also banks a regenerating barrier on the whole team.
+      const regens = actor.mods?.overbank ? line.map((a) => applyRegen(a, 1)) : [];
+      return { hits: [], chargeSpent: spent, shields, regens };
     },
   },
 
@@ -60,6 +76,7 @@ export const BULWARK_SKILLS = {
       actor.charge -= vented;
       const ally = target || actor;
       const shield = addBlock(ally, BULWARK.bodyguard.blockPerCharge * vented, actor);
+      seedReflect(ally, actor); // RETRIBUTION: the covered ally throws blows back
       return { hits: [], chargeSpent: vented, shields: [shield] };
     },
   },
