@@ -575,6 +575,13 @@ function saveRanks(m) { try { localStorage.setItem(RANKS_KEY, JSON.stringify(m))
 const AUTO_KEY = '8gents_seam_auto';
 function loadAuto() { try { return localStorage.getItem(AUTO_KEY) === '1'; } catch { return false; } }
 function saveAuto(on) { try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
+// AUTO playback speed — how many times faster than normal an AUTO fight runs. Only the
+// between-action hold is shortened (the engine math is unchanged), so it just fast-forwards
+// the show. 1× = watchable, 2× = default, 4× = quick-skip for grinding. Persisted.
+const AUTO_SPEEDS = [1, 2, 4];
+const AUTO_SPEED_KEY = '8gents_seam_autospeed';
+function loadAutoSpeed() { try { const n = parseInt(localStorage.getItem(AUTO_SPEED_KEY), 10); return AUTO_SPEEDS.includes(n) ? n : 2; } catch { return 2; } }
+function saveAutoSpeed(n) { try { localStorage.setItem(AUTO_SPEED_KEY, String(n)); } catch { /* best-effort */ } }
 // Ambient music toggle — default ON, but only ever sounds after a user gesture (the
 // AudioContext stays suspended until then), so nothing autoplays uninvited.
 const MUSIC_KEY = '8gents_seam_music';
@@ -1347,12 +1354,15 @@ function useFight(opts = {}) {
   const autoRef = useRef(false); // is the AI driving side A right now? (live-switchable mid-fight)
   const aiRef = useRef(createAIDriver()); // persistent AI brain for AUTO / take-over
   const [autoLive, setAutoLive] = useState(false); // mirror of autoRef for the in-battle button
+  const speedRef = useRef(loadAutoSpeed()); // AUTO playback speed multiplier (read live in startHold)
+  const [autoSpeed, setAutoSpeedState] = useState(speedRef.current);
+  function setAutoSpeed(n) { speedRef.current = n; setAutoSpeedState(n); saveAutoSpeed(n); }
 
   useEffect(() => { if (feedBoxRef.current) feedBoxRef.current.scrollTop = feedBoxRef.current.scrollHeight; }, [feed]);
 
   // Open a fresh action hold: the next actor-request (either side) awaits this, so the
   // hit animates and input stays locked until the beat passes. AUTO runs ~2× faster.
-  function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, Math.round(ms * (autoRef.current ? 0.5 : 1)))); }
+  function startHold(ms) { holdRef.current = new Promise((r) => setTimeout(r, Math.round(ms * (autoRef.current ? 1 / speedRef.current : 1)))); }
 
   // Look up the actor's mods from the live engine state so we can detect which
   // bend (if any) fired on this turn without touching the engine event format.
@@ -1529,7 +1539,7 @@ function useFight(opts = {}) {
   }
   function reset() { setSnap(null); setFeed([]); feedRef.current = []; setPhase('idle'); setPool([]); setPreviewUid(null); setPendingSkill(null); setFx({ actor: null, cast: null, bursts: {}, n: 0 }); setPopups([]); holdRef.current = Promise.resolve(); }
 
-  return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, cancelTarget, previewMoves, begin, reset, setLiveAuto, autoLive };
+  return { snap, feed, phase, pool, previewUid, pendingSkill, fx, popups, feedBoxRef, previewUnit, chooseSkill, chooseTarget, cancelTarget, previewMoves, begin, reset, setLiveAuto, autoLive, autoSpeed, setAutoSpeed };
 }
 
 // The move panel that lives in the center "VS" lane — between your squad and the
@@ -1630,13 +1640,29 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
     <div>
       {/* In-battle switch: take over an auto fight, or hand it back. Flips instantly. */}
       {onToggleAuto && live && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           <button onClick={() => onToggleAuto(!auto)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', borderRadius: 9, padding: '6px 14px',
               background: auto ? '#14233a' : '#1a1410', border: `2px solid ${auto ? '#5aa9ff' : ACCENT}`,
               color: auto ? '#9be7ff' : ACCENT, fontSize: T.small, fontWeight: 900 }}>
             {auto ? '⚡ AUTO — tap to 🎮 TAKE OVER' : '🎮 MANUAL — tap to ⚡ go AUTO'}
           </button>
+          {/* AUTO playback speed — only matters while the AI is driving. Fast-forwards the
+              show without touching the engine math. */}
+          {auto && fight.setAutoSpeed && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#0d1622', border: '1px solid #2a3a52', borderRadius: 9, padding: '4px 6px' }}>
+              <span style={{ fontSize: T.micro, color: '#6f86a8', fontWeight: 800, marginRight: 2 }}>speed</span>
+              {AUTO_SPEEDS.map((s) => (
+                <button key={s} onClick={() => fight.setAutoSpeed(s)}
+                  style={{ cursor: 'pointer', borderRadius: 6, padding: '3px 8px', fontSize: T.micro, fontWeight: 900,
+                    background: fight.autoSpeed === s ? '#1f3a5c' : 'transparent',
+                    border: `1px solid ${fight.autoSpeed === s ? '#5aa9ff' : 'transparent'}`,
+                    color: fight.autoSpeed === s ? '#9be7ff' : '#6f86a8' }}>
+                  {s}×
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {prompt && <div style={{ textAlign: 'center', fontSize: T.body, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>{prompt}</div>}
