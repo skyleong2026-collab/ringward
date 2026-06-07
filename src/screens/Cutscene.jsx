@@ -326,6 +326,124 @@ export function Cutscene({ scenes = OPENING_SCENES, onDone, finalLabel = 'TAKE T
   );
 }
 
+// ── Wayside scene backdrops (vF-BG) — wide banner illustrations for the branching
+// tales. Static vector (no keyframe dependency) so they render anywhere. PAINT-READY:
+// pass image="/art/wayside/<key>.jpg" to swap the vector for a painted frame — the
+// component shows the image instead, no other change. MJ prompts at the bottom. ──
+const wsDot = (c, xs) => xs.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.3" fill={c} opacity="0.6" />);
+const WS_SCENES = {
+  // A trail that forks — the classic crossroads choice.
+  trail: (t) => (
+    <svg viewBox="0 0 400 150" style={frame}>
+      <defs><linearGradient id="ws-trail" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#241f3a" /><stop offset="1" stopColor="#100b16" /></linearGradient></defs>
+      <rect width="400" height="150" fill="url(#ws-trail)" />
+      <ellipse cx="200" cy="66" rx="150" ry="28" fill={t} opacity="0.13" />
+      <circle cx="200" cy="58" r="3" fill={t} opacity="0.8" />
+      <path d="M0 84 Q120 72 200 78 T400 80 L400 96 L0 96 Z" fill="#1c1426" opacity="0.85" />
+      <path d="M0 92 L400 92 L400 150 L0 150 Z" fill="#0d0910" />
+      <path d="M186 150 L118 96 L150 96 L200 150 Z" fill="#251b15" />
+      <path d="M214 150 L282 96 L250 96 L200 150 Z" fill="#221913" />
+      <path d="M196 150 L150 96 L156 96 L203 150 Z" fill="#3a2c1f" opacity="0.55" />
+      <path d="M40 122 L70 106 L60 130" stroke={t} strokeWidth="1.4" fill="none" opacity="0.45" />
+      {wsDot(t, [[84, 116], [300, 120], [200, 108]])}
+    </svg>
+  ),
+  // A sealed door in a ruin — something behind it.
+  ruin: (t) => (
+    <svg viewBox="0 0 400 150" style={frame}>
+      <defs>
+        <radialGradient id="ws-ruin" cx="0.5" cy="0.55" r="0.6"><stop offset="0" stopColor={t} stopOpacity="0.35" /><stop offset="1" stopColor={t} stopOpacity="0" /></radialGradient>
+      </defs>
+      <rect width="400" height="150" fill="#0c0a12" />
+      <rect width="400" height="150" fill="url(#ws-ruin)" />
+      <path d="M0 110 L400 110 L400 150 L0 150 Z" fill="#0a0810" />
+      {/* broken wall flanks */}
+      <path d="M70 150 L70 64 L120 50 L120 150 Z" fill="#1a1520" />
+      <path d="M330 150 L330 60 L280 48 L280 150 Z" fill="#181320" />
+      {/* the sealed door, glowing seam */}
+      <path d="M168 132 L168 70 Q200 50 232 70 L232 132 Z" fill="#221a2e" stroke={t} strokeOpacity="0.5" strokeWidth="1.5" />
+      <line x1="200" y1="60" x2="200" y2="132" stroke={t} strokeWidth="1.5" opacity="0.7" />
+      <circle cx="200" cy="98" r="6" fill={t} opacity="0.6" />
+      {wsDot(t, [[150, 120], [250, 118], [200, 134]])}
+    </svg>
+  ),
+  // A blighted grove — pale dead trees, a glowing hollow.
+  grove: (t) => (
+    <svg viewBox="0 0 400 150" style={frame}>
+      <defs><linearGradient id="ws-grove" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#101a16" /><stop offset="1" stopColor="#08100c" /></linearGradient></defs>
+      <rect width="400" height="150" fill="url(#ws-grove)" />
+      <ellipse cx="200" cy="78" rx="130" ry="34" fill={t} opacity="0.1" />
+      <path d="M0 100 Q120 90 200 96 T400 96 L400 150 L0 150 Z" fill="#0a120d" />
+      {/* gnarled pale trunks */}
+      {[[90, 1], [150, -1], [300, 1], [340, -1]].map(([x, b], i) => (
+        <path key={i} d={`M${x} 150 q${b * 6} -50 ${b * 2} -86 q-${b * 8} -10 -${b * 3} -22`} stroke="#3a4a40" strokeWidth="3" fill="none" opacity="0.8" />
+      ))}
+      {/* the glowing hollow */}
+      <ellipse cx="210" cy="104" rx="16" ry="22" fill="#0c1410" stroke={t} strokeWidth="1.5" strokeOpacity="0.6" />
+      <circle cx="210" cy="106" r="5" fill={t} opacity="0.7" />
+      {wsDot(t, [[120, 90], [260, 92], [200, 80]])}
+    </svg>
+  ),
+  // A still pool reflecting light.
+  water: (t) => (
+    <svg viewBox="0 0 400 150" style={frame}>
+      <defs>
+        <linearGradient id="ws-water-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1a2030" /><stop offset="1" stopColor="#0c1018" /></linearGradient>
+        <radialGradient id="ws-water-glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stopColor={t} stopOpacity="0.5" /><stop offset="1" stopColor={t} stopOpacity="0" /></radialGradient>
+      </defs>
+      <rect width="400" height="92" fill="url(#ws-water-sky)" />
+      <rect y="92" width="400" height="58" fill="#0a0e14" />
+      <ellipse cx="200" cy="92" rx="150" ry="40" fill="url(#ws-water-glow)" />
+      <ellipse cx="200" cy="112" rx="120" ry="26" fill="#10202c" opacity="0.8" />
+      {[116, 122, 128].map((y, i) => <ellipse key={i} cx="200" cy={y} rx={90 - i * 22} ry="2" fill={t} opacity={0.3 - i * 0.07} />)}
+      <circle cx="200" cy="50" r="3" fill={t} opacity="0.8" />
+      {wsDot(t, [[120, 40], [280, 46], [320, 60]])}
+    </svg>
+  ),
+  // A small fire with a seated figure — another climber's camp.
+  camp: (t) => (
+    <svg viewBox="0 0 400 150" style={frame}>
+      <defs><radialGradient id="ws-camp" cx="0.5" cy="0.6" r="0.55"><stop offset="0" stopColor="#ffae5a" stopOpacity="0.4" /><stop offset="1" stopColor="#ffae5a" stopOpacity="0" /></radialGradient></defs>
+      <rect width="400" height="150" fill="#0c0a10" />
+      <ellipse cx="210" cy="118" rx="150" ry="44" fill="url(#ws-camp)" />
+      <path d="M0 122 L400 122 L400 150 L0 150 Z" fill="#0a0810" />
+      {/* fire */}
+      <path d="M204 122 q-10 -18 0 -30 q10 12 0 30" fill="#ffce6a" />
+      <path d="M210 122 q-7 -12 0 -20 q7 8 0 20" fill="#ff8a3a" opacity="0.9" />
+      <ellipse cx="207" cy="124" rx="16" ry="4" fill="#3a2418" />
+      {/* seated figure silhouette */}
+      <circle cx="150" cy="98" r="7" fill="#16121c" />
+      <path d="M140 130 q10 -26 22 0 z" fill="#16121c" />
+      <circle cx="152" cy="112" r="2" fill={t} opacity="0.8" />
+      {wsDot('#ffae5a', [[250, 96], [270, 84], [240, 80]])}
+    </svg>
+  ),
+  // A dark opening with a glow inside — a cave or seam mouth.
+  hollow: (t) => (
+    <svg viewBox="0 0 400 150" style={frame}>
+      <defs><radialGradient id="ws-hollow" cx="0.5" cy="0.6" r="0.5"><stop offset="0" stopColor={t} stopOpacity="0.55" /><stop offset="0.6" stopColor={t} stopOpacity="0.12" /><stop offset="1" stopColor={t} stopOpacity="0" /></radialGradient></defs>
+      <rect width="400" height="150" fill="#08070c" />
+      {/* rock mass */}
+      <path d="M0 150 L0 40 Q60 18 130 30 Q170 70 200 60 Q230 70 270 30 Q340 18 400 40 L400 150 Z" fill="#15121c" />
+      {/* the mouth */}
+      <path d="M148 150 Q150 80 200 70 Q250 80 252 150 Z" fill="#06050a" />
+      <path d="M148 150 Q150 80 200 70 Q250 80 252 150 Z" fill="url(#ws-hollow)" />
+      <circle cx="200" cy="118" r="6" fill={t} opacity="0.7" />
+      {wsDot(t, [[180, 100], [222, 104], [200, 90]])}
+    </svg>
+  ),
+};
+export function WaysideScene({ scene = 'trail', tint = '#b06bff', image = null }) {
+  const art = WS_SCENES[scene] || WS_SCENES.trail;
+  return (
+    <div style={{ width: '100%', aspectRatio: '400 / 150', borderRadius: 12, overflow: 'hidden', border: `1px solid ${tint}44`, boxShadow: `0 8px 28px #0008, 0 0 22px ${tint}1a` }}>
+      {image
+        ? <img src={image} alt={scene} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        : art(tint)}
+    </div>
+  );
+}
+
 /* ── PAINT-READY (Sky → Midjourney, set scene.image to swap in) ──────────────────
    Style suffix for all: "muted folk-mystery storybook illustration, painterly, dusk
    palette, glowing earthen cores, cinematic, soft grain, no text --ar 20:13"
@@ -341,4 +459,18 @@ export function Cutscene({ scenes = OPENING_SCENES, onDone, finalLabel = 'TAKE T
                   bright center marked 'the Drop', a small marker at the outer rim, …"
    scene-door:   "a tall glowing doorway of violet light at the heart of the rings, a small
                   figure standing before it, light spilling out, motes rising, awe, …"
+
+   ── Wayside tale backdrops (vF-BG), same style suffix, --ar 8:3 (wide banner) ──
+   wayside/trail:  "a dim forking dirt trail splitting two ways through a blighted dusk
+                    landscape, faint glowing cracks in the earth, a crossroads, …"
+   wayside/ruin:   "a sealed stone vault door set in a broken ruined wall, a faint glowing
+                    seam of violet light down its center, rubble, ominous, …"
+   wayside/grove:  "a grove of pale dead gnarled trees, a glowing hollow in one trunk,
+                    sickly green blight light, eerie quiet, …"
+   wayside/water:  "a perfectly still dark pool reflecting a single point of cold light,
+                    amid dead reeds, impossibly calm, unsettling, …"
+   wayside/camp:   "a small warm campfire at dusk with a lone hooded figure seated beside it,
+                    a glowing earthen creature nearby, intimate, wary, …"
+   wayside/hollow: "a dark cave mouth in a rock face with a soft glow deep inside, a seam of
+                    light leaking from the depths, inviting and dangerous, …"
 */

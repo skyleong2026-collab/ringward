@@ -13,7 +13,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import * as sfx from '../sfx.js';
-import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette } from './Cutscene.jsx';
+import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette, WaysideScene } from './Cutscene.jsx';
 import {
   createBattleState,
   runBattle,
@@ -458,6 +458,78 @@ const WAYSIDE_EVENTS = [
       { label: 'Add your name', detail: 'Say you were here.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.05; }), "🪦 You cut your name beneath his. Whatever waits at the Drop, it will know you came on purpose. The squad climbs with that purpose in them — Primed, +5% damage.") },
       { label: 'Take a stone for luck', detail: 'Carry them with you.', apply: (c) => (c.cores(20), '✦ You pocket one small stone, still warm from the sun. +20 ⬡ — and something steadier sitting in your chest for the climb ahead.') },
     ] },
+  // ── BRANCHING TALES (vF-BG): multi-step choose-your-own-path passages. A `steps` map
+  // (start → step ids) replaces the single text/choices. A choice with `goto` advances to
+  // another step (running any `apply` for effects on the way); a choice with no `goto` is
+  // terminal — its `apply(ctx)` returns the outcome line, same as a one-shot event. `scene`
+  // names a WaysideScene backdrop. Per-choice `icon` shows a glyph on the button. Pure
+  // run-meta like every wayside — never touches the engine. ──
+  { id: 'tale_fire', kind: 'story', glyph: '🔥', tint: '#ffae5a', title: 'The Fire and the Stranger', scene: 'camp', start: 'meet',
+    steps: {
+      meet: {
+        text: "A fire burns low off the trail, and a figure sits beside it — another climber, older, hands scarred. They lift a hand, unhurried. “Long way to come alone,” they say. “Sit. The fire’s warm and I’ve talked to no one in days.”",
+        choices: [
+          { icon: '🔥', label: 'Sit with them', detail: 'Trust costs nothing yet.', apply: (c) => c.heal(0.2), goto: 'sit' },
+          { icon: '👁', label: 'Hang back in the dark', detail: 'Watch before you trust.', goto: 'watch' },
+          { icon: '🚶', label: 'Nod and keep walking', detail: 'No time for fires.', apply: (c) => (c.slag(14), '🚶 You raise a hand and pass on. They don’t call after you. You strip a little slag from the trailside as you go. +14 ⚒.') },
+        ] },
+      sit: {
+        text: "You sit. They share dried meat and a tin of something bitter and good, and the squad eases by the warmth. After a while the stranger studies you. “You’ve got a mentor’s look. I knew one like that — went up and didn’t come down.” They turn a small worn token over in their hands. “I can tell you what he taught me, or I can give you this. Not both. A body’s got to keep something back.”",
+        choices: [
+          { icon: '📜', label: 'Hear what he taught', detail: '+12% damage onward.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.12; }), '📜 They talk low into the fire — how he read a ring, where he never stepped twice. You climb sharper for it. +12% damage onward.') },
+          { icon: '🎴', label: 'Take the token', detail: 'A found relic.', apply: (c) => { const r = c.relic(); if (r) return `🎴 They press it into your hand — ${r.name}. “He’d want it moving,” they say. Yours now.`; c.cores(30); return '🎴 You reach for it — but it’s a thing you already carry the like of. They give you Cores from their own pack instead. +30 ⬡.'; } },
+        ] },
+      watch: {
+        text: "You stay in the dark and watch. The stranger only sits, feeding the fire twig by twig, talking quiet — to a grunling’s cold grey core set in the dirt beside them, you realize. Grieving it. After a while they bank the fire and sleep, their pack lying open and unguarded.",
+        choices: [
+          { icon: '🤝', label: 'Step into the light anyway', detail: 'Share the watch. Heal well.', apply: (c) => (c.heal(0.34), '🤝 You sit across the fire. They don’t startle — maybe they knew. You keep the watch together till dawn, saying little. The squad rests deep.') },
+          { icon: '🎒', label: 'Take from the pack, slip away', detail: 'Slag, no thanks owed.', apply: (c) => (c.slag(34), '🎒 You lift what won’t be missed and go. It’s the trail’s way, you tell yourself. +34 ⚒ — and a small weight that isn’t slag.') },
+        ] },
+    } },
+  { id: 'tale_door', kind: 'story', glyph: '🚪', tint: '#b06bff', title: 'The Sealed Door', scene: 'ruin', start: 'door',
+    steps: {
+      door: {
+        text: "Set into a ruined wall is a vault door, blight-eaten at the hinges but whole. Behind it something hums — low and patient, the sound a charged core makes. Sealed this deep in, it was sealed for a reason. Or sealed to keep it safe.",
+        choices: [
+          { icon: '💪', label: 'Force it with the squad', detail: 'Hard work, some wounds.', apply: (c) => c.hurt(0.14), goto: 'forced' },
+          { icon: '🔍', label: 'Find the mechanism', detail: 'Slower, careful.', goto: 'mech' },
+          { icon: '🚫', label: 'Leave it sealed', detail: 'Some doors stay shut.', apply: (c) => (c.buff((m) => { m.healMult *= 1.15; }), '🚫 You leave it be. Caution has kept you alive this far, and the discipline of walking away steadies the squad. +15% healing onward.') },
+        ] },
+      forced: {
+        text: "The grunlings set their shoulders and the door grinds inward, rust raining down. The wounds were worth it: a dry vault, untouched, the hum coming from a core-casing on a stone shelf — and beside it a climber’s kit, long abandoned.",
+        choices: [
+          { icon: '🎴', label: 'Take the humming casing', detail: 'A found relic.', apply: (c) => { const r = c.relic(); if (r) return `🎴 You pry the casing open — ${r.name} inside, still warm. Yours.`; c.cores(42); return '🎴 The casing holds only spent Cores — but plenty of them. +42 ⬡.'; } },
+          { icon: '⬡', label: 'Strip the whole vault', detail: 'Cores and scrap.', apply: (c) => (c.cores(28), c.slag(20), '⬡ You take everything not bolted down — banked Cores, good scrap. +28 ⬡, +20 ⚒.') },
+        ] },
+      mech: {
+        text: "You don’t force it. You trace the door’s edge until you find it — a core-lock, the kind your people built before the blight, made to open for a living core and no other key. Your grunlings carry exactly that. You could power it clean… or pry the lock for parts and never know what hummed inside.",
+        choices: [
+          { icon: '⚡', label: 'Power the lock with a core', detail: 'It opens clean. A relic.', apply: (c) => { const r = c.relic(); if (r) return `⚡ The lock drinks the charge and the door sighs open — ${r.name} on the shelf within, left for someone who knew the old way. Yours.`; c.cores(46); return '⚡ The door opens on a stripped vault — but a good cache of Cores remains. +46 ⬡.'; } },
+          { icon: '🔧', label: 'Pry the lock for parts', detail: 'Sure slag, no risk.', apply: (c) => (c.slag(40), '🔧 You take the lock apart for its old, good metal and leave the door to its humming. +40 ⚒ — and you’ll wonder, later, what was behind it.') },
+        ] },
+    } },
+  { id: 'tale_tree', kind: 'story', glyph: '🌳', tint: '#7ec88a', title: 'The Hollow Tree', scene: 'grove', start: 'tree',
+    steps: {
+      tree: {
+        text: "In a stand of pale dead trees, one trunk has grown wrong — half-fused to a grunling that wandered in years ago and never left, the two grown into each other. Its little core still flickers in the hollow of the wood: weak, alive, afraid of you.",
+        choices: [
+          { icon: '✂️', label: 'Try to free its core', detail: 'Careful, costly work.', apply: (c) => c.hurt(0.12), goto: 'free' },
+          { icon: '📜', label: 'Read the carvings on the bark', detail: 'Someone marked this place.', goto: 'carve' },
+          { icon: '🔥', label: 'Burn it clean, move on', detail: 'A hard mercy.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.06; }), '🔥 You give it the only kindness left and set the hollow alight. The squad watches it go quiet and climbs on harder-eyed. Primed, +6% damage onward.') },
+        ] },
+      free: {
+        text: "You work the core loose splinter by splinter, the wood fighting you, your own hands torn for it. At last it comes free — a small, frightened, living thing pulsing in your palm. It looks at you. It has a choice to make too, and so do you.",
+        choices: [
+          { icon: '⚡', label: 'Let it ride with the squad', detail: 'It imprints. Primed + edge.', apply: (c) => (c.prime(3), c.buff((m) => { m.dmgMult *= 1.05; }), '⚡ It settles against your grunlings like it always belonged. The squad climbs Primed and a little bolder for the company. +5% damage onward.') },
+          { icon: '✚', label: 'Set it loose toward home', detail: 'Send it down. Its gift.', apply: (c) => (c.cores(30), c.heal(0.2), '✚ You point it downhill and it goes — but not before its core sheds what it gathered over those long years. +30 ⬡, and the squad eases watching it run.') },
+        ] },
+      carve: {
+        text: "Cut into the bark, weathered but clear, is a mark you know — your mentor’s, the same hand as the cairn. He stood here. Below it, more cuts: a few hard lines of advice, and an arrow pointing to a flat stone at the roots.",
+        choices: [
+          { icon: '📜', label: 'Follow his lines', detail: '+10% dmg & +15% heal.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.10; m.healMult *= 1.15; }), '📜 What he learned this deep, cut where only someone climbing would find it. You climb smarter and gentler on the squad. +10% damage, +15% healing onward.') },
+          { icon: '🪨', label: 'Lift the stone at the roots', detail: 'He cached something.', apply: (c) => (c.cores(24), c.heal(0.3), '🪨 Under it, wrapped against the rot: rations, salve, a handful of banked Cores he left for whoever came after. For you. +24 ⬡, the squad recovers.') },
+        ] },
+    } },
   // ── MERCHANT nodes (vF-BB): spend the slag you'd otherwise hoard for the Forge on an
   // immediate edge for THIS run. A real trade — power now vs. a permanent perk later. ──
   { id: 'trader', kind: 'merchant', glyph: '🛒', tint: '#c9c98a', title: 'The Wayside Trader',
@@ -2135,6 +2207,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
   const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
   const [pendingEvent, setPendingEvent] = useState(null); // a wayside event awaiting a choice (or null)
+  const [eventStep, setEventStep] = useState(null); // current step id within a branching TALE (null = start / not a tale)
   const [pendingElite, setPendingElite] = useState(null); // an ELITE node awaiting fight-or-flee (or null)
   const [eventOutcome, setEventOutcome] = useState(null); // the outcome line after a choice is made
   const eventsSeenRef = useRef([]); // event ids already shown THIS run — no repeats within a run
@@ -2192,11 +2265,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         sig = 'el' + waveIdx;
         act = () => eventPressOn(); // farming: slip past elites (don't risk the run on auto)
       } else if (runPhase === 'event' && pendingEvent && !eventOutcome) {
-        sig = 'ev' + pendingEvent.id;
         const ev = pendingEvent;
-        // prefer a FREE choice (don't auto-spend slag at a merchant); else the first.
-        const ch = ev.choices.find((c) => !c.cost) || ev.choices[0];
-        act = () => chooseEvent(ch);
+        const step = ev.steps ? ev.steps[eventStep || ev.start] : ev; // TALE: the live step
+        sig = 'ev' + ev.id + (eventStep || ''); // include step so auto re-fires through a branching tale
+        const choices = step.choices || [];
+        // farming: prefer a FREE TERMINAL choice (ends the tale fast, no auto-spend); else a
+        // free advancing choice; else the first available.
+        const ch = choices.find((c) => !c.cost && !c.goto) || choices.find((c) => !c.cost) || choices[0];
+        if (ch) act = () => chooseEvent(ch);
       } else if (runPhase === 'event' && eventOutcome) {
         sig = 'eo' + waveIdx;
         act = () => eventPressOn();
@@ -2207,7 +2283,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     if (apTimer.current) { clearTimeout(apTimer.current); apTimer.current = null; }
     if (act) apTimer.current = setTimeout(() => { apTimer.current = null; act(); }, sig && sig.startsWith('eo') ? 650 : 320);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPick, runPhase, offer, upgradeChoice, pendingUpgrade, pendingEvent, eventOutcome, squad, waveIdx]);
+  }, [autoPick, runPhase, offer, upgradeChoice, pendingUpgrade, pendingEvent, eventStep, eventOutcome, squad, waveIdx]);
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
@@ -2361,9 +2437,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       relic: () => { const rd = rollRelicChoices(relics, 1)[0]; if (!rd) return null; const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); return rd; },
     };
     sfx.upgradePick();
-    setEventOutcome(choice.apply(ctx) || 'You press on.');
+    const res = choice.apply ? choice.apply(ctx) : null; // run effects (terminal choices also return the outcome line)
+    if (choice.goto) setEventStep(choice.goto);          // a TALE continues — advance to the next step, no outcome yet
+    else setEventOutcome(res || 'You press on.');         // terminal — show the outcome + PRESS ON
   }
-  function eventPressOn() { setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setRelicDrop(null); setRunPhase('upgrade'); }
+  function eventPressOn() { setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicDrop(null); setRunPhase('upgrade'); }
   // ELITE node: an optional standalone fight vs a marked hunter (tough: depth × crossing ×
   // an elite bump). Win → a guaranteed relic + a brief reveal; lose → the run ends like any
   // wipe. Squad HP carries in and out. Reuses the run's auto/manual mode.
@@ -2478,7 +2556,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       const nextIsBoss = (idx + 1) === WAVE_COUNT - 1;
       const ev = nextIsBoss ? null : maybeWaysideEvent();
       if (ev && ev.kind === 'elite') { setPendingElite(ev); setEventOutcome(null); sfx.eliteGrowl(); setRunPhase('event'); }
-      else if (ev) { setPendingEvent(ev); setEventOutcome(null); (ev.kind === 'merchant' ? sfx.merchantBell() : ev.kind === 'treasure' ? sfx.treasureChime() : sfx.upgradePick()); setRunPhase('event'); }
+      else if (ev) { setPendingEvent(ev); setEventOutcome(null); setEventStep(null); (ev.kind === 'merchant' ? sfx.merchantBell() : ev.kind === 'treasure' ? sfx.treasureChime() : sfx.upgradePick()); setRunPhase('event'); }
       else setRunPhase('upgrade');
     });
     setWaveIdx(idx);
@@ -2495,7 +2573,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const base = perkBaseMods(owned, reclaimed, relicKit); // perks + Holdfast boons + equipped relics set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
-    eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); // fresh wayside-event pool per run
+    eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); setEventStep(null); // fresh wayside-event pool per run
     rollOffer(); setRunPhase('upgrade');
   }
   // ── Apex challenge: a one-off fight against a gathered apex creature. Win → recruit. ──
@@ -2558,7 +2636,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -3424,29 +3502,48 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
   if (runPhase === 'event' && pendingEvent) {
     const ev = pendingEvent;
+    const step = ev.steps ? (ev.steps[eventStep || ev.start] || ev.steps[ev.start]) : ev; // TALE: the live step, else the one-shot
+    const sceneKey = step.scene || ev.scene; // a branching tale shows a full illustrated backdrop
+    const text = step.text;
+    const choices = step.choices || [];
+    const multi = !!ev.steps; // a multi-step tale (longer, illustrated)
     return (
       <div>
         <div style={{ animation: 'seam-threshold .9s ease-out', maxWidth: 560, margin: '8px auto 0', background: 'linear-gradient(180deg,#120e1a,#0b0810)', border: `1px solid ${ev.tint}55`, borderRadius: 14, padding: narrow ? '16px 15px' : '20px 22px' }}>
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
-            <EventVignette tint={ev.tint} glyph={ev.glyph} size={narrow ? 70 : 88} />
-            <div>
-              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: ev.tint }}>⋯ A WAYSIDE</div>
-              <div style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff', marginTop: 2 }}>{ev.title}</div>
+          {/* A tale gets a wide illustrated banner + a title bar; one-shots keep the medallion. */}
+          {sceneKey ? (
+            <>
+              <div style={{ marginBottom: 12 }}><WaysideScene scene={sceneKey} tint={ev.tint} image={ev.image} /></div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: ev.tint }}>⋯ A WAYSIDE</span>
+                <span style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff' }}>{ev.glyph} {ev.title}</span>
+                {multi && !eventOutcome && (() => { const ids = Object.keys(ev.steps); const at = ids.indexOf(eventStep || ev.start);
+                  return <span style={{ marginLeft: 'auto', display: 'flex', gap: 5, alignSelf: 'center' }}>{ids.map((_, i) => <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i <= at ? ev.tint : '#2a2435' }} />)}</span>; })()}
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
+              <EventVignette tint={ev.tint} glyph={ev.glyph} size={narrow ? 70 : 88} />
+              <div>
+                <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: ev.tint }}>⋯ A WAYSIDE</div>
+                <div style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff', marginTop: 2 }}>{ev.title}</div>
+              </div>
             </div>
-          </div>
-          <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{ev.text}</div>
+          )}
+          <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{text}</div>
           {!eventOutcome ? (
             <div style={{ display: 'grid', gap: 10 }}>
-              {ev.choices.map((ch, k) => {
+              {choices.map((ch, k) => {
                 const tooPoor = ch.cost && slag < ch.cost;
                 return (
                   <button key={k} onClick={() => chooseEvent(ch)} disabled={tooPoor}
                     style={{ textAlign: 'left', cursor: tooPoor ? 'not-allowed' : 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${tooPoor ? LINE : `${ev.tint}66`}`, opacity: tooPoor ? 0.5 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff', flex: 1 }}>{ch.label}</div>
+                      {ch.icon && <span style={{ fontSize: T.sub, flexShrink: 0 }}>{ch.icon}</span>}
+                      <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff', flex: 1 }}>{ch.label}{ch.goto ? <span style={{ color: ev.tint, fontWeight: 800 }}> →</span> : null}</div>
                       {ch.cost ? <div style={{ fontSize: T.small, fontWeight: 900, color: tooPoor ? '#a85a5a' : '#c9c98a' }}>{ch.cost} ⚒</div> : null}
                     </div>
-                    <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2 }}>{tooPoor ? 'Not enough slag.' : ch.detail}</div>
+                    <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2, paddingLeft: ch.icon ? 28 : 0 }}>{tooPoor ? 'Not enough slag.' : ch.detail}</div>
                   </button>
                 );
               })}
