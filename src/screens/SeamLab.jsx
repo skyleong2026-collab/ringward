@@ -474,6 +474,11 @@ const RELICS = [
   { id: 'r_bloodpact', icon: '❤️‍🔥', color: '#ff4d6d', name: 'Bloodpact',    rarity: 'Legendary', desc: '+30% damage, +40% healing, −10% HP.', lore: 'What you pour out comes back doubled. Some of you stays behind.', apply: (m) => { m.dmgMult *= 1.3; m.healMult *= 1.4; m.hpMult *= 0.9; } },
   { id: 'r_glassedge', icon: '🗡️', color: '#e8e2ff', name: 'Glass Edge',     rarity: 'Legendary', desc: '+70% damage, −30% max HP.',          lore: 'It cuts through anything. Including the hand that holds it.',     apply: (m) => { m.dmgMult *= 1.7; m.hpMult *= 0.7; } },
   { id: 'r_dropshard', icon: '✦',  color: ACCENT,    name: 'Drop-Shard',     rarity: 'Legendary', desc: '+18% damage, +18% HP, +1 charge.',   lore: 'A splinter of whatever fell. It hums in tune with your cores.',   apply: (m) => { m.dmgMult *= 1.18; m.hpMult *= 1.18; m.chargeStart += 1; } },
+  // VERB relics (vF-AF) — not a stat, a RULE. Conditional and build-defining; they hook
+  // the shared combat path (opener/apex/shatter) so the whole squad gets the verb.
+  { id: 'r_ambush',    icon: '🎯', color: '#ffd166',  name: "Ambusher's Edge",rarity: 'Rare',      desc: 'First hit on a full-HP enemy: +25% damage.', lore: 'Strike before they know you are even there.',                  apply: (m) => { m.opener = true; } },
+  { id: 'r_frostbite', icon: '❄️', color: '#7fd6ff',  name: 'Frostbite Charm',rarity: 'Rare',      desc: 'Hits on a FROZEN enemy deal +50%. Pairs with a Warden.',     lore: 'Cold makes a thing brittle. Then you break it.',               apply: (m) => { m.shatter = true; } },
+  { id: 'r_totem',     icon: '🐺', color: '#ff7a9c',  name: "Hunter's Totem", rarity: 'Legendary', desc: 'Every kill sharpens that grunling +8% damage — stacks all fight.', lore: 'Blood remembers. The pack grows keener with every fall.',     apply: (m) => { m.apex = true; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
@@ -940,7 +945,13 @@ function playerDef(member, squadMods, perm) {
       deathsDoor:     p.deathsDoor     || false,
       cull:           p.cull           || false,
       absoluteZero:   p.absoluteZero   || false,
-      shatter:        p.shatter        || false,
+      // Universal VERB flags — read in the shared combatMath path (dealDamage), so they
+      // fire for ANY creature. OR'd with the tree value AND the run-wide channel, which
+      // lets a RELIC grant the verb squad-wide (vF-AF). Goldens never set squadMods and
+      // don't use playerDef, so combat stays byte-identical.
+      shatter:        (squadMods?.shatter || false) || p.shatter || false,
+      opener:         (squadMods?.opener  || false) || p.opener  || false,
+      apex:           (squadMods?.apex    || false) || p.apex    || false,
       doomAll:        p.doomAll        || false, // Hexer tree — Doom curses the line
       jinxSpread:     p.jinxSpread     || false, // Hexer tree — Jinx curses a 2nd enemy
       // per-creature bends (run-scoped) + permanent tree, combined:
