@@ -1,5 +1,14 @@
 import { ASSASSIN } from '../dials.js';
-import { dealDamage } from './combatMath.js';
+import { enemiesOf } from '../state.js';
+import { dealDamage, applyPoison, applyVuln } from './combatMath.js';
+
+// VENOM poison dose for a hit: Toxin seeds it, Potent thickens it, Plague drowns in it.
+const venomDose = (actor, base) => (actor.mods?.toxin || actor.mods?.plague)
+  ? base + (actor.mods?.potent ? 1 : 0) + (actor.mods?.plague ? 2 : 0) : 0;
+const weakestFoe = (actor, state) => {
+  const es = enemiesOf(state, actor);
+  return es.length ? es.reduce((w, u) => (u.hp / u.maxHp < w.hp / w.maxHp ? u : w), es[0]) : null;
+};
 
 // ─── Assassin — "execute: the weaker the target, the harder you hit" (§23) ───────
 // Same charge spine; the identity is a conditional multiplier — a payoff that spikes
@@ -25,6 +34,9 @@ export const ASSASSIN_SKILLS = {
       let mult = ASSASSIN.mark.hitMult;
       if (isWounded(target, ASSASSIN.mark.woundedPct)) mult *= ASSASSIN.mark.woundedBonus;
       const hit = dealDamage(target, actor.atk * mult, actor);
+      // "Toxin / Potent / Plague" (VENOM): Mark seeds a lingering, ramping poison.
+      const dose = venomDose(actor, 1);
+      if (dose > 0) applyPoison(target, dose);
       return { hits: [hit], chargeGained: gain };
     },
   },
@@ -57,9 +69,20 @@ export const ASSASSIN_SKILLS = {
         if (pct < 0.25) mult = 999;       // certain death for the wounded
         else if (pct > 0.6) mult *= 0.5;  // feeble against the healthy
       }
+      // "Toxic Shock" (VENOM): the killing blow on a poisoned target detonates poison
+      // across the whole line — each poisoned foe takes a burst of its own stacks.
+      if (actor.mods?.toxicShock && state) {
+        enemiesOf(state, actor).forEach((e) => { const p = e.statuses.poison || 0; if (p > 0) dealDamage(e, p * 6, actor); });
+      }
       const hit = dealDamage(prey, actor.atk * mult, actor);
       // "Cull" node: a kill refunds full charge → chain executions across the line.
       if (actor.mods?.cull && hit.killed) actor.charge = actor.maxCharge;
+      // VENOM riders: poison the prey, and on a kill spread it (Virulence) / mark the next
+      // weakest for death (Pack Tactics). Opt-in — all default off, no golden touched.
+      const dose = venomDose(actor, 2);
+      if (dose > 0) applyPoison(prey, dose);
+      if (hit.killed && actor.mods?.virulence && state) enemiesOf(state, actor).forEach((e) => applyPoison(e, 2));
+      if (hit.killed && actor.mods?.packTactics && state) { const next = weakestFoe(actor, state); if (next) applyVuln(next, 2); }
       return { hits: [hit], chargeSpent: spent, executed: executed || hit.killed };
     },
   },

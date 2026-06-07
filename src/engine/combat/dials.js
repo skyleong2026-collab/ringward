@@ -57,6 +57,24 @@ export const VULN = {
   maxStacks: 4, // = +60% damage taken at full curse
 };
 
+// ── Poison: a ramping damage-over-time the Assassin's VENOM path and the Hexer's
+// rot lay on. Like Burn it ticks at end of round, but it does NOT decay on its own
+// (it lingers and is meant to be RE-applied to ramp). Opt-in — no existing creature
+// applies poison, so every current golden is byte-identical. ──
+export const POISON = {
+  tickDmg: 8, // flat damage per stack at end of round (lighter than burn, but it stacks high)
+  decayPerRound: 0, // poison lingers — the VENOM identity is a stack that never fades
+  maxStacks: 12, // a high ceiling so "ramps forever" builds have somewhere to go
+};
+
+// ── Doom: a delayed detonation the Hexer's DOOM path brands onto an enemy. It counts
+// DOWN each end of round and, when it expires, erupts for a multiple of the brander's
+// attack (read from the mark). Opt-in — no creature carries doom by default. ──
+export const DOOM = {
+  timer: 3, // rounds until detonation
+  dmgMult: 4.0, // detonation = brand.atk * dmgMult (ignores block)
+};
+
 // ── Reactor kit (§23.5) — Charge Up / Overload / Backdraft ──
 export const REACTOR = {
   chargeUp: {

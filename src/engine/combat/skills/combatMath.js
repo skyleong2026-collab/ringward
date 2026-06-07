@@ -1,4 +1,4 @@
-import { BURN, BLOCK, REGEN, AMP, FREEZE, VULN } from '../dials.js';
+import { BURN, BLOCK, REGEN, AMP, FREEZE, VULN, POISON, DOOM } from '../dials.js';
 
 // ─── Shared combat math (§26.2: ONE place damage/status logic lives) ────────────
 // Every skill across every Type routes through these so a new Type can't quietly
@@ -35,24 +35,86 @@ export function dealDamage(target, amount, actor) {
   // "Shatter" (Warden keystone path): your hits on a frozen target hit 50% harder.
   // Opt-in — default 1, so every existing golden is byte-identical.
   const shatter = (actor?.mods?.shatter && (target.statuses.freeze || 0) > 0) ? 1.5 : 1;
+  // "Opener" (Striker DUELIST): you hit harder against a target still at full HP.
+  const opener = (actor?.mods?.opener && target.hp >= target.maxHp) ? 1.25 : 1;
+  // "Apex" (Assassin BLOODHOUND keystone): every kill this run permanently sharpens
+  // your blade — huntStacks accrue on kills below and add +8% damage apiece. Opt-in.
+  const apex = actor?.mods?.apex ? (1 + 0.08 * (actor.huntStacks || 0)) : 1;
+  // "Iron Maiden" (Bulwark) / "Plague" (Assassin) keystones: you deal NO direct damage
+  // — your whole win-con is reflected block / ramping poison. Opt-in flag → ×1 normally.
+  const noDirect = (actor?.mods?.ironMaiden || actor?.mods?.plague) ? 0 : 1;
   // Vulnerability (Hexer curse): a cursed target takes more from EVERY source. Opt-in —
   // no creature carries vuln by default, so this is ×1 and goldens are byte-identical.
   const vuln = 1 + VULN.perStack * (target.statuses.vuln || 0);
-  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult') * shatter * vuln));
+  const dmg = Math.max(0, Math.round(amount * ampMult(actor) * modMult(actor, 'dmgMult') * shatter * opener * apex * vuln * noDirect));
   let remaining = dmg;
   const blocked = Math.min(target.statuses.block || 0, remaining);
   if (blocked > 0) target.statuses.block -= blocked;
   remaining -= blocked;
+  // "Spikes / Riposte / Iron Maiden" (Bulwark RETRIBUTION): a shielded ally throws back
+  // a slice of what it blocks. Opt-in — reflect defaults 0, so no existing golden counters.
+  reflectBack(target, blocked, actor);
   const before = target.hp;
-  target.hp = Math.max(0, target.hp - remaining);
+  // "Unbreakable" (Bulwark GUARDIAN keystone): an ally cannot drop below 1 HP while its
+  // guardian still stands. The guardian is a live object ref seeded at round start; with
+  // no mod no unit carries one, so the floor never engages and goldens are byte-identical.
+  const floored = target._guardian && target._guardian.alive && target._guardian !== target && (before - remaining) <= 0;
+  target.hp = floored ? Math.max(1, before - remaining + 1) : Math.max(0, before - remaining);
   let killed = before > 0 && target.hp === 0;
   const revived = killed && phoenixSave(target); // Phoenix catches the lethal blow
   if (revived) killed = false;
   if (killed) target.alive = false;
+  // Apex: bank a permanent stack for the kill (read above on future hits).
+  if (killed && actor?.mods?.apex) actor.huntStacks = (actor.huntStacks || 0) + 1;
   // `dmg` reported is damage that reached HP (post-block), so feeds/goldens read
   // the real wound; `blocked` is surfaced separately for UI.
   return { uid: target.uid, name: target.name, dmg: remaining, blocked, killed, hpAfter: target.hp, revived };
 }
+
+// A shielded RETRIBUTION ally reflects a fraction of the damage its shield ate straight
+// back at the attacker — silently (no event), like amp/vuln decay, so the golden turn
+// shape is untouched. `reflect` is 0 for every unit unless a Bulwark seeded it, and
+// `spite` lets the counter bypass the attacker's own block. No recursion: applied to hp.
+function reflectBack(target, blocked, actor) {
+  const pct = target.statuses?.reflect || 0;
+  if (pct <= 0 || blocked <= 0 || !actor || !actor.alive || actor === target) return;
+  let back = Math.max(0, Math.round(blocked * pct));
+  if (back <= 0) return;
+  if (!target.mods?.spite) { // without Spite, the attacker's own shield soaks the counter first
+    const soak = Math.min(actor.statuses?.block || 0, back);
+    if (soak > 0) actor.statuses.block -= soak;
+    back -= soak;
+  }
+  if (back <= 0) return;
+  const before = actor.hp;
+  actor.hp = Math.max(0, actor.hp - back);
+  if (before > 0 && actor.hp === 0 && !phoenixSave(actor)) actor.alive = false;
+}
+
+// Seed a reflect aura onto a shielded recipient (Bulwark RETRIBUTION). The strongest
+// flag wins: Iron Maiden reflects everything, Spikes a slice. Opt-in — only called when
+// the Bulwark carries the mod, so no existing golden ever gains a reflect status.
+export function seedReflect(recipient, actor) {
+  if (actor?.mods?.ironMaiden) recipient.statuses.reflect = Math.max(recipient.statuses.reflect || 0, 1.0);
+  else if (actor?.mods?.spikes || actor?.mods?.riposte) recipient.statuses.reflect = Math.max(recipient.statuses.reflect || 0, actor.mods?.riposte ? 0.3 : 0.15);
+}
+
+// Poison (Assassin VENOM / Hexer rot): a ramping DoT that, unlike Burn, does not decay
+// on its own. Opt-in — no existing creature applies it, so goldens are byte-identical.
+export function applyPoison(target, stacks) {
+  target.statuses.poison = Math.min(POISON.maxStacks, (target.statuses.poison || 0) + stacks);
+  return { uid: target.uid, name: target.name, poison: target.statuses.poison };
+}
+
+// Doom (Hexer DOOM): brand a target with a countdown + the brander's punch. When the
+// timer expires (engine), it erupts. Opt-in — no creature carries doom by default.
+export function applyDoom(target, actorAtk, timer) {
+  target.statuses.doom = timer ?? DOOM.timer;
+  target.doomPunch = Math.max(target.doomPunch || 0, actorAtk); // strongest brand sticks
+  return { uid: target.uid, name: target.name, doom: target.statuses.doom };
+}
+
+export const isPoisoned = (u) => (u.statuses.poison || 0) > 0;
 
 export function applyBurn(target, stacks, actor) {
   const add = stacks + modAdd(actor, 'burnBonus');

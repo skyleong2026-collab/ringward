@@ -1,6 +1,16 @@
-import { HEXER } from '../dials.js';
+import { HEXER, DOOM } from '../dials.js';
 import { enemiesOf } from '../state.js';
-import { dealDamage, applyVuln } from './combatMath.js';
+import { dealDamage, applyVuln, applyPoison, applyDoom } from './combatMath.js';
+
+// Does this Hexer carry any DOOM-path brand mod? (the path that brands a detonation).
+const brandsDoom = (actor) => actor.mods?.doomMark || actor.mods?.hasten || actor.mods?.deathSentence || actor.mods?.inevitable || actor.mods?.armageddon;
+// Lay a curse (+ DECAY riders) on one enemy. "Entropy" strips its shield + "Wither"/
+// "Pandemic" lay a creeping rot. Opt-in — all default off, no golden curse is touched.
+function curse(actor, e, amount) {
+  if (actor.mods?.entropy) e.statuses.block = 0;
+  if (actor.mods?.wither || actor.mods?.pandemic) applyPoison(e, 1);
+  return applyVuln(e, amount);
+}
 
 // ─── Hexer — "curse: charge into VULNERABILITY, not raw damage" (§ new Type) ──────
 // The team multiplier. Low attack; it makes the enemy take more from the WHOLE squad.
@@ -21,11 +31,12 @@ export const HEXER_SKILLS = {
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
       if (!target) return { hits: [], chargeGained: gain };
       const hit = dealDamage(target, actor.atk * HEXER.jinx.chipMult, actor);
-      const vulns = [applyVuln(target, HEXER.jinx.vuln)];
+      const amt = HEXER.jinx.vuln + (actor.mods?.hexmaster ? 1 : 0); // "Hexmaster": deeper curses
+      const vulns = [curse(actor, target, amt)];
       // "Contagion" tree node: the curse also leaps to a second enemy. Opt-in.
       if (actor.mods?.jinxSpread && state) {
         const other = enemiesOf(state, actor).find((e) => e.uid !== target.uid);
-        if (other) vulns.push(applyVuln(other, HEXER.jinx.vuln));
+        if (other) vulns.push(curse(actor, other, amt));
       }
       return { hits: [hit], chargeGained: gain, vulns };
     },
@@ -44,16 +55,22 @@ export const HEXER_SKILLS = {
       actor.charge = 0;
       if (!target) return { hits: [], chargeSpent: spent };
       const mult = HEXER.doom.base + HEXER.doom.perCharge * spent;
-      // "Spreading Hex" tree node: Doom curses the WHOLE enemy line. Opt-in.
-      if (actor.mods?.doomAll && state) {
-        const line = enemiesOf(state, actor);
-        const vulns = line.map((e) => applyVuln(e, HEXER.doom.vuln));
-        const hit = dealDamage(target, actor.atk * mult, actor);
-        return { hits: [hit], chargeSpent: spent, vulns };
-      }
+      const amt = HEXER.doom.vuln + (actor.mods?.hexmaster ? 2 : 0); // "Hexmaster": heavier curse
+      // "Spreading Hex" / "Hexmaster" / "Pandemic": Doom curses the WHOLE enemy line. Opt-in.
+      const wide = actor.mods?.doomAll || actor.mods?.hexmaster || actor.mods?.pandemic;
+      const cursed = (wide && state) ? enemiesOf(state, actor) : [target];
       const hit = dealDamage(target, actor.atk * mult, actor);
-      const fr = applyVuln(target, HEXER.doom.vuln);
-      return { hits: [hit], chargeSpent: spent, vulns: [fr] };
+      const vulns = cursed.map((e) => curse(actor, e, amt));
+      // DOOM path: brand a delayed detonation onto the target — or the whole line (Armageddon).
+      if (brandsDoom(actor) && state) {
+        const brandTargets = actor.mods?.armageddon ? enemiesOf(state, actor) : [target];
+        const timer = actor.mods?.hasten ? DOOM.timer - 1 : DOOM.timer;
+        brandTargets.forEach((e) => {
+          applyDoom(e, actor.atk * (actor.mods?.inevitable ? 1.5 : 1), timer);
+          if (actor.mods?.deathSentence) e.doomSplash = true; // detonation brands the line
+        });
+      }
+      return { hits: [hit], chargeSpent: spent, vulns };
     },
   },
 
@@ -69,8 +86,9 @@ export const HEXER_SKILLS = {
       const vented = Math.floor(actor.charge / 2);
       actor.charge -= vented;
       const line = enemiesOf(state, actor);
+      const amt = HEXER.blight.vuln + (actor.mods?.hexmaster ? 1 : 0);
       const hits = line.map((e) => dealDamage(e, actor.atk * HEXER.blight.perCharge * vented, actor));
-      const vulns = line.map((e) => applyVuln(e, HEXER.blight.vuln));
+      const vulns = line.map((e) => curse(actor, e, amt));
       return { hits, chargeSpent: vented, vulns };
     },
   },

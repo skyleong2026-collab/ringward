@@ -1,11 +1,38 @@
 import { STRIKER } from '../dials.js';
-import { dealDamage } from './combatMath.js';
+import { dealDamage, heal, applyPoison, applyVuln, addBlock } from './combatMath.js';
 
 // ─── Striker — "tempo: hit fast, hit twice, reward moving first" (§23) ───────────
 // Same charge spine, but the identity is the SHAPE of its damage: many small hits
 // instead of one big one, plus an initiative bonus. It reuses the shared damage
 // primitive (no new status) — and because every hit passes `actor`, a Booster's Amp
 // stacks across the WHOLE flurry, the seam's first real combo.
+
+// One run of hits onto a target, carrying the DUELIST/BARRAGE riders. Opt-in: with no
+// mods this is just `count` plain hits, byte-identical to the original two loops.
+function strike(actor, target, count, baseMult) {
+  const hits = [];
+  for (let i = 0; i < count; i++) {
+    // "Momentum" (BARRAGE): each consecutive hit on the same target lands +5% harder.
+    const ramp = actor.mods?.momentum ? (1 + 0.05 * i) : 1;
+    const hit = dealDamage(target, actor.atk * baseMult * ramp, actor);
+    // "Thousand Cuts" (BARRAGE keystone): every hit leaves a stacking bleed (poison).
+    if (actor.mods?.thousandCuts) applyPoison(target, 1);
+    // "Bloodlust" (DUELIST): a kill patches you up and refunds charge — chain the cuts.
+    if (actor.mods?.bloodlust && hit.killed) { heal(actor, Math.round(actor.maxHp * 0.1), actor); actor.charge = Math.min(actor.maxCharge, actor.charge + 2); }
+    hits.push(hit);
+  }
+  return hits;
+}
+
+// "Marking Strike" (DUELIST): a builder hit also brands the target to take more.
+const mark = (actor, target) => { if (actor.mods?.markVuln) applyVuln(target, 1); };
+// "Riposte" stance (DUELIST capstone): your builder leaves you poised — a small guard
+// that throws blows back. Opt-in — only raised when the mod is set.
+function duelStance(actor) {
+  if (!actor.mods?.duelStance) return;
+  addBlock(actor, Math.round(actor.atk * 0.5), actor);
+  actor.statuses.reflect = Math.max(actor.statuses.reflect || 0, 0.3);
+}
 
 export const STRIKER_SKILLS = {
   // Builder — build charge and land a quick two-hit. Tempo never idles.
@@ -19,12 +46,11 @@ export const STRIKER_SKILLS = {
     apply(actor, [target]) {
       const gain = STRIKER.jab.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
+      duelStance(actor);
       if (!target) return { hits: [], chargeGained: gain };
+      mark(actor, target);
       const extra = actor.mods?.extraHits ?? 0; // "Twin Strike" upgrade; 0 = unchanged
-      const hits = [];
-      for (let i = 0; i < STRIKER.jab.hits + extra; i++) {
-        hits.push(dealDamage(target, actor.atk * STRIKER.jab.hitMult, actor));
-      }
+      const hits = strike(actor, target, STRIKER.jab.hits + extra, STRIKER.jab.hitMult);
       return { hits, chargeGained: gain };
     },
   },
@@ -43,10 +69,7 @@ export const STRIKER_SKILLS = {
       if (!target) return { hits: [], chargeSpent: spent };
       const extra = actor.mods?.extraHits ?? 0; // "Twin Strike" upgrade; 0 = unchanged
       const count = Math.min(STRIKER.flurry.maxHits + extra, STRIKER.flurry.baseHits + extra + STRIKER.flurry.hitsPerCharge * spent);
-      const hits = [];
-      for (let i = 0; i < count; i++) {
-        hits.push(dealDamage(target, actor.atk * STRIKER.flurry.hitMult, actor));
-      }
+      const hits = strike(actor, target, count, STRIKER.flurry.hitMult);
       return { hits, chargeSpent: spent, flurryHits: count };
     },
   },
@@ -66,10 +89,11 @@ export const STRIKER_SKILLS = {
       const first = !state.firstActionDone;
       let mult = STRIKER.blitz.hitMult * Math.max(1, vented);
       if (first) mult *= STRIKER.blitz.firstStrikeBonus;
+      // "Blur" keystone: you always move first (engine initiative) and the opener bites deeper.
+      if (first && actor.mods?.blur) mult *= 1.5;
       // "Blitz Storm" upgrade: Blitz becomes a 3-hit barrage instead of one heavy strike.
       const hitCount = actor.mods?.blitzMulti ? 3 : 1;
-      const hits = [];
-      for (let i = 0; i < hitCount; i++) hits.push(dealDamage(target, actor.atk * mult, actor));
+      const hits = strike(actor, target, hitCount, mult);
       return { hits, chargeSpent: vented, firstStrike: first };
     },
   },

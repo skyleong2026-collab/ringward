@@ -1,6 +1,14 @@
-import { BOOSTER } from '../dials.js';
-import { alliesOf } from '../state.js';
-import { dealDamage, applyAmp } from './combatMath.js';
+import { BOOSTER, AMP } from '../dials.js';
+import { alliesOf, enemiesOf } from '../state.js';
+import { dealDamage, applyAmp, addBlock } from './combatMath.js';
+
+// The most-charged living enemy — whose tempo the CONDUCTOR "Tempo Theft" saps.
+const enemyToSap = (actor, state) => {
+  const foes = enemiesOf(state, actor);
+  return foes.length ? foes.reduce((b, u) => ((u.charge || 0) > (b.charge || 0) ? u : b), foes[0]) : null;
+};
+// "Full Harmony" (RESONANCE): amp also hardens its recipients with a little shield.
+const harmonyShield = (recipients, actor) => { if (actor.mods?.fullHarmony) recipients.forEach((a) => addBlock(a, Math.round(actor.atk * 0.4), actor)); };
 
 // ─── Booster — "the amplifier: charge into an ally's damage, not your own" (§23) ──
 // Same charge spine, but the payoff lands on a TEAMMATE: it stacks Amp (an outgoing-
@@ -31,6 +39,9 @@ export const BOOSTER_SKILLS = {
       // no mod the recipient list is just [bestCarry], byte-identical to before.
       const recipients = (actor.mods?.primeTeam && state) ? alliesOf(state, actor) : [bestCarry(actor, state)];
       const amps = recipients.map((a) => applyAmp(a, BOOSTER.prime.ampStacks, actor));
+      harmonyShield(recipients, actor);
+      // "Quicken" (CONDUCTOR): the prime also nudges the carry's charge forward.
+      if (actor.mods?.quicken && state) { const c = bestCarry(actor, state); c.charge = Math.min(c.maxCharge ?? 6, (c.charge || 0) + 1); }
       const hits = target ? [dealDamage(target, actor.atk * BOOSTER.prime.chipMult, actor)] : [];
       return { hits, amps, chargeGained: gain };
     },
@@ -47,14 +58,25 @@ export const BOOSTER_SKILLS = {
     apply(actor, [target], state) {
       const spent = actor.charge;
       actor.charge = 0;
-      const stacks = BOOSTER.overdrive.base + BOOSTER.overdrive.perCharge * spent;
-      // "Surge" upgrade: Overdrive floods the whole team with Amp instead of one carry.
+      let stacks = BOOSTER.overdrive.base + BOOSTER.overdrive.perCharge * spent;
+      // "Critical Mass" keystone: Overdrive dumps a FULL bar of amp, feast-or-famine.
+      if (actor.mods?.criticalMass) stacks = AMP.maxStacks;
+      // "Power Spike": the first payoff each fight spikes with extra amp.
+      if (actor.mods?.powerSpike && !actor.powerSpikeUsed) { stacks += 2; actor.powerSpikeUsed = true; }
+      // "Tempo Theft" (CONDUCTOR): also sap a charge or two from the enemy's fastest.
+      if (actor.mods?.tempoTheft && state) { const foe = enemyToSap(actor, state); if (foe) foe.charge = Math.max(0, (foe.charge || 0) - 2); }
       if (actor.mods?.overdriveAll && state) {
-        const amps = alliesOf(state, actor).map((a) => applyAmp(a, stacks, actor));
+        const line = alliesOf(state, actor);
+        const amps = line.map((a) => applyAmp(a, stacks, actor));
+        harmonyShield(line, actor);
         return { hits: [], amps, chargeSpent: spent };
       }
       const ally = target || bestCarry(actor, state);
-      return { hits: [], amps: [applyAmp(ally, stacks, actor)], chargeSpent: spent };
+      const amps = [applyAmp(ally, stacks, actor)];
+      harmonyShield([ally], actor);
+      // "Double Time" (CONDUCTOR): a loaded carry gets the charge to swing again now.
+      if (actor.mods?.doubleTime) ally.charge = Math.min(ally.maxCharge ?? 6, (ally.charge || 0) + 3);
+      return { hits: [], amps, chargeSpent: spent };
     },
   },
 
@@ -72,6 +94,9 @@ export const BOOSTER_SKILLS = {
       const stacks = Math.max(1, BOOSTER.resonate.ampPerVent * vented);
       const line = alliesOf(state, actor);
       const amps = line.map((a) => applyAmp(a, stacks, actor));
+      harmonyShield(line, actor);
+      // "Pull" (CONDUCTOR): Resonate pulls the carry's strike forward — a charge for them.
+      if (actor.mods?.pull) { const c = bestCarry(actor, state); c.charge = Math.min(c.maxCharge ?? 6, (c.charge || 0) + 1); }
       return { hits: [], amps, chargeSpent: vented };
     },
   },
