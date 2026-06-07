@@ -363,6 +363,36 @@ const WAYSIDE_EVENTS = [
       { label: 'The short, mean way', detail: 'Fast, costly.', apply: (c) => (c.hurt(0.12), c.slag(40), '⚒ Rough going, but you make good time and strip a lot of slag. +40 ⚒, some scrapes.') },
       { label: 'The long, quiet way', detail: 'Slow, restful.', apply: (c) => (c.heal(0.25), '✚ Quiet miles. The squad recovers a little on the long road.') },
     ] },
+  { id: 'stillpool', glyph: '💧', tint: '#7fd6ff', title: 'The Stillpool',
+    text: 'A pool of clear water sits impossibly still amid the blight, untouched. It looks clean. Out here, that is reason enough to be careful.',
+    choices: [
+      { label: 'Drink deep', detail: 'A gamble — clean, or tainted?', apply: (c) => c.rng() < 0.65 ? (c.heal(0.5), '💧 It is clean and cold. The squad drinks deep and recovers well.') : (c.hurt(0.1), '🜲 A wrongness under the sweetness. It turns in your gut — a little blight for your trouble.') },
+      { label: 'Fill the canteens', detail: 'Cautious, smaller.', apply: (c) => (c.heal(0.2), '✚ You skim only the surface and move on. A small mercy on the climb.') },
+    ] },
+  { id: 'forge', glyph: '⚙', tint: '#ffae5a', title: 'The Cracked Forge',
+    text: 'An old field-forge, cold a long time, its anvil split clean down the middle. There is still salvage in it — or a last fire you could coax up.',
+    choices: [
+      { label: 'Strip it for slag', detail: 'Tools, plate, scrap.', apply: (c) => (c.slag(38), '⚒ You break it down for everything worth carrying. +38 ⚒.') },
+      { label: 'Temper your edges', detail: 'Sharpen the whole squad.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.15; }), '⚔️ You wake one last fire and put an edge on every claw and tooth. +15% damage for the rest of the climb.') },
+    ] },
+  { id: 'caged', glyph: '🕸', tint: '#9be7c0', title: 'The Caged Thing',
+    text: 'Something is tangled in a knot of old live-wire by the path — small, half-grown, still alive. Its little core flickers, weak and afraid.',
+    choices: [
+      { label: 'Cut it free', detail: 'Kindness has a price out here.', apply: (c) => c.rng() < 0.6 ? (c.cores(20), c.prime(2), '✦ It bolts into the dark — but leaves its gathered Cores at your feet, and one grunling starts the next fight Primed, emboldened.') : (c.hurt(0.18), '🜲 Cornered and terrified, it lashes out as the wire parts. The squad takes a few wounds freeing it.') },
+      { label: 'Strip the wire', detail: 'Hard, but sure.', apply: (c) => (c.slag(30), '⚒ You leave it and take the wire. Live copper is worth a lot. +30 ⚒.') },
+    ] },
+  { id: 'beacon', glyph: '🔆', tint: '#ffd166', title: 'The Watch-Beacon',
+    text: 'A signal-post from when the rim still watched the rings — a rusted brazier on a pole. From up here, a fire would be seen all the way home.',
+    choices: [
+      { label: 'Light it', detail: 'Fight bold; they can see you.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.1; }), '🔥 The beacon catches. Knowing home can see the light, the squad climbs bolder — Primed, and +10% damage onward.') },
+      { label: 'Take the lamp-oil', detail: 'Slag and a little rest.', apply: (c) => (c.slag(22), c.heal(0.15), '⚒ You drain the old oil and rest a moment in its shelter. +22 ⚒, a little recovered.') },
+    ] },
+  { id: 'mentorcache', glyph: '📜', tint: '#cba6ff', title: "The Mentor's Cache",
+    text: 'A stone cairn, marked the way he marked things. He cached supplies on his own climb — and left this one for whoever came after. For you.',
+    choices: [
+      { label: 'Take the supplies', detail: 'He thought of you.', apply: (c) => (c.heal(0.35), c.cores(15), '✚ Food, salve, a few banked Cores. The squad recovers, and you feel less alone on the trail. +15 ⬡.') },
+      { label: 'Read his last note', detail: 'His climb, sharpened to advice.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.1; m.healMult *= 1.2; }), "📜 Everything he learned going up, in a few hard lines. You climb smarter for it — +10% damage and +20% healing onward.") },
+    ] },
 ];
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
