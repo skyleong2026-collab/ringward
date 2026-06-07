@@ -2578,6 +2578,24 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             </div>
           );
         })}
+        {/* ── SETS reference — what synergies exist to chase ── */}
+        <div style={{ marginTop: 6, paddingTop: 14, borderTop: `1px solid ${LINE}` }}>
+          <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffd166', letterSpacing: 1, marginBottom: 7 }}>⚜ SETS <span style={{ color: DIM, fontWeight: 700, letterSpacing: 0 }}>· equip {RELIC_SETS[0].need}+ from a set to activate its bonus</span></div>
+          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
+            {RELIC_SETS.map((s) => (
+              <div key={s.id} style={{ borderRadius: 10, padding: '9px 11px', background: '#161204', border: '1px solid #4a3f1c' }}>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffe08a', marginBottom: 1 }}>{s.icon} {s.name}</div>
+                <div style={{ fontSize: T.micro, color: '#c9b87a', marginBottom: 5 }}>{s.desc}</div>
+                <div style={{ fontSize: T.micro, color: DIM, lineHeight: 1.5 }}>
+                  {s.members.map((id, k) => {
+                    const r = RELIC_BY_ID[id]; const have = relics.includes(id);
+                    return <span key={id} style={{ color: have ? (RELIC_BY_ID[id].color) : '#54506a' }}>{r ? r.name : id}{k < s.members.length - 1 ? ' · ' : ''}</span>;
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
