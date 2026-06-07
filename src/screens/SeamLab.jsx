@@ -488,6 +488,12 @@ const WAYSIDE_EVENTS = [
       { label: 'Pocket the cores', detail: 'A big haul of Cores.', apply: (c) => (c.cores(50), '💎 You fill your pack with banked Cores — a fortune by rim standards. +50 ⬡.') },
       { label: 'Take the best relic', detail: 'One good piece of gear.', apply: (c) => { const r = c.relic(); if (r) return `💎 You pick the finest piece — ${r.name}.`; c.cores(50); return '💎 Nothing here you don\'t already own — so you take the Cores. +50 ⬡.'; } },
     ] },
+  // ── ELITE node (vF-BC): an OPTIONAL extra fight. A marked hunter blocks the trail —
+  // fight it (harder than a normal pack) for a GUARANTEED relic, or slip past and lose
+  // nothing but the prize. Lose the fight and the run ends, like any wipe. Handled by a
+  // dedicated render + startEliteFight (no `choices` — it's fight-or-flee). ──
+  { id: 'elite_hunter', kind: 'elite', glyph: '💀', tint: '#ff6b6b', title: 'A Marked Hunter', foeId: 'veilclaw',
+    text: 'Something has been pacing you for the last mile — bigger than the locals, scarred, unhurried. It steps into the trail ahead and simply waits, the way a thing waits when it has done this before and the climbers always ran. There is a way around. There is always a way around.' },
 ];
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
@@ -2130,6 +2136,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
   const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
   const [pendingEvent, setPendingEvent] = useState(null); // a wayside event awaiting a choice (or null)
+  const [pendingElite, setPendingElite] = useState(null); // an ELITE node awaiting fight-or-flee (or null)
   const [eventOutcome, setEventOutcome] = useState(null); // the outcome line after a choice is made
   const eventsSeenRef = useRef([]); // event ids already shown THIS run — no repeats within a run
   const [music, setMusic] = useState(loadMusic); // ambient pad on/off (user toggle, persisted)
@@ -2180,6 +2187,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         sig = 'pt' + waveIdx;
         const tgt = squad.find((m) => m.hp > 0) || squad[0];
         if (tgt) act = () => pickTarget(tgt.id);
+      } else if (runPhase === 'event' && pendingElite && !eventOutcome) {
+        sig = 'el' + waveIdx;
+        act = () => eventPressOn(); // farming: slip past elites (don't risk the run on auto)
       } else if (runPhase === 'event' && pendingEvent && !eventOutcome) {
         sig = 'ev' + pendingEvent.id;
         const ev = pendingEvent;
@@ -2325,7 +2335,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     // Roll a node KIND (weighted), then an unseen node of that kind; fall back to any unseen.
     const kindOf = (e) => e.kind || 'story';
     const roll = Math.random() * 100;
-    const kind = roll < 56 ? 'story' : roll < 78 ? 'merchant' : 'treasure';
+    const kind = roll < 50 ? 'story' : roll < 69 ? 'merchant' : roll < 88 ? 'treasure' : 'elite';
     const ofKind = unseen.filter((e) => kindOf(e) === kind);
     const pickPool = ofKind.length ? ofKind : unseen;
     const ev = pickPool[Math.floor(Math.random() * pickPool.length)];
@@ -2352,7 +2362,33 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     sfx.upgradePick();
     setEventOutcome(choice.apply(ctx) || 'You press on.');
   }
-  function eventPressOn() { setPendingEvent(null); setEventOutcome(null); setRunPhase('upgrade'); }
+  function eventPressOn() { setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setRelicDrop(null); setRunPhase('upgrade'); }
+  // ELITE node: an optional standalone fight vs a marked hunter (tough: depth × crossing ×
+  // an elite bump). Win → a guaranteed relic + a brief reveal; lose → the run ends like any
+  // wipe. Squad HP carries in and out. Reuses the run's auto/manual mode.
+  function startEliteFight() {
+    if (!pendingElite) return;
+    const elite = pendingElite, sq = squad, mods = runMods;
+    const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
+    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
+    const base = COMBAT_CREATURES[elite.foeId], cm = crossMult(crossing);
+    const eHp = Math.round(base.hp * D_HP(runDepth) * cm * 2.0), eAtk = Math.round(base.atk * D_ATK(runDepth) * cm * 1.4);
+    const foeDef = { ...makeUnitDef(elite.foeId, 'Greedy'), name: elite.title, hp: eHp, maxHp: eHp, atk: eAtk, speed: 7 };
+    setPendingElite(null);
+    fight.begin(aDefs, [foeDef], 555, auto ? 'auto' : 'play', (res, finalState) => {
+      const next = sq.map((m) => ({ ...m }));
+      fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
+      const won = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0) && res.winner !== 'B';
+      if (!won) { const got = lossSlag(waveIdx); onSlag?.(got); setEarned(got); setSquad(next); sfx.squadDown(); setRunPhase('lost'); return; }
+      setSquad(next);
+      const rd = rollRelicChoices(relics, 1)[0]; // guaranteed relic for felling the hunter
+      if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); setRelicDrop(rd); } else { onSlag?.(40); }
+      sfx.ringTaken();
+      setEventOutcome('💀 The Marked Hunter falls. It will not pace anyone again. You take its prize.');
+      setPendingElite(elite); setRunPhase('event'); // back to the node screen to show the spoils
+    });
+    setRunPhase('fighting');
+  }
 
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
@@ -2440,7 +2476,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       // (Offer is already rolled, so the event sits in front of the upgrade screen.)
       const nextIsBoss = (idx + 1) === WAVE_COUNT - 1;
       const ev = nextIsBoss ? null : maybeWaysideEvent();
-      if (ev) { setPendingEvent(ev); setEventOutcome(null); sfx.upgradePick(); setRunPhase('event'); }
+      if (ev && ev.kind === 'elite') { setPendingElite(ev); setEventOutcome(null); sfx.ringThreshold(runDepth); setRunPhase('event'); }
+      else if (ev) { setPendingEvent(ev); setEventOutcome(null); sfx.upgradePick(); setRunPhase('event'); }
       else setRunPhase('upgrade');
     });
     setWaveIdx(idx);
@@ -2521,7 +2558,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setEventOutcome(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -3225,6 +3262,52 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }
 
   // ── Wayside event: a choice on the trail between waves (vF-AB). ──
+  if (runPhase === 'event' && pendingElite) {
+    const el = pendingElite;
+    return (
+      <div>
+        <div style={{ animation: 'seam-threshold .9s ease-out', maxWidth: 560, margin: '8px auto 0', background: 'linear-gradient(180deg,#1a0e0e,#0b0808)', border: `1px solid ${el.tint}66`, borderRadius: 14, padding: narrow ? '16px 15px' : '20px 22px' }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
+            <EventVignette tint={el.tint} glyph={el.glyph} size={narrow ? 70 : 88} />
+            <div>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: el.tint }}>💀 AN ELITE BARS THE TRAIL</div>
+              <div style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff', marginTop: 2 }}>{el.title}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{el.text}</div>
+          {!eventOutcome ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              <button onClick={startEliteFight}
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 11, padding: '13px 15px', background: '#1f1010', border: `1.5px solid ${el.tint}` }}>
+                <div style={{ fontSize: T.body, fontWeight: 900, color: '#ffd0d0' }}>⚔ Fight it</div>
+                <div style={{ fontSize: T.small, color: '#c89a9a', marginTop: 2 }}>Tougher than a pack. Win for a <b style={{ color: '#ffd0d0' }}>guaranteed relic</b> — but a loss ends the run.</div>
+              </button>
+              <button onClick={eventPressOn}
+                style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${LINE}` }}>
+                <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff' }}>↩ Slip past</div>
+                <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2 }}>Take the way around. No prize, no risk.</div>
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: T.body, color: '#cfe8c0', lineHeight: 1.6, marginBottom: 12 }}>{eventOutcome}</div>
+              {relicDrop && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#150d22', border: '1.5px solid #b06bff', borderRadius: 11, padding: '11px 13px', marginBottom: 14 }}>
+                  <RelicIcon r={relicDrop} size={30} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC WON</div>
+                    <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff' }}>{relicDrop.name} <span style={{ fontSize: T.micro, fontWeight: 800, color: (RARITY_INFO[relicDrop.rarity] || {}).color }}>· {relicDrop.rarity}</span></div>
+                    <div style={{ fontSize: T.small, color: '#cba6ff', fontWeight: 700 }}>{relicDrop.desc}</div>
+                  </div>
+                </div>
+              )}
+              <button onClick={eventPressOn} style={{ width: '100%', padding: '12px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>PRESS ON →</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
   if (runPhase === 'event' && pendingEvent) {
     const ev = pendingEvent;
     return (
