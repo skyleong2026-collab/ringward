@@ -2787,6 +2787,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {HOLDFAST_STAGES.map((s) => cEntry('hf' + s.depth, s.part, s.beat, s.depth <= reclaimed))}
         {cHead('THE DROP')}
         {cEntry('drop', 'The First Climb', dropText, reclaimed >= HOLDFAST_MAX)}
+        {(crossing > 0 || reclaimed >= HOLDFAST_MAX) && cHead('THE CROSSINGS')}
+        {(crossing > 0 || reclaimed >= HOLDFAST_MAX) && CROSSING_BEATS.map((b, i) =>
+          cEntry('cx' + i, b.title, b.lines.join(' ') + ' ' + b.take, crossing > i || (i === 0 && reclaimed >= HOLDFAST_MAX))
+        )}
         {cHead('THE GRUNLINGS')}
         {COMBAT_ROSTER.map((c) => cEntry('cr' + c.id, c.name, CREATURE_LORE[c.id] ? `${CREATURE_LORE[c.id].rumor} (Said to roam ${CREATURE_LORE[c.id].where}.)` : '', stable.includes(c.id)))}
       </div>
@@ -2974,6 +2978,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     setTreeEquip({}); saveEquip({});              // equipped loadout,
                     setTreeRanks({}); saveRanks({});              // and node ranks.
                     setOwned([]); savePerks([]);                 // Forge perks too.
+                    setRelics([]); saveRelics([]);               // the relic collection,
+                    setRelicKit([]); saveRelicKit([]);            // the equipped kit,
+                    setCrossing(0); saveCrossing(0);              // and the NG+ crossing level.
                     setGround('outer-ring'); saveGround('outer-ring');
                     setPicked([]); saveSquad([]);
                   }],
@@ -3120,7 +3127,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 onSelect={(id) => { setGround(id); saveGround(id); }} />
               {/* The selected ring, spelled out (the map shows state by colour; this is the detail). */}
               {(() => {
-                const diff = diffOf(sel.depth);
+                const diff = diffOf(sel.depth + crossing); // crossing-aware: rings read harder in NG+
                 const n = clears[sel.id] || 0; const m = repeatMult(n);
                 const ringRars = [...new Set(sel.biasIds.map(rarityOf))].sort((a, b) => RARITY_INFO[b].mult - RARITY_INFO[a].mult);
                 return (
@@ -3189,7 +3196,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           );
         })()}
         <div style={{ marginBottom: 18 }} />
-        {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth); return (
+        {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth + crossing); return (
         <button onClick={startRun} disabled={picked.length < 2}
           style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
           {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
@@ -3358,7 +3365,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       <div>
         {/* THE THRESHOLD (vF-Z): stepping into a ring is a story beat, not a menu. */}
         {waveIdx === 0 && enteredRing && RING_INTRO[enteredRing.id] && (() => {
-          const di = diffOf(enteredRing.depth);
+          const di = diffOf(enteredRing.depth + crossing);
           return (
             <div style={{ animation: 'seam-threshold 1s ease-out', display: 'flex', gap: 13, alignItems: 'stretch', background: 'linear-gradient(180deg,#0e1320,#0b0d16)', border: `1px solid ${SEL}44`, borderLeft: `3px solid ${di.color}`, borderRadius: 12, padding: '12px 15px', marginBottom: 14 }}>
               <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 84} />
