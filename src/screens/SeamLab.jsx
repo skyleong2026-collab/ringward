@@ -121,6 +121,22 @@ const RING_INTRO = {
   'frostbound': 'Everything goes still and cold and clear. The rings end ahead. And past the last of them, faint and steady, something is waiting at the Drop.',
 };
 
+// ── RING-CLEAR BEATS (vF-AY): felling a ring's boss is a STORY moment, not just a reward.
+// Each clear is the mentor's trail, one ring deeper — his notes getting shorter, stranger,
+// braver, closing on the Drop. Shown on the won screen (the boss falls → a beat → the
+// spoils). Together with RING_INTRO (entry) they bracket each ring with story; together
+// across the 8 they ARE the mentor's through-line toward what he found at the Drop.
+const RING_CLEAR = {
+  'outer-ring': { boss: 'The Cinder Maw', beat: 'The Cinder Maw goes out like a snuffed coal. The outer ring is yours — the easy country, the part everyone survives. Your mentor barely wrote about it. His note just says: “Past here, start paying attention.”' },
+  'fallen-gate': { boss: 'The Gatebreaker', beat: 'The Gatebreaker falls across the rubble of the gate it was named for. Your people built that gate to hold the blight out, and it didn\'t hold. But you got through where it couldn\'t — the way he must have, climbing alone.' },
+  'green-seam': { boss: 'The Old Grove', beat: 'The Old Grove stills, and the wrong-green light dims with it. Your grunlings\' cores have been humming louder the deeper you go, like they remember something older than you. He felt it here too. He wrote one word, underlined: “Closer.”' },
+  'storm-wire': { boss: 'The Live Wire', beat: 'The Live Wire gutters out, and the old power-lines fall quiet for the first time in seventy-five years. Whatever fell never cut the current — it\'s been calling inward all this time. You\'re following it now. He did too.' },
+  'fast-trails': { boss: 'The Blur', beat: 'The Blur finally holds still. This is as far as most ever come back from, and you\'re still climbing. Past here his notes get shorter, then stranger. The last few aren\'t instructions at all. They\'re just questions he never got to answer.' },
+  'lightless': { boss: 'The Throat-Cutter', beat: 'The Throat-Cutter falls in the dark, and you go on by the light of your own grunlings\' hearts. Something down here has been watching you climb the whole way. He knew it was there. His note: “It remembers being looked at. Don\'t look back. Keep going.”' },
+  'witherfen': { boss: 'The Blight-Heart', beat: 'The Blight-Heart bursts, and the pooled rot goes slack and quiet around you. You\'re nearly there. You can feel the Drop deciding whether to let you pass — the same choice it must have offered him. He chose to go on. You find that you already have.' },
+  'frostbound': { boss: 'The Stillness', beat: 'The Stillness ends. The cold goes silent, and the last ring opens ahead of you. Past it, faint and steady, something waits at the Drop — patient, and somehow familiar. He walked into it and never came back down. Now, finally, you\'re going to find out why.' },
+};
+
 // ── Tiers: ring depth IS character tier. Deeper ring = higher tier = a STRONGER
 // creature (Foundation 1-3 / Specialist 4-6 / Apex 7-8). Higher tiers are both much
 // harder to reach (strict inward unlock + steep depth scaling) AND straight-up better
@@ -668,6 +684,12 @@ const AUTO_SPEEDS = [1, 2, 4];
 const AUTO_SPEED_KEY = '8gents_seam_autospeed';
 function loadAutoSpeed() { try { const n = parseInt(localStorage.getItem(AUTO_SPEED_KEY), 10); return AUTO_SPEEDS.includes(n) ? n : 2; } catch { return 2; } }
 function saveAutoSpeed(n) { try { localStorage.setItem(AUTO_SPEED_KEY, String(n)); } catch { /* best-effort */ } }
+// AUTO-PICK (vF-AZ) — on rings you've ALREADY cleared (farming), auto-resolve the upgrade
+// draft + wayside events instead of prompting, so re-clears are a true fast-forward. It NEVER
+// fires on a fresh/deeper ring (depth > reclaimed) — the climb stays a hands-on decision.
+const AUTO_PICK_KEY = '8gents_seam_autopick';
+function loadAutoPick() { try { return localStorage.getItem(AUTO_PICK_KEY) === '1'; } catch { return false; } }
+function saveAutoPick(on) { try { localStorage.setItem(AUTO_PICK_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
 // Ambient music toggle — default ON, but only ever sounds after a user gesture (the
 // AudioContext stays suspended until then), so nothing autoplays uninvited.
 const MUSIC_KEY = '8gents_seam_music';
@@ -2067,6 +2089,43 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
   const [auto, setAutoState] = useState(loadAuto); // AUTO: let the AI fight your squad
   const setAuto = (on) => { setAutoState(on); saveAuto(on); };
+  const [autoPick, setAutoPickState] = useState(loadAutoPick); // auto-resolve upgrade/event screens on FARMED rings
+  const setAutoPick = (on) => { setAutoPickState(on); saveAutoPick(on); };
+  const farmedRef = useRef(false); // is THIS run a re-clear of an already-beaten ring? (set at run start)
+  const apTimer = useRef(null);    // the single pending auto-pick action timer
+  const apSig = useRef(null);      // signature of the actionable state we've already scheduled for
+  // AUTO-PICK: on a farmed ring (already cleared), auto-resolve the upgrade draft + wayside
+  // events with a brief beat (so you can still SEE each pick fly by) instead of prompting.
+  // NOTE: this screen re-renders rapidly, so we DON'T clear the timer on every effect run —
+  // we only (re)schedule when the actionable STATE changes (tracked by `apSig`). Otherwise a
+  // self-cancelling setTimeout would be wiped before its delay elapsed and never fire.
+  useEffect(() => {
+    let sig = null, act = null;
+    if (autoPick && farmedRef.current) {
+      if (runPhase === 'upgrade' && offer.length && !upgradeChoice) {
+        sig = 'u' + waveIdx;
+        // `offer` holds upgrade IDS — resolve to objects, prefer a squad-scope one (no target detour).
+        const pick = offer.map((id) => UPGRADE_BY_ID[id]).find((u) => u && u.scope === 'squad') || UPGRADE_BY_ID[offer[0]];
+        if (pick) act = () => applyUpgrade(pick);
+      } else if (runPhase === 'pick-target' && pendingUpgrade) {
+        sig = 'pt' + waveIdx;
+        const tgt = squad.find((m) => m.hp > 0) || squad[0];
+        if (tgt) act = () => pickTarget(tgt.id);
+      } else if (runPhase === 'event' && pendingEvent && !eventOutcome) {
+        sig = 'ev' + pendingEvent.id;
+        const ev = pendingEvent;
+        act = () => chooseEvent(ev.choices[0]);
+      } else if (runPhase === 'event' && eventOutcome) {
+        sig = 'eo' + waveIdx;
+        act = () => eventPressOn();
+      }
+    }
+    if (sig === apSig.current) return; // same actionable state (incl. both null) — let any pending timer ride
+    apSig.current = sig;
+    if (apTimer.current) { clearTimeout(apTimer.current); apTimer.current = null; }
+    if (act) apTimer.current = setTimeout(() => { apTimer.current = null; act(); }, sig && sig.startsWith('eo') ? 650 : 320);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPick, runPhase, offer, upgradeChoice, pendingUpgrade, pendingEvent, eventOutcome, squad, waveIdx]);
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
@@ -2311,6 +2370,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
     setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
     setEnteredRing(g); sfx.ringThreshold(g.depth); // crossing the threshold — a beat + a deepening swell
+    farmedRef.current = g.depth <= reclaimed; // a re-clear of an already-beaten ring → auto-pick eligible
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
     const base = perkBaseMods(owned, reclaimed, relicKit); // perks + Holdfast boons + equipped relics set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
@@ -2645,6 +2705,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             title={music ? 'Ambient music on' : 'Ambient music off'}
             style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: `1px solid ${music ? '#4a3a66' : '#33333f'}`, background: music ? '#160f1d' : 'transparent', color: music ? '#cba6ff' : '#777' }}>
             {music ? '🔊 Music' : '🔇 Music'}
+          </button>
+          <button onClick={() => setAutoPick(!autoPick)}
+            title="Auto-pick upgrades & events on rings you've ALREADY cleared (farming). Never on a fresh ring — the climb stays hands-on."
+            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: `1px solid ${autoPick ? '#2a5a8a' : '#33333f'}`, background: autoPick ? '#0d1622' : 'transparent', color: autoPick ? '#9be7ff' : '#777' }}>
+            {autoPick ? '⏩ Auto-pick' : '⏩ Auto-pick off'}
           </button>
         </div>
         {/* ── THE HOLDFAST — your home + the destination. Reclaims one stage per ring boss. ── */}
@@ -3217,6 +3282,17 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
           <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
           <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You cleared <b>{caughtFrom ? caughtFrom.name : 'the ring'}</b> to its heart.</div>
+          {enteredRing && RING_CLEAR[enteredRing.id] && (
+            <div style={{ background: '#0a0f14', border: '1px solid #2a3f2a', borderRadius: 12, padding: '13px 14px', margin: '0 0 14px', textAlign: 'left' }}>
+              <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
+                <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 82} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#9ad0a0' }}>✦ {RING_CLEAR[enteredRing.id].boss.toUpperCase()} FALLS</div>
+                  <div style={{ fontSize: T.small, color: '#cbd8cb', lineHeight: 1.6, fontStyle: 'italic', marginTop: 5 }}>{RING_CLEAR[enteredRing.id].beat}</div>
+                </div>
+              </div>
+            </div>
+          )}
           {pullNow && (() => {
             const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
             return (
