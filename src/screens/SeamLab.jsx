@@ -1927,6 +1927,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [relicKit, setRelicKit] = useState(loadRelicKit);  // equipped relic loadout (subset, capped at RELIC_SLOTS)
   const [relicChoices, setRelicChoices] = useState([]);    // pending boss-drop picks — choose one on the won screen
   const [relicDrop, setRelicDrop] = useState(null);        // the relic you chose this clear (won-screen reveal)
+  const [showVault, setShowVault] = useState(false);       // the relic VAULT overlay — the full collection to chase
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
@@ -2450,6 +2451,47 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     return <Cutscene scenes={OPENING_SCENES} onDone={() => { setShowIntro(false); saveIntroSeen(); }} />;
   }
 
+  // ── THE RELIC VAULT (vF-AK) — the whole collection to chase. Owned relics show in full;
+  // the rest are undiscovered silhouettes with just a rarity tease. A full-screen overlay. ──
+  if (showVault) {
+    const byRarity = { Common: [], Rare: [], Legendary: [] };
+    RELICS.forEach((r) => byRarity[r.rarity]?.push(r));
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ fontSize: T.huge, fontWeight: 900, color: '#cba6ff', letterSpacing: 0.5 }}>✦ THE RELIC VAULT</div>
+          <button onClick={() => setShowVault(false)} style={{ fontSize: T.small, fontWeight: 800, color: DIM, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 13px', cursor: 'pointer' }}>← back</button>
+        </div>
+        <div style={{ fontSize: T.small, color: DIM, marginBottom: 14 }}>Found <b style={{ color: '#cba6ff' }}>{relics.length}</b> of <b style={{ color: '#cba6ff' }}>{RELICS.length}</b> — every ring boss leaves another. Deeper rings hold the rarer ones.</div>
+        {['Legendary', 'Rare', 'Common'].map((rar) => {
+          const info = RARITY_INFO[rar] || {};
+          return (
+            <div key={rar} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: T.small, fontWeight: 900, color: info.color, letterSpacing: 1, marginBottom: 7 }}>{rar.toUpperCase()} <span style={{ color: DIM, fontWeight: 700 }}>· {byRarity[rar].filter((r) => relics.includes(r.id)).length}/{byRarity[rar].length}</span></div>
+              <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+                {byRarity[rar].map((r) => {
+                  const have = relics.includes(r.id);
+                  const eq = relicKit.includes(r.id);
+                  return (
+                    <div key={r.id} title={have ? r.lore : 'Undiscovered — found on a ring boss.'}
+                      style={{ borderRadius: 10, padding: '9px 10px', background: have ? PANEL : '#0b0b10', border: `1.5px solid ${have ? (eq ? '#b06bff' : `${r.color}66`) : LINE}`, opacity: have ? 1 : 0.55 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: T.body, filter: have ? 'none' : 'grayscale(1) brightness(0.5)' }}>{have ? r.icon : '✦'}</span>
+                        <span style={{ fontSize: T.small, fontWeight: 900, color: have ? r.color : '#54506a' }}>{have ? r.name : '? ? ?'}</span>
+                        {eq && <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#cba6ff' }}>●</span>}
+                      </div>
+                      <div style={{ fontSize: T.micro, color: have ? '#bfb0d6' : '#454056', lineHeight: 1.35, fontStyle: have ? 'normal' : 'italic' }}>{have ? r.desc : 'Undiscovered.'}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   // ── Squad picker ──
   if (runPhase === 'pick') {
     return (
@@ -2592,7 +2634,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
-            <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 vault {relics.length}/{RELICS.length}</button>
+              <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
+            </div>
           </div>
           <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>.</div>
           {relics.length === 0 ? (
