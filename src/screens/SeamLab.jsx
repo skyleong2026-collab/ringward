@@ -13,7 +13,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import * as sfx from '../sfx.js';
-import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette } from './Cutscene.jsx';
+import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette } from './Cutscene.jsx';
 import {
   createBattleState,
   runBattle,
@@ -315,6 +315,50 @@ function wavesForGround(g) {
   ];
 }
 const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
+
+// ── WAYSIDE EVENTS (vF-AB) — not every step is a fight. Between non-boss waves the
+// trail sometimes offers a CHOICE: a flavored situation + 2-3 options with real stakes
+// (Cores / slag / HP / a run-buff / a primed start). Each choice's `apply(ctx)` runs the
+// effect and returns the outcome line to show. ctx is built in RunMode with the live
+// setters. Gambles read ctx.rng(). Pure run-meta — never touches the combat engine.
+const WAYSIDE_EVENTS = [
+  { id: 'cache', glyph: '🜲', tint: '#7ec88a', title: 'The Blighted Cache',
+    text: 'A sealed core-casing lies half-eaten by rot at the trailside. Something inside it still hums, faintly.',
+    choices: [
+      { label: 'Pry it open', detail: 'Risky — it might bite.', apply: (c) => c.rng() < 0.6 ? (c.cores(24), '✦ It splits open — old Cores spill into your hands. +24 ⬡ to the squad.') : (c.hurt(0.18), '🜲 The rot bites back. The squad takes a hit prying it loose.') },
+      { label: 'Strip it for slag', detail: 'Safe, smaller.', apply: (c) => (c.slag(25), '⚒ You strip the casing for slag instead. +25 ⚒.') },
+    ] },
+  { id: 'mender', glyph: '✚', tint: '#9be7c0', title: 'The Wayside Mender',
+    text: 'An old healer tends a low fire at the crossfire, humming a tune your mentor used to whistle. She looks up, unsurprised.',
+    choices: [
+      { label: 'Let her tend the squad', detail: 'Heal up.', apply: (c) => (c.heal(0.4), '✚ Wounds close under her hands. The squad breathes easier.') },
+      { label: 'Take her blessing instead', detail: 'Power, not patching.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.12; }), '🔥 She marks your grunlings. +12% damage for the rest of the climb.') },
+    ] },
+  { id: 'fallen', glyph: '⚰', tint: '#9a9aae', title: 'The Fallen Climber',
+    text: 'Someone climbed this far and no further. Their pack remains, and beside it a grunling’s core, gone cold and grey.',
+    choices: [
+      { label: 'Take the cold core', detail: 'Wake it for the next fight.', apply: (c) => (c.cores(18), c.prime(2), '⚡ You coax a last spark from it — Cores banked, and a grunling starts the next fight Primed.') },
+      { label: 'Bury them, take the rations', detail: 'Rest and supplies.', apply: (c) => (c.heal(0.3), c.slag(15), '✚ You do right by them. The squad recovers a little. +15 ⚒.') },
+    ] },
+  { id: 'whisper', glyph: '👁', tint: '#b06bff', title: 'The Whispering Seam',
+    text: 'The blight murmurs as you pass. It knows your name — your mentor’s name. It offers something, the way it must have offered him.',
+    choices: [
+      { label: 'Listen close', detail: 'It always costs.', apply: (c) => (c.hurt(0.15), c.buff((m) => { m.dmgMult *= 1.2; }), '👁 It costs you blood — but you climb angrier. +20% damage, and some HP gone.') },
+      { label: 'Keep your head down', detail: 'Refuse it.', apply: (c) => (c.slag(10), '⚒ You refuse it and keep walking. +10 ⚒ from what you scavenge.') },
+    ] },
+  { id: 'shrine', glyph: '🔥', tint: '#ffae5a', title: 'The Ember Shrine',
+    text: 'A shrine your people raised at the rim, long gone cold. The old wards still hold. You could wake it.',
+    choices: [
+      { label: 'Stoke the embers', detail: 'Charge up.', apply: (c) => (c.prime(3), '⚡ The shrine flares. Your grunlings start the next fight well Primed.') },
+      { label: 'Leave an offering', detail: 'For luck and Cores.', apply: (c) => (c.cores(30), '✦ You leave what you can. The old wards answer. +30 ⬡ to the squad.') },
+    ] },
+  { id: 'fork', glyph: '⋔', tint: '#7ec8ff', title: 'The Forked Trail',
+    text: 'The trail splits. One way is short and mean, scraping along a live seam; the other long and quiet, the slow road around.',
+    choices: [
+      { label: 'The short, mean way', detail: 'Fast, costly.', apply: (c) => (c.hurt(0.12), c.slag(40), '⚒ Rough going, but you make good time and strip a lot of slag. +40 ⚒, some scrapes.') },
+      { label: 'The long, quiet way', detail: 'Slow, restful.', apply: (c) => (c.heal(0.25), '✚ Quiet miles. The squad recovers a little on the long road.') },
+    ] },
+];
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
 const MATCHUPS = {
@@ -1768,6 +1812,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [reclaimed, setReclaimed] = useState(loadReclaimed); // deepest ring boss ever beaten (0..8) = Holdfast reclaim depth
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
   const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
+  const [pendingEvent, setPendingEvent] = useState(null); // a wayside event awaiting a choice (or null)
+  const [eventOutcome, setEventOutcome] = useState(null); // the outcome line after a choice is made
+  const eventsSeenRef = useRef([]); // event ids already shown THIS run — no repeats within a run
   const [music, setMusic] = useState(loadMusic); // ambient pad on/off (user toggle, persisted)
   const [showIntro, setShowIntro] = useState(() => !introSeen()); // opening cutscene (first launch + replay)
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
@@ -1889,6 +1936,33 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setOffer(out); setUpgradeChoice(null); // fresh choice each upgrade screen
   }
 
+  // Roll a wayside event for this between-waves step (~55%), never repeating one in a run.
+  function maybeWaysideEvent() {
+    if (Math.random() > 0.55) return null;
+    const pool = WAYSIDE_EVENTS.filter((e) => !eventsSeenRef.current.includes(e.id));
+    if (!pool.length) return null;
+    const ev = pool[Math.floor(Math.random() * pool.length)];
+    eventsSeenRef.current = [...eventsSeenRef.current, ev.id];
+    return ev;
+  }
+  // Apply a chosen option's effect via a ctx bound to the live run state, then show the outcome.
+  function chooseEvent(choice) {
+    if (eventOutcome) return; // already chosen — wait for PRESS ON
+    const aliveIds = squad.filter((m) => m.hp > 0).map((m) => m.id);
+    const ctx = {
+      rng: Math.random,
+      cores: (n) => awardCores(aliveIds, n),
+      slag: (n) => onSlag?.(n),
+      heal: (frac) => setSquad((sq) => sq.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, runMods), Math.round(m.hp + maxHpOf(m, runMods) * frac)) } : m)),
+      hurt: (frac) => setSquad((sq) => sq.map((m) => m.hp > 0 ? { ...m, hp: Math.max(1, Math.round(m.hp - maxHpOf(m, runMods) * frac)) } : m)),
+      buff: (fn) => setRunMods((rm) => { const n = { ...rm }; fn(n); return n; }),
+      prime: (n = 2) => setRunMods((rm) => ({ ...rm, chargeStart: (rm.chargeStart || 0) + n })),
+    };
+    sfx.upgradePick();
+    setEventOutcome(choice.apply(ctx) || 'You press on.');
+  }
+  function eventPressOn() { setPendingEvent(null); setEventOutcome(null); setRunPhase('upgrade'); }
+
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
     const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
@@ -1963,7 +2037,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       }
       const aliveTypes = new Set(patched.filter((m) => m.hp > 0).map((m) => COMBAT_CREATURES[m.id].type));
       sfx.waveClear();
-      setWaveIdx(idx + 1); rollOffer(aliveTypes, patched); setRunPhase('upgrade');
+      setWaveIdx(idx + 1); rollOffer(aliveTypes, patched);
+      // Wayside event — between non-boss waves the trail sometimes offers a choice.
+      // (Offer is already rolled, so the event sits in front of the upgrade screen.)
+      const nextIsBoss = (idx + 1) === WAVE_COUNT - 1;
+      const ev = nextIsBoss ? null : maybeWaysideEvent();
+      if (ev) { setPendingEvent(ev); setEventOutcome(null); sfx.upgradePick(); setRunPhase('event'); }
+      else setRunPhase('upgrade');
     });
     setWaveIdx(idx);
     setRunPhase('fighting');
@@ -1978,6 +2058,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const base = perkBaseMods(owned, reclaimed); // perks + reclaimed Holdfast boons set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
+    eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); // fresh wayside-event pool per run
     rollOffer(); setRunPhase('upgrade');
   }
   // ── Apex challenge: a one-off fight against a gathered apex creature. Win → recruit. ──
@@ -2041,7 +2122,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setEventOutcome(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2574,6 +2655,44 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           style={{ width: '100%', marginTop: 14, padding: '14px 0', borderRadius: 12, border: 'none', background: targetChoice ? up.color : '#222', color: targetChoice ? '#0a0a14' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 0.5, cursor: targetChoice ? 'pointer' : 'default' }}>
           {targetChoice ? `CONFIRM — give ${COMBAT_CREATURES[targetChoice].name} ${up.name} →` : 'TAP A CREATURE ABOVE'}
         </button>
+      </div>
+    );
+  }
+
+  // ── Wayside event: a choice on the trail between waves (vF-AB). ──
+  if (runPhase === 'event' && pendingEvent) {
+    const ev = pendingEvent;
+    return (
+      <div>
+        <div style={{ animation: 'seam-threshold .9s ease-out', maxWidth: 560, margin: '8px auto 0', background: 'linear-gradient(180deg,#120e1a,#0b0810)', border: `1px solid ${ev.tint}55`, borderRadius: 14, padding: narrow ? '16px 15px' : '20px 22px' }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
+            <EventVignette tint={ev.tint} glyph={ev.glyph} size={narrow ? 70 : 88} />
+            <div>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: ev.tint }}>⋯ A WAYSIDE</div>
+              <div style={{ fontSize: T.head, fontWeight: 900, color: '#eadcff', marginTop: 2 }}>{ev.title}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: T.body, color: '#cdc2dd', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 16 }}>{ev.text}</div>
+          {!eventOutcome ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {ev.choices.map((ch, k) => (
+                <button key={k} onClick={() => chooseEvent(ch)}
+                  style={{ textAlign: 'left', cursor: 'pointer', borderRadius: 11, padding: '13px 15px', background: '#16111f', border: `1.5px solid ${ev.tint}66` }}>
+                  <div style={{ fontSize: T.body, fontWeight: 900, color: '#eadcff' }}>{ch.label}</div>
+                  <div style={{ fontSize: T.small, color: '#9a8fb0', marginTop: 2 }}>{ch.detail}</div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: T.body, color: '#e8dcf6', lineHeight: 1.6, background: '#16111f', border: `1px solid ${ev.tint}44`, borderRadius: 11, padding: '13px 15px', marginBottom: 14 }}>{eventOutcome}</div>
+              <button onClick={eventPressOn}
+                style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ev.tint, color: '#160f1d', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>
+                PRESS ON →
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }

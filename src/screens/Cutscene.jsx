@@ -250,6 +250,24 @@ export function HoldfastVignette({ size = 84 }) {
   );
 }
 
+// A wayside-event medallion: a tinted glyph in a glowing ring (vF-AB).
+export function EventVignette({ tint = '#b06bff', glyph = '✦', size = 84 }) {
+  return (
+    <svg viewBox="0 0 100 100" width={size} height={size} style={{ display: 'block', borderRadius: 10, flexShrink: 0 }}>
+      <defs>
+        <radialGradient id={`ev-${glyph.codePointAt(0)}`} cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor={tint} stopOpacity="0.5" /><stop offset="1" stopColor={tint} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <rect width="100" height="100" fill="#0e0a14" />
+      <circle cx="50" cy="50" r="42" fill={`url(#ev-${glyph.codePointAt(0)})`} />
+      <circle cx="50" cy="50" r="24" fill="none" stroke={tint} strokeWidth="1.5" opacity="0.55" />
+      <circle cx="50" cy="50" r="30" fill="none" stroke={tint} strokeWidth="0.8" opacity="0.25" />
+      <text x="50" y="52" textAnchor="middle" dominantBaseline="central" fontSize="30">{glyph}</text>
+    </svg>
+  );
+}
+
 // ── The opening — five beats from the rim to the choice to climb. ──────────────
 export const OPENING_SCENES = [
   { art: <SceneRim />,    image: null, title: 'The Rim',
