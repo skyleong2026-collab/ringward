@@ -453,6 +453,7 @@ const UPGRADES = [
   { id: 'firststrike', scope: 'squad', icon: '🎯', color: '#ffd166', name: 'Opening Strike', desc: 'First hit on a full-HP enemy: +25% damage.',  apply: (m) => { m.opener = true; } },
   { id: 'leech',       scope: 'squad', icon: '🩸', color: '#c83a5a', name: 'Leeching Strikes', desc: 'Heal 12% of all damage you deal.',           apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.12; } },
   { id: 'killingblow', scope: 'squad', icon: '☠️', color: '#c0c0d8', name: 'Killing Blow',   desc: '+30% damage to enemies already below half HP.', apply: (m) => { m.executioner = (m.executioner || 0) + 0.3; } },
+  { id: 'secondwind',  scope: 'squad', icon: '🪶', color: WIN,        name: 'Second Wind',    desc: 'Each grunling cheats death once per fight — survives a lethal blow at 30% HP.', apply: (m) => { m.phoenix = true; } },
   // ── Move-bend upgrades: scope:'unit' — you PICK which creature gets this, so
   // bends define your carry rather than spreading thin across the squad. Only
   // offered when you brought the matching Type (no dead drafts). ──
@@ -994,7 +995,7 @@ function playerDef(member, squadMods, perm) {
       cinderskin:      p.cinderskin || false,
       backdraftShield: p.backdraftShield || false,
       smolder:         p.smolder || false,
-      phoenix:         p.phoenix || false,
+      phoenix:         (squadMods?.phoenix || false) || p.phoenix || false, // squad route = "Second Wind" upgrade (vF-AQ)
       // Keystones (deep tree, opt-in flags):
       singularity:    p.singularity    || false,
       overloadRefund: p.overloadRefund || false,
