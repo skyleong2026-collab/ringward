@@ -499,31 +499,31 @@ function savePerks(ids) {
 // channel (same opt-in path as perks/Holdfast), so the engine + goldens stay byte-identical.
 const RELICS = [
   // Commons — one clean stat, the bread-and-butter of a loadout.
-  { id: 'r_ironwood',  icon: '🌰', color: '#c9a06a', name: 'Ironwood Charm', rarity: 'Common', desc: '+18% max HP.',                       lore: 'Blight-hardened heartwood. Heavy — and it makes you heavy too.',  apply: (m) => { m.hpMult *= 1.18; } },
-  { id: 'r_quickcore', icon: '⚡', color: CHG,       name: 'Quick Core',     rarity: 'Common', desc: 'Start every fight +2 charge.',       lore: 'Still warm to the touch. It wants to go.',                       apply: (m) => { m.chargeStart += 2; } },
-  { id: 'r_menderknot',icon: '💚', color: WIN,       name: "Mender's Knot",  rarity: 'Common', desc: 'Healing is +50% stronger.',          lore: 'Tied by a healer who climbed these rings before you.',           apply: (m) => { m.healMult *= 1.5; } },
+  { id: 'r_ironwood', img: '/art/relics/r_ironwood.jpg',  icon: '🌰', color: '#c9a06a', name: 'Ironwood Charm', rarity: 'Common', desc: '+18% max HP.',                       lore: 'Blight-hardened heartwood. Heavy — and it makes you heavy too.',  apply: (m) => { m.hpMult *= 1.18; } },
+  { id: 'r_quickcore', img: '/art/relics/r_quickcore.jpg', icon: '⚡', color: CHG,       name: 'Quick Core',     rarity: 'Common', desc: 'Start every fight +2 charge.',       lore: 'Still warm to the touch. It wants to go.',                       apply: (m) => { m.chargeStart += 2; } },
+  { id: 'r_menderknot', img: '/art/relics/r_menderknot.jpg',icon: '💚', color: WIN,       name: "Mender's Knot",  rarity: 'Common', desc: 'Healing is +50% stronger.',          lore: 'Tied by a healer who climbed these rings before you.',           apply: (m) => { m.healMult *= 1.5; } },
   // Rares — bigger, most with a small second edge.
-  { id: 'r_whetfang',   icon: '⚔️', color: '#ff8a4a', name: 'Whetstone Fang', rarity: 'Rare', desc: '+35% damage.',                        lore: 'A tooth filed to an edge that never seems to dull.',             apply: (m) => { m.dmgMult *= 1.35; } },
-  { id: 'r_emberbrand', icon: '🔥', color: BURN,      name: 'Ember Brand',    rarity: 'Rare', desc: 'Burns +2 stacks, +10% damage.',       lore: 'It smoulders against the cold of the deep rings.',              apply: (m) => { m.burnBonus += 2; m.dmgMult *= 1.1; } },
-  { id: 'r_bulwark',    icon: '🛡️', color: '#7fd6ff', name: 'Bulwark Stone',  rarity: 'Rare', desc: '+30% max HP and +30% shields.',       lore: 'A shard of the Fallen Gate that still remembers holding.',       apply: (m) => { m.hpMult *= 1.3; m.blockMult *= 1.3; } },
-  { id: 'r_reckless',   icon: '🩸', color: '#ff6b6b', name: 'Reckless Charm', rarity: 'Rare', desc: '+55% damage, −18% max HP.',           lore: 'Climb angry, climb fast — and mind the long way down.',         apply: (m) => { m.dmgMult *= 1.55; m.hpMult *= 0.82; } },
+  { id: 'r_whetfang', img: '/art/relics/r_whetfang.jpg',   icon: '⚔️', color: '#ff8a4a', name: 'Whetstone Fang', rarity: 'Rare', desc: '+35% damage.',                        lore: 'A tooth filed to an edge that never seems to dull.',             apply: (m) => { m.dmgMult *= 1.35; } },
+  { id: 'r_emberbrand', img: '/art/relics/r_emberbrand.jpg', icon: '🔥', color: BURN,      name: 'Ember Brand',    rarity: 'Rare', desc: 'Burns +2 stacks, +10% damage.',       lore: 'It smoulders against the cold of the deep rings.',              apply: (m) => { m.burnBonus += 2; m.dmgMult *= 1.1; } },
+  { id: 'r_bulwark', img: '/art/relics/r_bulwark.jpg',    icon: '🛡️', color: '#7fd6ff', name: 'Bulwark Stone',  rarity: 'Rare', desc: '+30% max HP and +30% shields.',       lore: 'A shard of the Fallen Gate that still remembers holding.',       apply: (m) => { m.hpMult *= 1.3; m.blockMult *= 1.3; } },
+  { id: 'r_reckless', img: '/art/relics/r_reckless.jpg',   icon: '🩸', color: '#ff6b6b', name: 'Reckless Charm', rarity: 'Rare', desc: '+55% damage, −18% max HP.',           lore: 'Climb angry, climb fast — and mind the long way down.',         apply: (m) => { m.dmgMult *= 1.55; m.hpMult *= 0.82; } },
   // Legendaries — run-defining, with a real trade.
-  { id: 'r_bloodpact', icon: '❤️‍🔥', color: '#ff4d6d', name: 'Bloodpact',    rarity: 'Legendary', desc: '+30% damage, +40% healing, −10% HP.', lore: 'What you pour out comes back doubled. Some of you stays behind.', apply: (m) => { m.dmgMult *= 1.3; m.healMult *= 1.4; m.hpMult *= 0.9; } },
-  { id: 'r_glassedge', icon: '🗡️', color: '#e8e2ff', name: 'Glass Edge',     rarity: 'Legendary', desc: '+70% damage, −30% max HP.',          lore: 'It cuts through anything. Including the hand that holds it.',     apply: (m) => { m.dmgMult *= 1.7; m.hpMult *= 0.7; } },
-  { id: 'r_dropshard', icon: '✦',  color: ACCENT,    name: 'Drop-Shard',     rarity: 'Legendary', desc: '+18% damage, +18% HP, +1 charge.',   lore: 'A splinter of whatever fell. It hums in tune with your cores.',   apply: (m) => { m.dmgMult *= 1.18; m.hpMult *= 1.18; m.chargeStart += 1; } },
+  { id: 'r_bloodpact', img: '/art/relics/r_bloodpact.jpg', icon: '❤️‍🔥', color: '#ff4d6d', name: 'Bloodpact',    rarity: 'Legendary', desc: '+30% damage, +40% healing, −10% HP.', lore: 'What you pour out comes back doubled. Some of you stays behind.', apply: (m) => { m.dmgMult *= 1.3; m.healMult *= 1.4; m.hpMult *= 0.9; } },
+  { id: 'r_glassedge', img: '/art/relics/r_glassedge.jpg', icon: '🗡️', color: '#e8e2ff', name: 'Glass Edge',     rarity: 'Legendary', desc: '+70% damage, −30% max HP.',          lore: 'It cuts through anything. Including the hand that holds it.',     apply: (m) => { m.dmgMult *= 1.7; m.hpMult *= 0.7; } },
+  { id: 'r_dropshard', img: '/art/relics/r_dropshard.jpg', icon: '✦',  color: ACCENT,    name: 'Drop-Shard',     rarity: 'Legendary', desc: '+18% damage, +18% HP, +1 charge.',   lore: 'A splinter of whatever fell. It hums in tune with your cores.',   apply: (m) => { m.dmgMult *= 1.18; m.hpMult *= 1.18; m.chargeStart += 1; } },
   // VERB relics (vF-AF) — not a stat, a RULE. Conditional and build-defining; they hook
   // the shared combat path (opener/apex/shatter) so the whole squad gets the verb.
-  { id: 'r_ambush',    icon: '🎯', color: '#ffd166',  name: "Ambusher's Edge",rarity: 'Rare',      desc: 'First hit on a full-HP enemy: +25% damage.', lore: 'Strike before they know you are even there.',                  apply: (m) => { m.opener = true; } },
-  { id: 'r_frostbite', icon: '❄️', color: '#7fd6ff',  name: 'Frostbite Charm',rarity: 'Rare',      desc: 'Hits on a FROZEN enemy deal +50%. Pairs with a Warden.',     lore: 'Cold makes a thing brittle. Then you break it.',               apply: (m) => { m.shatter = true; } },
-  { id: 'r_totem',     icon: '🐺', color: '#ff7a9c',  name: "Hunter's Totem", rarity: 'Legendary', desc: 'Every kill sharpens that grunling +8% damage — stacks all fight.', lore: 'Blood remembers. The pack grows keener with every fall.',     apply: (m) => { m.apex = true; } },
-  { id: 'r_vampiric',  icon: '🩸', color: '#c83a5a',  name: 'Vampiric Edge',  rarity: 'Legendary', desc: 'Heal 15% of all damage you deal.',             lore: 'It takes a little life each time it bites — and gives it to you.', apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.15; } },
+  { id: 'r_ambush', img: '/art/relics/r_ambush.jpg',    icon: '🎯', color: '#ffd166',  name: "Ambusher's Edge",rarity: 'Rare',      desc: 'First hit on a full-HP enemy: +25% damage.', lore: 'Strike before they know you are even there.',                  apply: (m) => { m.opener = true; } },
+  { id: 'r_frostbite', img: '/art/relics/r_frostbite.jpg', icon: '❄️', color: '#7fd6ff',  name: 'Frostbite Charm',rarity: 'Rare',      desc: 'Hits on a FROZEN enemy deal +50%. Pairs with a Warden.',     lore: 'Cold makes a thing brittle. Then you break it.',               apply: (m) => { m.shatter = true; } },
+  { id: 'r_totem', img: '/art/relics/r_totem.jpg',     icon: '🐺', color: '#ff7a9c',  name: "Hunter's Totem", rarity: 'Legendary', desc: 'Every kill sharpens that grunling +8% damage — stacks all fight.', lore: 'Blood remembers. The pack grows keener with every fall.',     apply: (m) => { m.apex = true; } },
+  { id: 'r_vampiric', img: '/art/relics/r_vampiric.jpg',  icon: '🩸', color: '#c83a5a',  name: 'Vampiric Edge',  rarity: 'Legendary', desc: 'Heal 15% of all damage you deal.',             lore: 'It takes a little life each time it bites — and gives it to you.', apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.15; } },
   // More stat/trade relics — widen the build space (a healer kit, a berserker kit, tempo).
-  { id: 'r_stoneblood',icon: '🪨', color: '#a89070',  name: 'Stoneblood',     rarity: 'Common',    desc: '+22% max HP.',                               lore: 'Slow to bleed, slower to fall.',                              apply: (m) => { m.hpMult *= 1.22; } },
-  { id: 'r_wrathcore', icon: '😤', color: '#ff5a3c',  name: 'Wrathcore',      rarity: 'Rare',      desc: '+42% damage, −12% healing.',                 lore: 'All forward. Mending is for after — if there is an after.',    apply: (m) => { m.dmgMult *= 1.42; m.healMult *= 0.88; } },
-  { id: 'r_surgeon',   icon: '🧰', color: '#7be0a0',  name: "Surgeon's Kit",  rarity: 'Rare',      desc: '+70% healing, −12% damage.',                 lore: 'Keep everyone standing and the rest sorts itself out.',        apply: (m) => { m.healMult *= 1.7; m.dmgMult *= 0.88; } },
-  { id: 'r_frenzy',    icon: '🔆', color: '#ffb84d',  name: 'Frenzy Totem',   rarity: 'Legendary', desc: '+20% damage and start every fight +1 charge.', lore: 'It will not let you wait. Neither will what is coming.',       apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
-  { id: 'r_reaper',    icon: '☠️', color: '#c0c0d8',  name: "Reaper's Mark",  rarity: 'Legendary', desc: '+40% damage to enemies already below half HP.', lore: 'Finish what the climb started. Leave nothing standing.',      apply: (m) => { m.executioner = (m.executioner || 0) + 0.4; } },
-  { id: 'r_bramble',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
+  { id: 'r_stoneblood', img: '/art/relics/r_stoneblood.jpg',icon: '🪨', color: '#a89070',  name: 'Stoneblood',     rarity: 'Common',    desc: '+22% max HP.',                               lore: 'Slow to bleed, slower to fall.',                              apply: (m) => { m.hpMult *= 1.22; } },
+  { id: 'r_wrathcore', img: '/art/relics/r_wrathcore.jpg', icon: '😤', color: '#ff5a3c',  name: 'Wrathcore',      rarity: 'Rare',      desc: '+42% damage, −12% healing.',                 lore: 'All forward. Mending is for after — if there is an after.',    apply: (m) => { m.dmgMult *= 1.42; m.healMult *= 0.88; } },
+  { id: 'r_surgeon', img: '/art/relics/r_surgeon.jpg',   icon: '🧰', color: '#7be0a0',  name: "Surgeon's Kit",  rarity: 'Rare',      desc: '+70% healing, −12% damage.',                 lore: 'Keep everyone standing and the rest sorts itself out.',        apply: (m) => { m.healMult *= 1.7; m.dmgMult *= 0.88; } },
+  { id: 'r_frenzy', img: '/art/relics/r_frenzy.jpg',    icon: '🔆', color: '#ffb84d',  name: 'Frenzy Totem',   rarity: 'Legendary', desc: '+20% damage and start every fight +1 charge.', lore: 'It will not let you wait. Neither will what is coming.',       apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
+  { id: 'r_reaper', img: '/art/relics/r_reaper.jpg',    icon: '☠️', color: '#c0c0d8',  name: "Reaper's Mark",  rarity: 'Legendary', desc: '+40% damage to enemies already below half HP.', lore: 'Finish what the climb started. Leave nothing standing.',      apply: (m) => { m.executioner = (m.executioner || 0) + 0.4; } },
+  { id: 'r_bramble', img: '/art/relics/r_bramble.jpg',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
   { id: 'r_phoenix',   icon: '🪶', color: '#ffb84d',  name: 'Phoenix Feather', rarity: 'Legendary', desc: 'Each grunling survives one lethal blow per fight (revives at 30% HP).', lore: 'A single bright feather, warm to the touch. It does not burn — it remembers how to come back.', apply: (m) => { m.phoenix = true; } },
   { id: 'r_reservoir', icon: '🌀', color: CHG,        name: 'Reservoir Core',  rarity: 'Rare',      desc: 'Every kill banks +2 charge on the grunling that landed it.', lore: 'It drinks the last spark of whatever falls to you, and saves it for the next blow.', apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
 ];
@@ -579,6 +579,14 @@ function rollRelicChoices(owned, n = 3) {
     out.push(work[i]); work.splice(i, 1); w.splice(i, 1);
   }
   return out;
+}
+// Renders a relic's icon: a painted image if the relic carries an `img` path (art-instance
+// drop-in), else the emoji fallback. So adding relic art = just set `img:` on the relic +
+// drop the file; no render change needed. `size` is the emoji font-size; the image scales to it.
+function RelicIcon({ r, size = 16, dim = false }) {
+  const f = dim ? 'grayscale(1) brightness(0.5)' : 'none';
+  if (r?.img) return <img src={r.img} alt="" style={{ width: Math.round(size * 1.15), height: Math.round(size * 1.15), objectFit: 'contain', display: 'block', filter: f }} />;
+  return <span style={{ fontSize: size, filter: f }}>{r?.icon ?? '✦'}</span>;
 }
 
 // ── Stable: the creatures you've caught — grows every time you clear the ring. ──
@@ -1148,6 +1156,14 @@ const FOCAL_X = {
   vault: 0.02, bastion: 0.02, bulwark: 0.02,
   link: 0.04, nexus: 0.04, conduit: 0.04,
   striker: 0.04, fang: 0.04, claw: 0.04,
+  fizzpop: 0.5, glowtail: 0.5, cinderpaw: 0.5,
+  stoneward: 0.5, ironwall: 0.5,
+  mossback: 0.5, dewleaf: 0.5,
+  buzzline: 0.5, tanglewing: 0.5,
+  swiftpaw: 0.5, dartwing: 0.5,
+  shadefang: 0.5, veilclaw: 0.5,
+  blightcap: 0.5, hexmoth: 0.5,
+  frostwarden: 0.5, rimecaller: 0.5,
 };
 
 // One creature, cropped big out of its concept-art strip and framed in its type
@@ -1169,7 +1185,7 @@ function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, siz
         <div style={{ width: '100%', height: '100%', animation: animCss }}>
           <div style={{
             width: '100%', height: '100%',
-            backgroundImage: `url(/sprites/${spriteId}.png)`,
+            backgroundImage: `url(/sprites/${spriteId}.jpg)`,
             backgroundSize: 'auto 122%',
             backgroundPosition: `${focal}% 38%`,
             backgroundRepeat: 'no-repeat',
@@ -2569,7 +2585,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <div key={r.id} title={have ? r.lore : 'Undiscovered — found on a ring boss.'}
                       style={{ borderRadius: 10, padding: '9px 10px', background: have ? PANEL : '#0b0b10', border: `1.5px solid ${have ? (eq ? '#b06bff' : `${r.color}66`) : LINE}`, opacity: have ? 1 : 0.55 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: T.body, filter: have ? 'none' : 'grayscale(1) brightness(0.5)' }}>{have ? r.icon : '✦'}</span>
+                        {have ? <RelicIcon r={r} size={T.body} /> : <span style={{ fontSize: T.body, filter: 'grayscale(1) brightness(0.5)' }}>✦</span>}
                         <span style={{ fontSize: T.small, fontWeight: 900, color: have ? r.color : '#54506a' }}>{have ? r.name : '? ? ?'}</span>
                         {eq && <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#cba6ff' }}>●</span>}
                       </div>
@@ -2774,7 +2790,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
                       background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                      <span style={{ fontSize: T.body }}>{r.icon}</span>
+                      <RelicIcon r={r} size={T.body} />
                       <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
                       <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
                     </div>
@@ -3264,7 +3280,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
                       style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1.5px solid ${r.color}88` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: T.body }}>{r.icon}</span>
+                        <RelicIcon r={r} size={T.body} />
                         <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
                       </div>
                       <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
@@ -3278,7 +3294,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           {relicDrop && (
             <div style={{ background: '#150d22', border: '1.5px solid #b06bff', borderRadius: 11, padding: '11px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                <span style={{ fontSize: 30 }}>{relicDrop.icon}</span>
+                <RelicIcon r={relicDrop} size={30} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC TAKEN</div>
                   <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '2px 0' }}>{relicDrop.name} <span style={{ fontSize: T.micro, fontWeight: 800, color: (RARITY_INFO[relicDrop.rarity] || {}).color }}>· {relicDrop.rarity}</span></div>
@@ -3411,7 +3427,7 @@ function LearnMode({ narrow, onGraduate }) {
   function start() {
     const cre = COMBAT_CREATURES.cinderpaw;
     const you = [{ ...cre, temperament: 'Balanced', maxHp: cre.hp, hp: cre.hp }];
-    const dummy = { ...COMBAT_CREATURES.glowtail, name: 'Straw Target', spriteId: 'flicker', hp: 90, maxHp: 90, atk: 6, speed: 1 };
+    const dummy = { ...COMBAT_CREATURES.glowtail, name: 'Straw Target', spriteId: 'glowtail', hp: 90, maxHp: 90, atk: 6, speed: 1 };
     fight.begin(you, [dummy], 11, 'play', () => setStage('won'));
     setStage('fight');
   }
@@ -3425,7 +3441,7 @@ function LearnMode({ narrow, onGraduate }) {
     return (
       <div style={{ textAlign: 'center', maxWidth: 520, margin: '0 auto', paddingTop: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-          <Sprite spriteId="cinder" color={ti.accent} glyph={ti.glyph} size={140} />
+          <Sprite spriteId="cinderpaw" color={ti.accent} glyph={ti.glyph} size={140} />
         </div>
         <div style={{ fontSize: T.sub, fontWeight: 900, color: ti.accent, marginBottom: 16 }}>🔥 Cinderpaw</div>
         {/* the whole game, as a picture: fill charge → spend it big */}
