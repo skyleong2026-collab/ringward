@@ -514,6 +514,14 @@ function rollRelicChoices(owned, n = 3) {
   }
   return out;
 }
+// Renders a relic's icon: a painted image if the relic carries an `img` path (art-instance
+// drop-in), else the emoji fallback. So adding relic art = just set `img:` on the relic +
+// drop the file; no render change needed. `size` is the emoji font-size; the image scales to it.
+function RelicIcon({ r, size = 16, dim = false }) {
+  const f = dim ? 'grayscale(1) brightness(0.5)' : 'none';
+  if (r?.img) return <img src={r.img} alt="" style={{ width: Math.round(size * 1.15), height: Math.round(size * 1.15), objectFit: 'contain', display: 'block', filter: f }} />;
+  return <span style={{ fontSize: size, filter: f }}>{r?.icon ?? '✦'}</span>;
+}
 
 // ── Stable: the creatures you've caught — grows every time you clear the ring. ──
 // You start with three (one of three Types) and win one more per clear. Once you
@@ -1081,6 +1089,14 @@ const FOCAL_X = {
   vault: 0.02, bastion: 0.02, bulwark: 0.02,
   link: 0.04, nexus: 0.04, conduit: 0.04,
   striker: 0.04, fang: 0.04, claw: 0.04,
+  fizzpop: 0.5, glowtail: 0.5, cinderpaw: 0.5,
+  stoneward: 0.5, ironwall: 0.5,
+  mossback: 0.5, dewleaf: 0.5,
+  buzzline: 0.5, tanglewing: 0.5,
+  swiftpaw: 0.5, dartwing: 0.5,
+  shadefang: 0.5, veilclaw: 0.5,
+  blightcap: 0.5, hexmoth: 0.5,
+  frostwarden: 0.5, rimecaller: 0.5,
 };
 
 // One creature, cropped big out of its concept-art strip and framed in its type
@@ -1102,7 +1118,7 @@ function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, siz
         <div style={{ width: '100%', height: '100%', animation: animCss }}>
           <div style={{
             width: '100%', height: '100%',
-            backgroundImage: `url(/sprites/${spriteId}.png)`,
+            backgroundImage: `url(/sprites/${spriteId}.jpg)`,
             backgroundSize: 'auto 122%',
             backgroundPosition: `${focal}% 38%`,
             backgroundRepeat: 'no-repeat',
@@ -2502,7 +2518,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <div key={r.id} title={have ? r.lore : 'Undiscovered — found on a ring boss.'}
                       style={{ borderRadius: 10, padding: '9px 10px', background: have ? PANEL : '#0b0b10', border: `1.5px solid ${have ? (eq ? '#b06bff' : `${r.color}66`) : LINE}`, opacity: have ? 1 : 0.55 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: T.body, filter: have ? 'none' : 'grayscale(1) brightness(0.5)' }}>{have ? r.icon : '✦'}</span>
+                        {have ? <RelicIcon r={r} size={T.body} /> : <span style={{ fontSize: T.body, filter: 'grayscale(1) brightness(0.5)' }}>✦</span>}
                         <span style={{ fontSize: T.small, fontWeight: 900, color: have ? r.color : '#54506a' }}>{have ? r.name : '? ? ?'}</span>
                         {eq && <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#cba6ff' }}>●</span>}
                       </div>
@@ -2680,7 +2696,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
                       background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                      <span style={{ fontSize: T.body }}>{r.icon}</span>
+                      <RelicIcon r={r} size={T.body} />
                       <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
                       <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
                     </div>
@@ -3170,7 +3186,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
                       style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1.5px solid ${r.color}88` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <span style={{ fontSize: T.body }}>{r.icon}</span>
+                        <RelicIcon r={r} size={T.body} />
                         <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
                       </div>
                       <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
@@ -3184,7 +3200,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           {relicDrop && (
             <div style={{ background: '#150d22', border: '1.5px solid #b06bff', borderRadius: 11, padding: '11px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                <span style={{ fontSize: 30 }}>{relicDrop.icon}</span>
+                <RelicIcon r={relicDrop} size={30} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC TAKEN</div>
                   <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '2px 0' }}>{relicDrop.name} <span style={{ fontSize: T.micro, fontWeight: 800, color: (RARITY_INFO[relicDrop.rarity] || {}).color }}>· {relicDrop.rarity}</span></div>
@@ -3317,7 +3333,7 @@ function LearnMode({ narrow, onGraduate }) {
   function start() {
     const cre = COMBAT_CREATURES.cinderpaw;
     const you = [{ ...cre, temperament: 'Balanced', maxHp: cre.hp, hp: cre.hp }];
-    const dummy = { ...COMBAT_CREATURES.glowtail, name: 'Straw Target', spriteId: 'flicker', hp: 90, maxHp: 90, atk: 6, speed: 1 };
+    const dummy = { ...COMBAT_CREATURES.glowtail, name: 'Straw Target', spriteId: 'glowtail', hp: 90, maxHp: 90, atk: 6, speed: 1 };
     fight.begin(you, [dummy], 11, 'play', () => setStage('won'));
     setStage('fight');
   }
@@ -3331,7 +3347,7 @@ function LearnMode({ narrow, onGraduate }) {
     return (
       <div style={{ textAlign: 'center', maxWidth: 520, margin: '0 auto', paddingTop: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-          <Sprite spriteId="cinder" color={ti.accent} glyph={ti.glyph} size={140} />
+          <Sprite spriteId="cinderpaw" color={ti.accent} glyph={ti.glyph} size={140} />
         </div>
         <div style={{ fontSize: T.sub, fontWeight: 900, color: ti.accent, marginBottom: 16 }}>🔥 Cinderpaw</div>
         {/* the whole game, as a picture: fill charge → spend it big */}
