@@ -102,6 +102,22 @@ const HUNTING_GROUNDS = [
   { id: 'witherfen',   name: 'The Witherfen',            tag: 'where the blight pools', depth: 7, boss: 'The Blight-Heart', biasIds: ['blightcap', 'hexmoth'] },
   { id: 'frostbound',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', depth: 8, boss: 'The Stillness', biasIds: ['frostwarden', 'rimecaller'] },
 ];
+
+// ── WARD GATES (vF-BI) — some thresholds inward won't open to a boss kill alone. A Ward
+// bars the way and sets a RIDDLE: solve its DEED (a clue you decode) to earn the key and
+// pass. A deed wants a SQUAD SHAPE (e.g. two Types climbing together), not raw power — so
+// you can't out-farm the wall — but it's always doable in rings you've already opened, and
+// beta bypasses wards entirely, so no one ever soft-locks. Pure progression-gating; the
+// combat engine is never touched. More wards + chained clues + crafted keys layer on later.
+const WARDS = [
+  { atDepth: 4, id: 'paired', name: "The Warden's Lock", glyph: '🜸', tint: '#9be7ff',
+    // The story shown the first time you reach the sealed gate — the reason WHY it asks this.
+    story: "The way out of the Storm-Wire ends at a gate older than the blight: two iron sockets where a single core should lock, not one. Your people built it back when the rim was held in pairs — a Warden to hold the line, a Reactor to break what came at it — never one climber alone. The mentor's mark is cut fresh beside the sockets: “It still remembers how we did it. Show it, and it'll let you by.”",
+    clue: 'A shield and a flame, set in the old gate together. Bring a 🛡 Bulwark and a 🔥 Reactor back through the Fallen Gate side by side — twice over — and the lock will know its own.',
+    deed: { ring: 'fallen-gate', types: ['Bulwark', 'Reactor'], count: 2,
+      told: 'Clear the Fallen Gate with a 🛡 Bulwark AND a 🔥 Reactor in your squad' } },
+];
+const WARD_AT = Object.fromEntries(WARDS.map((w) => [w.atDepth, w]));
 const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
 const GROUND_KEY = '8gents_seam_ground';
 
@@ -371,6 +387,9 @@ const crossingBeat = (c) => CROSSING_BEATS[Math.min(c, CROSSING_BEATS.length - 1
 const CROSSING_KEY = '8gents_seam_crossing'; // how many times you've stepped through the Drop (NG+ level)
 function loadCrossing() { try { return Math.max(0, parseInt(localStorage.getItem(CROSSING_KEY), 10) || 0); } catch { return 0; } }
 function saveCrossing(n) { try { localStorage.setItem(CROSSING_KEY, String(n)); } catch { /* best-effort */ } }
+const WARDS_KEY = '8gents_seam_wards'; // {wardId: {active, progress, solved}} — gate-riddle state
+function loadWards() { try { return JSON.parse(localStorage.getItem(WARDS_KEY) || '{}') || {}; } catch { return {}; } }
+function saveWards(w) { try { localStorage.setItem(WARDS_KEY, JSON.stringify(w)); } catch { /* best-effort */ } }
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']; // crossing numeral
 const roman = (n) => ROMAN[n] || ('×' + n);
 
@@ -2199,6 +2218,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [sigils, setSigils] = useState(loadSigils); // {apexId: count} — gathered toward a challenge
   const [unlocked, setUnlocked] = useState(loadUnlocked); // deepest ring earned (strict inward)
   const [unlockedNow, setUnlockedNow] = useState(null); // ring depth just opened (won-screen beat)
+  const [wards, setWards] = useState(loadWards);        // {wardId: {active, progress, solved}} — gate riddles
+  const [wardBlock, setWardBlock] = useState(null);     // a Ward just barred the way (won-screen reveal)
+  const [wardSolvedNow, setWardSolvedNow] = useState(null); // a Ward's riddle just completed (won-screen reveal)
   const [beta, setBeta] = useState(loadBeta); // test switch — fast-forwards the gate
   const accessDepth = beta ? 8 : unlocked; // the deepest ring you may enter right now
   const [challenge, setChallenge] = useState(null); // apex creature def currently being challenged
@@ -2498,11 +2520,37 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         setCaughtFrom(hunted);
         // Record the clear — repeats of this ring pay diminishing Cores from here on.
         setClears((c) => { const n = { ...c, [hunted.id]: (c[hunted.id] || 0) + 1 }; saveClears(n); return n; });
-        // Strict inward: beating a ring's boss at your current frontier opens the next ring
-        // (and its higher tier). Beta mode skips the gate, so it never re-unlocks.
-        if (!beta && hunted.depth === unlocked && unlocked < 8) {
+        // Strict inward + WARD GATES: beating a ring's boss at your frontier opens the next
+        // ring — UNLESS a Ward bars that threshold. A sealed Ward reveals its riddle and the
+        // way stays shut until its deed is done. Beta skips wards (and the gate) entirely.
+        const frontierWin = !beta && hunted.depth === unlocked && unlocked < 8;
+        const ward = WARD_AT[unlocked];
+        if (frontierWin && ward && !wards[ward.id]?.solved) {
+          setWards((w) => { const cur = w[ward.id] || {}; const n = { ...w, [ward.id]: { active: true, progress: cur.progress || 0, solved: false } }; saveWards(n); return n; });
+          setWardBlock(ward); setUnlockedNow(null);
+        } else if (frontierWin) {
           const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); setUnlockedNow(nd);
         } else setUnlockedNow(null);
+        // WARD DEEDS: any clear can advance an ACTIVE ward's riddle — the right ring with the
+        // right squad shape (e.g. a Bulwark + a Reactor fielded together). Complete it and the
+        // ward opens (its gated ring unlocks) + drops a key relic. Never touches the engine.
+        setWardSolvedNow(null);
+        WARDS.forEach((wd) => {
+          const ws = wards[wd.id];
+          if (!ws?.active || ws.solved) return;
+          const d = wd.deed;
+          const ringOk = hunted.id === d.ring;
+          const typesOk = (d.types || [d.type]).every((t) => squad.some((m) => COMBAT_CREATURES[m.id]?.type === t));
+          if (!ringOk || !typesOk) return;
+          const progress = (ws.progress || 0) + 1;
+          const solved = progress >= d.count;
+          setWards((w) => { const n = { ...w, [wd.id]: { ...(w[wd.id] || {}), active: true, progress, solved } }; saveWards(n); return n; });
+          if (solved) {
+            setWardSolvedNow(wd);
+            if (unlocked === wd.atDepth && unlocked < 8) { const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); }
+            const rd = rollRelicChoices(relics, 1)[0]; if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); } // the key, made manifest
+          }
+        });
         // THE HOLDFAST reclaims a stage the first time you beat a ring's boss (works in
         // beta too — pushing deeper heals more of the home + drips the next story beat).
         if (hunted.depth > reclaimed) {
@@ -2636,7 +2684,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -3033,6 +3081,17 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 );
               })}
             </div>
+            {/* ── Active WARD riddles — the wall ahead + how to solve it (always visible). ── */}
+            {WARDS.filter((w) => wards[w.id]?.active && !wards[w.id]?.solved).map((w) => (
+              <div key={w.id} style={{ borderRadius: 10, border: `1px solid ${w.tint}66`, background: 'linear-gradient(180deg,#0c1620,#0a0e16)', padding: '11px 13px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 15 }}>{w.glyph}</span>
+                  <span style={{ fontSize: T.small, fontWeight: 900, color: w.tint }}>{w.name} <span style={{ color: DIM, fontWeight: 700 }}>· bars the way inward</span></span>
+                  <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 900, color: '#9be7ff' }}>{(wards[w.id]?.progress) || 0}/{w.deed.count}</span>
+                </div>
+                <div style={{ fontSize: T.micro, color: '#bcd0e0', lineHeight: 1.45 }}>{w.deed.told}. <span style={{ color: DIM, fontStyle: 'italic' }}>Solve the riddle and the gate opens.</span></div>
+              </div>
+            ))}
             {(() => {
               // The ring picker is the RUN selector — it always shows (even with everything
               // caught, you still pick a ring to raid for Cores + boss clears that open the
@@ -3373,7 +3432,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                           setOwned([]); savePerks([]);                 // Forge perks too.
                           setRelics([]); saveRelics([]);               // the relic collection,
                           setRelicKit([]); saveRelicKit([]);            // the equipped kit,
-                          setCrossing(0); saveCrossing(0);              // and the NG+ crossing level.
+                          setCrossing(0); saveCrossing(0);              // the NG+ crossing level,
+                          setWards({}); saveWards({});                  // and every ward riddle.
                           setGround('outer-ring'); saveGround('outer-ring');
                           setPicked([]); saveSquad([]);
                         }],
@@ -3775,6 +3835,28 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ margin: '12px 0', padding: '12px 14px', borderRadius: 12, background: '#1a1407', border: `2px solid ${ACCENT}` }}>
               <div style={{ fontSize: T.small, fontWeight: 900, color: ACCENT, letterSpacing: 0.5 }}>🔓 THE WAY INWARD OPENS</div>
               <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open, with rarer creatures to pull within.</div>
+            </div>
+          ); })()}
+          {wardBlock && (
+            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: 'linear-gradient(180deg,#0c1620,#0a0e16)', border: `2px solid ${wardBlock.tint}`, boxShadow: `0 0 16px ${wardBlock.tint}33`, textAlign: 'left' }}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: wardBlock.tint }}>{wardBlock.glyph} THE WAY IS SEALED</div>
+              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', margin: '3px 0 6px' }}>{wardBlock.name}</div>
+              <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.55, fontStyle: 'italic', marginBottom: 10 }}>{wardBlock.story}</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 11px', borderRadius: 9, background: '#0a0e16', border: `1px solid ${wardBlock.tint}55` }}>
+                <span style={{ fontSize: T.body }}>🜲</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: wardBlock.tint }}>The riddle</div>
+                  <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.5 }}>{wardBlock.clue}</div>
+                  <div style={{ fontSize: T.micro, fontWeight: 800, color: '#9be7ff', marginTop: 6 }}>→ {wardBlock.deed.told} · {(wards[wardBlock.id]?.progress) || 0}/{wardBlock.deed.count}</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {wardSolvedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === wardSolvedNow.atDepth + 1); return (
+            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: 'linear-gradient(180deg,#10231a,#0c1812)', border: `2px solid ${WIN}`, boxShadow: `0 0 16px ${WIN}44`, textAlign: 'left' }}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: WIN }}>{wardSolvedNow.glyph} THE LOCK KNOWS ITS OWN</div>
+              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eafff2', margin: '3px 0 6px' }}>{wardSolvedNow.name} opens</div>
+              <div style={{ fontSize: T.small, color: '#bfe8cf', lineHeight: 1.5 }}>You did as the old gate asked. It grinds open — the way inward to <b>{g?.name || 'the deep'}</b> lies clear, and a key relic is yours for the solving.</div>
             </div>
           ); })()}
           {holdfastNow && (
