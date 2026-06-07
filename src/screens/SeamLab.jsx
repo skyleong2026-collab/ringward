@@ -454,6 +454,48 @@ function savePerks(ids) {
   try { localStorage.setItem(PERKS_KEY, JSON.stringify(ids)); } catch { /* best-effort */ }
 }
 
+// ── RELICS (vF-AE) — the loot chase. Unlike PERKS (bought with slag, gentle always-on)
+// these are FOUND: every ring boss drops one. You collect them permanently, then equip a
+// LOADOUT of up to RELIC_SLOTS before a run. The point isn't raw power — relics carry
+// TRADE-OFFS (glass-cannon, bloodpact), so your equipped three DEFINE a build: go fragile
+// and lethal, or slow and unkillable. They funnel through perkBaseMods → the run-wide mod
+// channel (same opt-in path as perks/Holdfast), so the engine + goldens stay byte-identical.
+const RELICS = [
+  // Commons — one clean stat, the bread-and-butter of a loadout.
+  { id: 'r_ironwood',  icon: '🌰', color: '#c9a06a', name: 'Ironwood Charm', rarity: 'Common', desc: '+18% max HP.',                       lore: 'Blight-hardened heartwood. Heavy — and it makes you heavy too.',  apply: (m) => { m.hpMult *= 1.18; } },
+  { id: 'r_quickcore', icon: '⚡', color: CHG,       name: 'Quick Core',     rarity: 'Common', desc: 'Start every fight +2 charge.',       lore: 'Still warm to the touch. It wants to go.',                       apply: (m) => { m.chargeStart += 2; } },
+  { id: 'r_menderknot',icon: '💚', color: WIN,       name: "Mender's Knot",  rarity: 'Common', desc: 'Healing is +50% stronger.',          lore: 'Tied by a healer who climbed these rings before you.',           apply: (m) => { m.healMult *= 1.5; } },
+  // Rares — bigger, most with a small second edge.
+  { id: 'r_whetfang',   icon: '⚔️', color: '#ff8a4a', name: 'Whetstone Fang', rarity: 'Rare', desc: '+35% damage.',                        lore: 'A tooth filed to an edge that never seems to dull.',             apply: (m) => { m.dmgMult *= 1.35; } },
+  { id: 'r_emberbrand', icon: '🔥', color: BURN,      name: 'Ember Brand',    rarity: 'Rare', desc: 'Burns +2 stacks, +10% damage.',       lore: 'It smoulders against the cold of the deep rings.',              apply: (m) => { m.burnBonus += 2; m.dmgMult *= 1.1; } },
+  { id: 'r_bulwark',    icon: '🛡️', color: '#7fd6ff', name: 'Bulwark Stone',  rarity: 'Rare', desc: '+30% max HP and +30% shields.',       lore: 'A shard of the Fallen Gate that still remembers holding.',       apply: (m) => { m.hpMult *= 1.3; m.blockMult *= 1.3; } },
+  { id: 'r_reckless',   icon: '🩸', color: '#ff6b6b', name: 'Reckless Charm', rarity: 'Rare', desc: '+55% damage, −18% max HP.',           lore: 'Climb angry, climb fast — and mind the long way down.',         apply: (m) => { m.dmgMult *= 1.55; m.hpMult *= 0.82; } },
+  // Legendaries — run-defining, with a real trade.
+  { id: 'r_bloodpact', icon: '❤️‍🔥', color: '#ff4d6d', name: 'Bloodpact',    rarity: 'Legendary', desc: '+30% damage, +40% healing, −10% HP.', lore: 'What you pour out comes back doubled. Some of you stays behind.', apply: (m) => { m.dmgMult *= 1.3; m.healMult *= 1.4; m.hpMult *= 0.9; } },
+  { id: 'r_glassedge', icon: '🗡️', color: '#e8e2ff', name: 'Glass Edge',     rarity: 'Legendary', desc: '+70% damage, −30% max HP.',          lore: 'It cuts through anything. Including the hand that holds it.',     apply: (m) => { m.dmgMult *= 1.7; m.hpMult *= 0.7; } },
+  { id: 'r_dropshard', icon: '✦',  color: ACCENT,    name: 'Drop-Shard',     rarity: 'Legendary', desc: '+18% damage, +18% HP, +1 charge.',   lore: 'A splinter of whatever fell. It hums in tune with your cores.',   apply: (m) => { m.dmgMult *= 1.18; m.hpMult *= 1.18; m.chargeStart += 1; } },
+];
+const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
+const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
+const RELIC_KEY = '8gents_seam_relics';          // owned relic ids (the collection)
+const RELIC_LOADOUT_KEY = '8gents_seam_relic_kit'; // equipped subset, capped at RELIC_SLOTS
+const RELIC_DROP_WEIGHT = { Common: 50, Rare: 34, Legendary: 16 };
+function loadRelics() { try { return JSON.parse(localStorage.getItem(RELIC_KEY) || '[]') || []; } catch { return []; } }
+function saveRelics(ids) { try { localStorage.setItem(RELIC_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
+function loadRelicKit() { try { return JSON.parse(localStorage.getItem(RELIC_LOADOUT_KEY) || '[]') || []; } catch { return []; } }
+function saveRelicKit(ids) { try { localStorage.setItem(RELIC_LOADOUT_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
+// Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe).
+function relicMods(equippedIds, m) { (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) r.apply(m); }); }
+// A ring boss drops a relic: a weighted draw from what you DON'T yet own. null = collection full.
+function rollRelicDrop(owned) {
+  const pool = RELICS.filter((r) => !owned.includes(r.id));
+  if (!pool.length) return null;
+  const total = pool.reduce((s, r) => s + RELIC_DROP_WEIGHT[r.rarity], 0);
+  let x = Math.random() * total;
+  for (const r of pool) { x -= RELIC_DROP_WEIGHT[r.rarity]; if (x <= 0) return r; }
+  return pool[pool.length - 1];
+}
+
 // ── Stable: the creatures you've caught — grows every time you clear the ring. ──
 // You start with three (one of three Types) and win one more per clear. Once you
 // have all 13 the stable is full; extra wins still pay slag.
@@ -471,10 +513,11 @@ function saveStable(ids) {
 // Build the starting mods for a run from the perks you own AND the Holdfast stages
 // you've reclaimed (vs. EMPTY_MODS before). Both are opt-in mods — goldens never set
 // them, so combat stays byte-identical.
-function perkBaseMods(owned, reclaimed = 0) {
+function perkBaseMods(owned, reclaimed = 0, relicKit = []) {
   const m = { ...EMPTY_MODS };
   PERKS.forEach((p) => { if (owned.includes(p.id)) p.apply(m); });
   holdfastMods(reclaimed, m);
+  relicMods(relicKit, m); // equipped relic loadout — found gear, opt-in, golden-safe
   return m;
 }
 
@@ -1852,6 +1895,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const eventsSeenRef = useRef([]); // event ids already shown THIS run — no repeats within a run
   const [music, setMusic] = useState(loadMusic); // ambient pad on/off (user toggle, persisted)
   const [showIntro, setShowIntro] = useState(() => !introSeen()); // opening cutscene (first launch + replay)
+  const [relics, setRelics] = useState(loadRelics);        // owned relic ids (the collection — found from boss clears)
+  const [relicKit, setRelicKit] = useState(loadRelicKit);  // equipped relic loadout (subset, capped at RELIC_SLOTS)
+  const [relicDrop, setRelicDrop] = useState(null);        // a relic just found this clear (won-screen reveal)
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
@@ -1880,6 +1926,18 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     onSlag(-p.cost);
     const next = [...owned, p.id];
     setOwned(next); savePerks(next);
+  }
+
+  // Equip / bench a relic into the run loadout (capped at RELIC_SLOTS). You can only
+  // equip relics you own; the equipped set persists and feeds the next run's mods.
+  function toggleRelic(id) {
+    setRelicKit((cur) => {
+      let next;
+      if (cur.includes(id)) next = cur.filter((x) => x !== id);
+      else if (cur.length >= RELIC_SLOTS) return cur; // loadout full — bench one first
+      else next = [...cur, id];
+      saveRelicKit(next); sfx.upgradePick(); return next;
+    });
   }
 
   // Award Cores to each listed creature (banked permanently + tracked for the recap).
@@ -2061,6 +2119,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           setSigils(nextSig); saveSigils(nextSig);
           setSigilGain({ id: apexId, count, ready: count >= APEX_SIGILS });
         } else setSigilGain(null);
+        // RELIC DROP — every ring boss yields a relic (the loot chase). A weighted draw
+        // from what you don't own yet; once the collection is full, it pays slag instead.
+        const rd = rollRelicDrop(relics);
+        if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); setRelicDrop(rd); }
+        else { onSlag?.(35); setRelicDrop(null); }
         // THE DROP — clearing the final ring for the first time is the ending. The whole
         // climb has pointed here; play the theme and run the ceremony instead of the
         // ordinary won-screen. (reclaimed still holds the PRE-clear value here.)
@@ -2090,7 +2153,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setRunWaves(wavesForGround(g)); setRunDepth(g.depth);
     setEnteredRing(g); sfx.ringThreshold(g.depth); // crossing the threshold — a beat + a deepening swell
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
-    const base = perkBaseMods(owned, reclaimed); // perks + reclaimed Holdfast boons set the run's opening mods
+    const base = perkBaseMods(owned, reclaimed, relicKit); // perks + Holdfast boons + equipped relics set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
     eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); // fresh wayside-event pool per run
@@ -2099,7 +2162,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // ── Apex challenge: a one-off fight against a gathered apex creature. Win → recruit. ──
   function startChallenge(apexId) {
     sfx.resume();
-    const base = perkBaseMods(owned, reclaimed);
+    const base = perkBaseMods(owned, reclaimed, relicKit);
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     const aDefs = sq.map((m) => playerDef(m, base, treeModsFor(m.id, treeEquip, treeRanks)));
     const apex = COMBAT_CREATURES[apexId];
@@ -2157,7 +2220,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setPendingUpgrade(null);
     startWave(waveIdx, sq, runMods);
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setEventOutcome(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setEventOutcome(null); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -2487,6 +2550,39 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               );
             })}
           </div>
+        </div>
+        {/* ── RELICS: the loot you find on the climb. Equip up to RELIC_SLOTS into a run. ── */}
+        <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
+            <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
+          </div>
+          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>.</div>
+          {relics.length === 0 ? (
+            <div style={{ fontSize: T.small, color: DIM, fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>No relics yet. Beat a ring's boss to find your first.</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
+              {RELICS.filter((r) => relics.includes(r.id)).map((r) => {
+                const eq = relicKit.includes(r.id);
+                const full = !eq && relicKit.length >= RELIC_SLOTS;
+                const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
+                return (
+                  <button key={r.id} onClick={() => toggleRelic(r.id)} disabled={full}
+                    title={r.lore}
+                    style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: full ? 'default' : 'pointer',
+                      background: eq ? '#1a1230' : PANEL, border: `1.5px solid ${eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: full ? 0.5 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                      <span style={{ fontSize: T.body }}>{r.icon}</span>
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: eq ? '#cba6ff' : full ? DIM : rc }}>{eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
+                    </div>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
+                    <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div style={{ fontSize: T.body, color: '#ddd', fontWeight: 700, marginBottom: 10 }}>
           Pick <b style={{ color: ACCENT }}>2–3</b> creatures <span style={{ color: DIM, fontWeight: 600 }}>({picked.length} chosen)</span>
@@ -2952,6 +3048,19 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 <div>
                   <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff' }}>Standing boon — {holdfastNow.boon.name}</div>
                   <div style={{ fontSize: T.micro, color: '#bfa8da' }}>{holdfastNow.boon.desc}</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {relicDrop && (
+            <div style={{ background: '#150d22', border: '1.5px solid #b06bff', borderRadius: 11, padding: '11px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                <span style={{ fontSize: 30 }}>{relicDrop.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC FOUND</div>
+                  <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '2px 0' }}>{relicDrop.name} <span style={{ fontSize: T.micro, fontWeight: 800, color: (RARITY_INFO[relicDrop.rarity] || {}).color }}>· {relicDrop.rarity}</span></div>
+                  <div style={{ fontSize: T.small, color: '#cba6ff', fontWeight: 700 }}>{relicDrop.desc}</div>
+                  <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.45, fontStyle: 'italic', marginTop: 3 }}>{relicDrop.lore} <span style={{ color: DIM, fontStyle: 'normal' }}>— equip it in ✦ RELICS before your next run.</span></div>
                 </div>
               </div>
             </div>
