@@ -14,6 +14,7 @@
 import { useState, useRef, useEffect } from 'react';
 import * as sfx from '../sfx.js';
 import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette, WaysideScene } from './Cutscene.jsx';
+import { WARDS, wardBlocking, activateWard, advanceWardDeeds } from '../data/wards.js';
 import {
   createBattleState,
   runBattle,
@@ -103,21 +104,8 @@ const HUNTING_GROUNDS = [
   { id: 'frostbound',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', depth: 8, boss: 'The Stillness', biasIds: ['frostwarden', 'rimecaller'] },
 ];
 
-// ── WARD GATES (vF-BI) — some thresholds inward won't open to a boss kill alone. A Ward
-// bars the way and sets a RIDDLE: solve its DEED (a clue you decode) to earn the key and
-// pass. A deed wants a SQUAD SHAPE (e.g. two Types climbing together), not raw power — so
-// you can't out-farm the wall — but it's always doable in rings you've already opened, and
-// beta bypasses wards entirely, so no one ever soft-locks. Pure progression-gating; the
-// combat engine is never touched. More wards + chained clues + crafted keys layer on later.
-const WARDS = [
-  { atDepth: 4, id: 'paired', name: "The Warden's Lock", glyph: '🜸', tint: '#9be7ff',
-    // The story shown the first time you reach the sealed gate — the reason WHY it asks this.
-    story: "The way out of the Storm-Wire ends at a gate older than the blight: two iron sockets where a single core should lock, not one. Your people built it back when the rim was held in pairs — a Warden to hold the line, a Reactor to break what came at it — never one climber alone. The mentor's mark is cut fresh beside the sockets: “It still remembers how we did it. Show it, and it'll let you by.”",
-    clue: 'A shield and a flame, set in the old gate together. Bring a 🛡 Bulwark and a 🔥 Reactor back through the Fallen Gate side by side — twice over — and the lock will know its own.',
-    deed: { ring: 'fallen-gate', types: ['Bulwark', 'Reactor'], count: 2,
-      told: 'Clear the Fallen Gate with a 🛡 Bulwark AND a 🔥 Reactor in your squad' } },
-];
-const WARD_AT = Object.fromEntries(WARDS.map((w) => [w.atDepth, w]));
+// WARD GATES — data + pure logic now live in ../data/wards.js (imported above) so the
+// gating is headlessly testable (scripts/ward-gates.mjs). The component just orchestrates.
 const GROUND_BY_ID = Object.fromEntries(HUNTING_GROUNDS.map((g) => [g.id, g]));
 const GROUND_KEY = '8gents_seam_ground';
 
@@ -2549,33 +2537,26 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         // ring — UNLESS a Ward bars that threshold. A sealed Ward reveals its riddle and the
         // way stays shut until its deed is done. Beta skips wards (and the gate) entirely.
         const frontierWin = !beta && hunted.depth === unlocked && unlocked < 8;
-        const ward = WARD_AT[unlocked];
-        if (frontierWin && ward && !wards[ward.id]?.solved) {
-          setWards((w) => { const cur = w[ward.id] || {}; const n = { ...w, [ward.id]: { active: true, progress: cur.progress || 0, solved: false } }; saveWards(n); return n; });
-          setWardBlock(ward); setUnlockedNow(null);
-        } else if (frontierWin) {
+        const blockingWard = frontierWin ? wardBlocking(unlocked, wards) : null;
+        if (blockingWard) {                       // sealed: reveal the riddle, the way stays shut
+          const nw = activateWard(wards, blockingWard.id); setWards(nw); saveWards(nw);
+          setWardBlock(blockingWard); setUnlockedNow(null);
+        } else if (frontierWin) {                 // open: the next ring inward unlocks
           const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); setUnlockedNow(nd);
         } else setUnlockedNow(null);
         // WARD DEEDS: any clear can advance an ACTIVE ward's riddle — the right ring with the
         // right squad shape (e.g. a Bulwark + a Reactor fielded together). Complete it and the
         // ward opens (its gated ring unlocks) + drops a key relic. Never touches the engine.
         setWardSolvedNow(null);
-        WARDS.forEach((wd) => {
-          const ws = wards[wd.id];
-          if (!ws?.active || ws.solved) return;
-          const d = wd.deed;
-          const ringOk = hunted.id === d.ring;
-          const typesOk = (d.types || [d.type]).every((t) => squad.some((m) => COMBAT_CREATURES[m.id]?.type === t));
-          if (!ringOk || !typesOk) return;
-          const progress = (ws.progress || 0) + 1;
-          const solved = progress >= d.count;
-          setWards((w) => { const n = { ...w, [wd.id]: { ...(w[wd.id] || {}), active: true, progress, solved } }; saveWards(n); return n; });
-          if (solved) {
-            setWardSolvedNow(wd);
-            if (unlocked === wd.atDepth && unlocked < 8) { const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); }
-            const rd = rollRelicChoices(relics, 1)[0]; if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); } // the key, made manifest
-          }
-        });
+        const squadTypes = squad.map((m) => COMBAT_CREATURES[m.id]?.type).filter(Boolean);
+        const deed = advanceWardDeeds(wards, hunted.id, squadTypes);
+        if (deed.changed) { setWards(deed.wards); saveWards(deed.wards); }
+        if (deed.solved.length) {
+          const wd = WARDS.find((w) => w.id === deed.solved[0]);
+          setWardSolvedNow(wd);
+          if (unlocked === wd.atDepth && unlocked < 8) { const nd = unlocked + 1; setUnlocked(nd); saveUnlocked(nd); }
+          const rd = rollRelicChoices(relics, 1)[0]; if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); } // the key, made manifest
+        }
         // THE HOLDFAST reclaims a stage the first time you beat a ring's boss (works in
         // beta too — pushing deeper heals more of the home + drips the next story beat).
         if (hunted.depth > reclaimed) {
@@ -3534,6 +3515,17 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                         ['Catch all 17', () => { const all = COMBAT_ROSTER.map((c) => c.id); setStable(all); saveStable(all); }],
                         ['+300 ⬡ to squad', () => setCores((c) => { const n = { ...c }; stable.forEach((id) => { n[id] = (n[id] || 0) + 300; }); saveCores(n); return n; })],
                         ['Max apex sigils', () => { const s = {}; [...APEX_IDS].forEach((id) => { s[id] = APEX_SIGILS; }); setSigils(s); saveSigils(s); }],
+                        // Playtest the Warden's Lock fast: stand at ring 4 (its threshold) with beta OFF
+                        // (so the ward engages) + a Bulwark & Reactor in the stable for the deed. Then:
+                        // raid ring 4 → hit the gate; raid the Fallen Gate with both, twice → it opens.
+                        ['🜸 Ward test: ring 4', () => {
+                          setBeta(false); saveBeta(false);
+                          setUnlocked(4); saveUnlocked(4);
+                          setWards({}); saveWards({});
+                          const st = [...new Set([...stable, 'fizzpop', 'ironwall'])]; setStable(st); saveStable(st); // a 🔥 Reactor + a 🛡 Bulwark
+                          onSlag?.(300); // slag to summon/forge while testing
+                          setShowSettings(false);
+                        }],
                         ['Reset ALL progress', () => {
                           const st = [...STARTER_IDS];
                           setUnlocked(1); saveUnlocked(1);
