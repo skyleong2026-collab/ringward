@@ -201,6 +201,55 @@ function SceneDoor() {
   );
 }
 
+// ── In-run vignettes (vF-AA) — small illustrated thumbnails that turn the threshold
+// and Holdfast text-beats into illustrated moments. Static (no keyframe dependency) so
+// they render correctly anywhere, not just inside the Cutscene's injected styles. ──
+const RING_TINT = ['#e8a040', '#b59a6a', '#7ec88a', '#7ec8ff', '#8ae0d0', '#8a78c8', '#9a7fc0', '#cfe8ff'];
+export function RingVignette({ depth = 1, size = 84 }) {
+  const i = Math.max(0, Math.min(7, depth - 1));
+  const tint = RING_TINT[i];
+  const t = i / 7; // deeper → darker, colder
+  return (
+    <svg viewBox="0 0 100 100" width={size} height={size} style={{ display: 'block', borderRadius: 10, flexShrink: 0 }}>
+      <defs>
+        <linearGradient id={`rv-sky-${i}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={t > 0.6 ? '#0e0c1a' : '#221a2e'} /><stop offset="1" stopColor="#08060c" />
+        </linearGradient>
+        <radialGradient id={`rv-glow-${i}`} cx="0.5" cy="0.55" r="0.5">
+          <stop offset="0" stopColor={tint} stopOpacity={0.5 - t * 0.18} /><stop offset="1" stopColor={tint} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <rect width="100" height="100" fill={`url(#rv-sky-${i})`} />
+      <ellipse cx="50" cy="56" rx="46" ry="17" fill={`url(#rv-glow-${i})`} />
+      <circle cx="50" cy="50" r="2.6" fill={tint} />
+      <path d="M0 58 Q30 50 50 55 T100 54 L100 72 L0 72 Z" fill="#000" opacity="0.4" />
+      <path d="M0 72 L100 72 L100 100 L0 100 Z" fill="#08060c" />
+      <path d="M38 100 L48 72 L52 72 L62 100 Z" fill={tint} opacity="0.13" />
+      {[[24, 84], [72, 88], [50, 80]].map(([x, y], k) => <circle key={k} cx={x} cy={y} r="1.2" fill={tint} opacity={0.7 - t * 0.3} />)}
+    </svg>
+  );
+}
+export function HoldfastVignette({ size = 84 }) {
+  return (
+    <svg viewBox="0 0 100 100" width={size} height={size} style={{ display: 'block', borderRadius: 10, flexShrink: 0 }}>
+      <defs>
+        <radialGradient id="hv-glow" cx="0.5" cy="0.42" r="0.6">
+          <stop offset="0" stopColor="#b06bff" stopOpacity="0.4" /><stop offset="1" stopColor="#b06bff" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <rect width="100" height="100" fill="#0e0a14" />
+      <ellipse cx="50" cy="44" rx="42" ry="30" fill="url(#hv-glow)" />
+      <path d="M0 74 Q50 64 100 74 L100 100 L0 100 Z" fill="#160f1d" />
+      <path d="M32 72 L32 50 L50 36 L68 50 L68 72 Z" fill="#241a30" />
+      <path d="M28 51 L50 33 L72 51" stroke="#3a2a52" strokeWidth="2.4" fill="none" strokeLinejoin="round" />
+      <rect x="44" y="56" width="12" height="14" rx="1" fill="#b06bff" />
+      <rect x="44" y="56" width="12" height="14" rx="1" fill="none" stroke="#e8dcff" strokeWidth="0.8" opacity="0.6" />
+      <circle cx="50" cy="20" r="1.4" fill="#cba6ff" opacity="0.7" />
+      <circle cx="62" cy="28" r="1" fill="#cba6ff" opacity="0.5" />
+    </svg>
+  );
+}
+
 // ── The opening — five beats from the rim to the choice to climb. ──────────────
 export const OPENING_SCENES = [
   { art: <SceneRim />,    image: null, title: 'The Rim',

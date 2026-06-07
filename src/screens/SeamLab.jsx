@@ -13,7 +13,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import * as sfx from '../sfx.js';
-import { Cutscene, OPENING_SCENES } from './Cutscene.jsx';
+import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette } from './Cutscene.jsx';
 import {
   createBattleState,
   runBattle,
@@ -2587,13 +2587,16 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {waveIdx === 0 && enteredRing && RING_INTRO[enteredRing.id] && (() => {
           const di = diffOf(enteredRing.depth);
           return (
-            <div style={{ animation: 'seam-threshold 1s ease-out', background: 'linear-gradient(180deg,#0e1320,#0b0d16)', border: `1px solid ${SEL}44`, borderLeft: `3px solid ${di.color}`, borderRadius: 12, padding: '12px 15px', marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#8fa7c8' }}>⛰ YOU CROSS INTO</span>
-                <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff' }}>{enteredRing.name}</span>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: di.color }}>ring {enteredRing.depth}/8 · {di.label}</span>
+            <div style={{ animation: 'seam-threshold 1s ease-out', display: 'flex', gap: 13, alignItems: 'stretch', background: 'linear-gradient(180deg,#0e1320,#0b0d16)', border: `1px solid ${SEL}44`, borderLeft: `3px solid ${di.color}`, borderRadius: 12, padding: '12px 15px', marginBottom: 14 }}>
+              <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 84} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#8fa7c8' }}>⛰ YOU CROSS INTO</span>
+                  <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff' }}>{enteredRing.name}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: di.color }}>ring {enteredRing.depth}/8 · {di.label}</span>
+                </div>
+                <div style={{ fontSize: T.small, color: '#bcc6d8', lineHeight: 1.55, fontStyle: 'italic', marginTop: 5 }}>{RING_INTRO[enteredRing.id]}</div>
               </div>
-              <div style={{ fontSize: T.small, color: '#bcc6d8', lineHeight: 1.55, fontStyle: 'italic', marginTop: 5 }}>{RING_INTRO[enteredRing.id]}</div>
             </div>
           );
         })()}
@@ -2782,9 +2785,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           ); })()}
           {holdfastNow && (
             <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: '#160f1d', border: '2px solid #b06bff', boxShadow: '0 0 16px #b06bff33', textAlign: 'left' }}>
-              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>🏚 THE HOLDFAST RECLAIMS</div>
-              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '3px 0 6px' }}>{holdfastNow.part} <span style={{ fontSize: T.micro, fontWeight: 700, color: '#9a7fc0' }}>· stage {holdfastNow.depth}/{HOLDFAST_MAX}</span></div>
-              <div style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.5, fontStyle: 'italic' }}>{holdfastNow.beat}</div>
+              <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
+                <HoldfastVignette size={narrow ? 66 : 84} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>🏚 THE HOLDFAST RECLAIMS</div>
+                  <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '3px 0 6px' }}>{holdfastNow.part} <span style={{ fontSize: T.micro, fontWeight: 700, color: '#9a7fc0' }}>· stage {holdfastNow.depth}/{HOLDFAST_MAX}</span></div>
+                  <div style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.5, fontStyle: 'italic' }}>{holdfastNow.beat}</div>
+                </div>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 10px', borderRadius: 9, background: '#0e0a14', border: '1px solid #4a3a66' }}>
                 <span style={{ fontSize: T.body }}>{holdfastNow.boon.icon}</span>
                 <div>
