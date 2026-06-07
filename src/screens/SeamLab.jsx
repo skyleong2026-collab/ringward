@@ -487,6 +487,8 @@ const RELICS = [
   { id: 'r_frenzy',    img: '/art/relics/r_frenzy.jpg',    icon: '🔆', color: '#ffb84d',  name: 'Frenzy Totem',   rarity: 'Legendary', desc: '+20% damage and start every fight +1 charge.', lore: 'It will not let you wait. Neither will what is coming.',       apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
   { id: 'r_reaper',    img: '/art/relics/r_reaper.jpg',    icon: '☠️', color: '#c0c0d8',  name: "Reaper's Mark",  rarity: 'Legendary', desc: '+40% damage to enemies already below half HP.', lore: 'Finish what the climb started. Leave nothing standing.',      apply: (m) => { m.executioner = (m.executioner || 0) + 0.4; } },
   { id: 'r_bramble',   img: '/art/relics/r_bramble.jpg',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
+  { id: 'r_reservoir', img: '/art/relics/r_reservoir.jpg', icon: '⚗️', color: CHG,        name: 'Reservoir Core', rarity: 'Rare',      desc: 'Each kill grants the killer +1 charge.',         lore: 'A spark caught in glass. It wants to be more.',               apply: (m) => { m.onKillCharge = true; } },
+  { id: 'r_phoenix',   img: '/art/relics/r_phoenix.jpg',   icon: '🪶', color: '#ffb347',  name: 'Phoenix Feather',rarity: 'Legendary', desc: 'Once per run: survive a lethal hit at 1 HP.',    lore: 'The ash at its edges never quite catches. Not yet.',           apply: (m) => { m.phoenix = true; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
