@@ -114,7 +114,7 @@ a regal crystalline grunling robed in rime and frost-feathers, an aura of slowly
 
 ---
 
-# Part 2 — Gear / Relics (20 icons)
+# Part 2 — Gear / Relics (22 icons)
 
 **Objects, not creatures** — small painted relic icons in the SAME style (painterly, dusk, glowing accents, simple dark background, square). Single clear silhouette (shown small). Rarity → ornateness + glow. Accent colour follows the effect (red=damage, green=heal, cyan=shield, gold=tempo, purple=curse/Drop).
 
@@ -134,8 +134,10 @@ a regal crystalline grunling robed in rime and frost-feathers, an aura of slowly
 - **r_wrathcore** — Wrathcore (+dmg/−heal): `a furious red-hot core clenched in iron, angry orange-red light`
 - **r_surgeon** — Surgeon's Kit (+heal/−dmg): `a worn healer's kit of bound herbs and clean tools, gentle green glow`
 - **r_bramble** — Bramble Hide (thorns): `a wrap of thorned green bramble, sharp barbs, faint defensive glow`
+- **r_reservoir** — Reservoir Core (kill→charge): `a glass vial holding a swirling captured spark, coiled yellow lightning inside`
 
 ## Legendary (ornate, strong glow, run-defining)
+- **r_phoenix** — Phoenix Feather (survive-lethal): `a single bright feather warm with ember-light, faint ash curling at its edges that never quite catches`
 - **r_bloodpact** — Bloodpact (dmg+heal/−HP): `an ornate locket dripping one bead of glowing red, dark gold filigree`
 - **r_glassedge** — Glass Edge (+dmg/−HP): `a translucent glass blade, impossibly sharp, hairline cracks, pale glow`
 - **r_dropshard** — Drop-Shard (all-round): `a violet splinter of whatever fell at the Drop, humming with otherworldly light`

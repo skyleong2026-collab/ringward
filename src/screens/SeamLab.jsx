@@ -524,6 +524,8 @@ const RELICS = [
   { id: 'r_frenzy',    icon: '🔆', color: '#ffb84d',  name: 'Frenzy Totem',   rarity: 'Legendary', desc: '+20% damage and start every fight +1 charge.', lore: 'It will not let you wait. Neither will what is coming.',       apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
   { id: 'r_reaper',    icon: '☠️', color: '#c0c0d8',  name: "Reaper's Mark",  rarity: 'Legendary', desc: '+40% damage to enemies already below half HP.', lore: 'Finish what the climb started. Leave nothing standing.',      apply: (m) => { m.executioner = (m.executioner || 0) + 0.4; } },
   { id: 'r_bramble',   icon: '🌵', color: '#7fae5a',  name: 'Bramble Hide',   rarity: 'Rare',      desc: 'Attackers take 25% of their hit straight back.', lore: 'Touch a thornbush and it touches you back.',                  apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
+  { id: 'r_phoenix',   icon: '🪶', color: '#ffb84d',  name: 'Phoenix Feather', rarity: 'Legendary', desc: 'Each grunling survives one lethal blow per fight (revives at 30% HP).', lore: 'A single bright feather, warm to the touch. It does not burn — it remembers how to come back.', apply: (m) => { m.phoenix = true; } },
+  { id: 'r_reservoir', icon: '🌀', color: CHG,        name: 'Reservoir Core',  rarity: 'Rare',      desc: 'Every kill banks +2 charge on the grunling that landed it.', lore: 'It drinks the last spark of whatever falls to you, and saves it for the next blow.', apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
