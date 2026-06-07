@@ -2,17 +2,31 @@
 
 > **For the art instance (Sonnet):** generate these, then add them to the game files (see **Integration** at the bottom). Goal: replace the old shared sprites with **one unique painted creature per grunling (17)**, plus **gear/relic icons (20)**, all matching the painted **cutscene** style already in the game (`public/art/cutscene/`). Prompts are ready to run; tune freely.
 
+## ⚠️ REVISION (2026-06-07, Sky's feedback) — FIX THE EYES & ADD EMOTION
+
+The first generation read **zombie/undead** — blank, iris-less eyes, off-putting and a little creepy. **The single most important fix: give every creature ALIVE, EXPRESSIVE EYES.** This is a known Midjourney failure mode and the prompt below fixes it. Regenerate the 17 creatures with this.
+
+**Eyes & emotion (put this NEAR THE FRONT of every CREATURE prompt, before the body description):**
+```
+an endearing creature with two large warm expressive eyes, each with a clear round dark iris, a bright pupil, and a soft white catchlight, a gentle soulful alive expression, full of feeling and warmth
+```
+**And add these NEGATIVES (end of the creature prompt, before --ar):**
+```
+::  NOT undead, no blank or hollow eyes, no empty white eyes, no missing irises, not creepy, not zombie, not menacing
+```
+Lean a touch warmer overall — keep the folk-mystery painterly tone, but let warm light fall on the face so the creature feels like a beloved companion, not a husk. Think the soul of a hand-painted children's-book animal (Ghibli/Brian Froud warmth) inside the earthen-machine body. (Bosses/enemies can stay fierce — this is about the 17 collectible creatures.)
+
 ## The look (style bible — append to EVERY prompt)
 
 ```
-muted folk-mystery storybook illustration, painterly, dusk palette, glowing earthen core, cinematic, soft grain, single subject centered, simple dark atmospheric background, square composition, no text --ar 1:1
+muted folk-mystery storybook illustration, painterly, warm dusk palette with gentle light on the face, glowing earthen core, cinematic, soft grain, single subject centered, simple dark atmospheric background, square composition, no text --ar 1:1
 ```
 
 Matches the 5 opening cutscene frames (warm-but-melancholy, hand-painted, NOT slick sci-fi, NOT cartoon-mascot). Keep the whole set consistent so creatures, gear, and cutscenes read as one world.
 
 ## Species canon — what a "grunling" IS
 
-Every creature is a **grunling**: a small being **grown from earth + old salvaged machine** — mossy stone, weathered bronze/iron, root and rock fused into a living body — with a **single glowing core set in its chest like a heart** (core colour = its Type colour). Small, soulful, a little worn. Rarity raises the craft: **Common** = scrappy/simple, **Rare** = refined, **Legendary** = striking/ornate, **Unique** = awe (rarest in the world).
+Every creature is a **grunling**: a small being **grown from earth + old salvaged machine** — mossy stone, weathered bronze/iron, root and rock fused into a living body — with a **single glowing core set in its chest like a heart** (core colour = its Type colour). **It is ALIVE and soulful — warm expressive eyes with real irises and a catchlight, a gentle feeling face (curious, brave, kind, weary — never blank or dead).** Small, soulful, a little worn, but clearly a living companion you'd love. Rarity raises the craft: **Common** = scrappy/simple, **Rare** = refined, **Legendary** = striking/ornate, **Unique** = awe (rarest in the world).
 
 ---
 

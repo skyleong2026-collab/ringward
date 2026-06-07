@@ -393,6 +393,18 @@ const WAYSIDE_EVENTS = [
       { label: 'Take the supplies', detail: 'He thought of you.', apply: (c) => (c.heal(0.35), c.cores(15), '✚ Food, salve, a few banked Cores. The squad recovers, and you feel less alone on the trail. +15 ⬡.') },
       { label: 'Read his last note', detail: 'His climb, sharpened to advice.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.1; m.healMult *= 1.2; }), "📜 Everything he learned going up, in a few hard lines. You climb smarter for it — +10% damage and +20% healing onward.") },
     ] },
+  { id: 'watcher', glyph: '🔭', tint: '#9be7ff', title: 'The Rim-Watcher',
+    text: "An old watcher keeps a cold vigil here, her scope trained inward at the rings. She doesn't turn as you pass. “You've got his walk,” she says. “He'd stop right here too. Said the rings were listening. Said you could hear the Drop think, if you got quiet enough.”",
+    choices: [
+      { label: 'Ask about him', detail: 'How did he climb?', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.08; }), '👁 She tells it plain: patient, never cornered, never proud. He treated every ring like it could kill him, because it could. You climb a little wiser for the telling. +8% damage onward.') },
+      { label: 'Share the watch', detail: 'Sit a while.', apply: (c) => (c.heal(0.3), '✚ You take an hour at the scope beside her, saying nothing. The squad rests. For one hour the blight holds still, almost respectful.') },
+    ] },
+  { id: 'cairn', glyph: '🪦', tint: '#b8b8c8', title: 'The First Cairn',
+    text: 'A cairn older than the blight, names cut into every stone — the first climbers, from when the Drop was new and the rings were only one ring. None of them came back down. Your mentor’s name is here too, cut fresh, in his own hand, the day before he went up for the last time.',
+    choices: [
+      { label: 'Add your name', detail: 'Say you were here.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.05; }), "🪦 You cut your name beneath his. Whatever waits at the Drop, it will know you came on purpose. The squad climbs with that purpose in them — Primed, +5% damage.") },
+      { label: 'Take a stone for luck', detail: 'Carry them with you.', apply: (c) => (c.cores(20), '✦ You pocket one small stone, still warm from the sun. +20 ⬡ — and something steadier sitting in your chest for the climb ahead.') },
+    ] },
 ];
 
 // Sandbox matchups, each pinned to a blessed golden seed so WATCH reproduces a fight.
