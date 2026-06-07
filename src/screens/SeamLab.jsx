@@ -292,8 +292,13 @@ function useViewport() {
 // curve is steeper now (so deep rings are a real wall) and the base bumped so even the
 // outer ring makes you sweat — though it stays beatable, since you bootstrap your first
 // Cores there. Paired with a smaller between-wave patch-up so damage actually accrues.
-const D_HP = (d) => 1 + 0.22 * (d - 1);   // depth 1 → ×1.0, depth 8 → ×2.54
-const D_ATK = (d) => 1 + 0.18 * (d - 1);  // depth 1 → ×1.0, depth 8 → ×2.26
+// FRONT-LOAD pass (vF-AC — Sky: "rings 3-4 weren't difficult, 5 was"). The old curve was
+// LINEAR, so the squad outgrew the soft mid before the deep rings caught up. These are now
+// CONCAVE (diminishing): the biggest per-ring jump lands EARLY, so rings 2-4 bite while
+// the depth-1 bootstrap (×1.0) and the depth-8 wall (≈×2.5 HP / ×2.2 ATK) stay put. ATK is
+// the lever that actually threatens the squad, so it's front-loaded hardest. Feel-check freely.
+const D_HP = (d) => 1 + 0.34 * (d - 1) - 0.017 * (d - 1) ** 2;  // d1 ×1.0, d3 ×1.61, d4 ×1.87, d8 ×2.55
+const D_ATK = (d) => 1 + 0.30 * (d - 1) - 0.018 * (d - 1) ** 2; // d1 ×1.0, d3 ×1.53, d4 ×1.74, d8 ×2.22
 function foe(id, temperament, roleHp, roleAtk, depth, extra = {}) {
   const hp = Math.round(roleHp * D_HP(depth));
   return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth)), ...extra };
@@ -540,8 +545,8 @@ function saveSquad(ids) { try { localStorage.setItem(SQUAD_KEY, JSON.stringify(i
 // The saved squad, kept to creatures you still own (a reset/uncatch can't leave a ghost).
 function savedSquadIn(stableIds) { return loadSquad().filter((id) => stableIds.includes(id)); }
 // A legible difficulty read for a ring's depth — lead with what the player can SEE.
-const diffOf = (depth) => depth <= 2 ? { label: 'easy', color: '#7ed321' }
-  : depth <= 4 ? { label: 'fair', color: '#9be7ff' }
+const diffOf = (depth) => depth <= 1 ? { label: 'easy', color: '#7ed321' }
+  : depth <= 3 ? { label: 'fair', color: '#9be7ff' }
   : depth <= 6 ? { label: 'hard', color: '#e8a040' }
   : { label: 'brutal', color: '#ff6b6b' };
 
