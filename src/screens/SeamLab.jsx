@@ -536,8 +536,32 @@ function loadRelics() { try { return JSON.parse(localStorage.getItem(RELIC_KEY) 
 function saveRelics(ids) { try { localStorage.setItem(RELIC_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
 function loadRelicKit() { try { return JSON.parse(localStorage.getItem(RELIC_LOADOUT_KEY) || '[]') || []; } catch { return []; } }
 function saveRelicKit(ids) { try { localStorage.setItem(RELIC_LOADOUT_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
-// Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe).
-function relicMods(equippedIds, m) { (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) r.apply(m); }); }
+// ── RELIC SETS (vF-AT) — thematic synergies. Equip 2+ relics from a set into your kit and
+// it activates a bonus on top of the relics themselves. With only RELIC_SLOTS=3 to spend,
+// this makes the loadout a real decision: chase a set synergy, or just take your best three.
+// Relics can belong to more than one set, so some kits light up two at once. Opt-in mods.
+const RELIC_SETS = [
+  { id: 'berserker', name: 'Berserker', icon: '🔥', need: 2, desc: '+12% damage',
+    members: ['r_whetfang', 'r_reckless', 'r_wrathcore', 'r_glassedge', 'r_bloodpact', 'r_frenzy'],
+    apply: (m) => { m.dmgMult *= 1.12; } },
+  { id: 'warden', name: 'Warden', icon: '🛡️', need: 2, desc: '+12% max HP',
+    members: ['r_ironwood', 'r_stoneblood', 'r_bulwark', 'r_bramble'],
+    apply: (m) => { m.hpMult *= 1.12; } },
+  { id: 'lifeblood', name: 'Lifeblood', icon: '🩸', need: 2, desc: '+8% lifesteal',
+    members: ['r_vampiric', 'r_bloodpact', 'r_menderknot', 'r_surgeon', 'r_reckless'],
+    apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.08; } },
+];
+// Which sets are active for an equipped kit (>= the set's `need` members present).
+function activeRelicSets(equippedIds) {
+  const ids = equippedIds || [];
+  return RELIC_SETS.filter((s) => s.members.filter((id) => ids.includes(id)).length >= s.need);
+}
+// Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe) — the
+// relics themselves, then any active SET bonuses on top.
+function relicMods(equippedIds, m) {
+  (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) r.apply(m); });
+  activeRelicSets(equippedIds).forEach((s) => s.apply(m));
+}
 // A ring boss offers a CHOICE of up to n relics — a weighted draw of DISTINCT relics from
 // what you don't yet own. You pick one on the won screen. Empty = collection full → slag.
 function rollRelicChoices(owned, n = 3) {
@@ -2705,7 +2729,16 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
             </div>
           </div>
-          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>.</div>
+          <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10, lineHeight: 1.4 }}>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</div>
+          {(() => { const sets = activeRelicSets(relicKit); return sets.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {sets.map((s) => (
+                <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: T.micro, fontWeight: 800, color: '#ffe08a', background: '#231d0e', border: '1px solid #6a5a2a', borderRadius: 999, padding: '3px 9px' }}>
+                  ⚜ {s.icon} {s.name} set — {s.desc}
+                </span>
+              ))}
+            </div>
+          ); })()}
           {relics.length === 0 ? (
             <div style={{ fontSize: T.small, color: DIM, fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>No relics yet. Beat a ring's boss to find your first.</div>
           ) : (
