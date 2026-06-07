@@ -2071,6 +2071,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [relicChoices, setRelicChoices] = useState([]);    // pending boss-drop picks — choose one on the won screen
   const [relicDrop, setRelicDrop] = useState(null);        // the relic you chose this clear (won-screen reveal)
   const [showVault, setShowVault] = useState(false);       // the relic VAULT overlay — the full collection to chase
+  const [showCodex, setShowCodex] = useState(false);       // THE CHRONICLE — a lore codex that fills as you climb
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
@@ -2632,6 +2633,48 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     return <Cutscene scenes={OPENING_SCENES} onDone={() => { setShowIntro(false); saveIntroSeen(); }} />;
   }
 
+  // ── THE CHRONICLE (vF-AZ) — a lore codex that fills in as you climb. Every story fragment
+  // in the game — the opening, each ring, the Holdfast, the Drop, the grunlings — gathered in
+  // one re-readable place. Entries unlock as you reach them, so it's a record of YOUR climb. ──
+  if (showCodex) {
+    const cEntry = (key, title, text, unlocked) => (
+      <div key={key} style={{ borderRadius: 10, padding: '10px 12px', marginBottom: 8, background: unlocked ? '#0e0b16' : '#0a0a0e', border: `1px solid ${unlocked ? '#2a2438' : LINE}`, opacity: unlocked ? 1 : 0.5 }}>
+        <div style={{ fontSize: T.small, fontWeight: 900, color: unlocked ? '#d8cfe6' : '#54506a' }}>{unlocked ? title : '? ? ?'}</div>
+        <div style={{ fontSize: T.micro, color: unlocked ? '#b0a8c4' : '#454056', lineHeight: 1.6, fontStyle: 'italic', marginTop: 4 }}>{unlocked ? text : 'Not yet reached on the climb.'}</div>
+      </div>
+    );
+    const cHead = (txt) => <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff', letterSpacing: 1.5, margin: '18px 0 8px' }}>{txt}</div>;
+    const dropText = 'You walk the last ring to its end, and the Drop opens — not a pit but a doorway, light spilling up out of the dark. Your mentor stood exactly here. Went in. You understand it now: he was never lost. He was the first one through. Three cores hum at your chest. Seventy-five years of blight — and the answer to all of it is one step away. You take it.';
+    // count discovered
+    let found = OPENING_SCENES.length; let total = OPENING_SCENES.length;
+    HUNTING_GROUNDS.forEach((g) => { total += 2; if (g.depth <= unlocked) found++; if (g.depth <= reclaimed) found++; });
+    HOLDFAST_STAGES.forEach((s) => { total++; if (s.depth <= reclaimed) found++; });
+    total++; if (reclaimed >= HOLDFAST_MAX) found++; // the Drop
+    COMBAT_ROSTER.forEach((c) => { total++; if (stable.includes(c.id)) found++; });
+    return (
+      <div style={{ maxWidth: 720, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ fontSize: T.huge, fontWeight: 900, color: '#cba6ff', letterSpacing: 0.5 }}>❖ THE CHRONICLE</div>
+          <button onClick={() => setShowCodex(false)} style={{ fontSize: T.small, fontWeight: 800, color: DIM, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 13px', cursor: 'pointer' }}>← back</button>
+        </div>
+        <div style={{ fontSize: T.small, color: DIM, marginBottom: 6 }}>The story so far — <b style={{ color: '#cba6ff' }}>{found}</b> of <b style={{ color: '#cba6ff' }}>{total}</b> remembered. It fills as you climb.</div>
+        {cHead('THE OPENING')}
+        {OPENING_SCENES.map((s, i) => cEntry('op' + i, s.title, s.text, true))}
+        {cHead('THE RINGS')}
+        {HUNTING_GROUNDS.map((g) => [
+          cEntry('ri' + g.id, `${g.name} — you cross in`, RING_INTRO[g.id], g.depth <= unlocked),
+          RING_CLEAR[g.id] && cEntry('rc' + g.id, `${RING_CLEAR[g.id].boss} falls`, RING_CLEAR[g.id].beat, g.depth <= reclaimed),
+        ])}
+        {cHead('THE HOLDFAST')}
+        {HOLDFAST_STAGES.map((s) => cEntry('hf' + s.depth, s.part, s.beat, s.depth <= reclaimed))}
+        {cHead('THE DROP')}
+        {cEntry('drop', 'The First Climb', dropText, reclaimed >= HOLDFAST_MAX)}
+        {cHead('THE GRUNLINGS')}
+        {COMBAT_ROSTER.map((c) => cEntry('cr' + c.id, c.name, CREATURE_LORE[c.id] ? `${CREATURE_LORE[c.id].rumor} (Said to roam ${CREATURE_LORE[c.id].where}.)` : '', stable.includes(c.id)))}
+      </div>
+    );
+  }
+
   // ── THE RELIC VAULT (vF-AK) — the whole collection to chase. Owned relics show in full;
   // the rest are undiscovered silhouettes with just a rarity tease. A full-screen overlay. ──
   if (showVault) {
@@ -2700,6 +2743,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             title="Watch the opening again"
             style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
             ❖ The Story
+          </button>
+          <button onClick={() => setShowCodex(true)}
+            title="The Chronicle — every story fragment you've found, in one place"
+            style={{ fontSize: T.micro, fontWeight: 800, padding: '4px 9px', borderRadius: 7, cursor: 'pointer', border: '1px solid #4a3a66', background: '#160f1d', color: '#cba6ff' }}>
+            📖 Chronicle
           </button>
           <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
             title={music ? 'Ambient music on' : 'Ambient music off'}
