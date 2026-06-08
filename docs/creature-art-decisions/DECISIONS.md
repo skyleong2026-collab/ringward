@@ -8,36 +8,34 @@ Midjourney PNG (generated from the prompts in `Ringward-Creature-Reference.xlsx`
 → pixel state-frames → into the game. The single locked image is what kills Midjourney's
 continuity problem (you never re-generate the character).
 
-## Locked so far (downloaded, real PNG in this folder)
+## Downloaded — real full-res PNGs in this folder (14)
 
-| Creature | Type | File | MJ job id | Note |
-|---|---|---|---|---|
-| **Cinderpaw** | Reactor | `cinderpaw.png` | `19b15d23` | Ash-grey cracked-stone cat, molten seams, heart-shaped fire core. Textbook. **First PixelLab test.** |
-| **Stoneward** | Bulwark | `stoneward.png` | `d800245d` | Mossy granite wall-golem, glowing eyes. Solid, very pixel-friendly. |
-| **Frostward** | Warden | `frostward.png` | `6d0d18b2` | Rime-coated blue golem, ice shards, bright blue core. Clear silhouette. |
-| **Hexmoth** | Hexer | `hexmoth.png` | `8765cd31` | Violet moth, glowing eye-spots, golden heart-core. Elegant + readable. |
+All came from your Liked set; most were generated from the spreadsheet prompts, so the
+`--sref` style is consistent (one family) and the glowing **core-heart** motif runs through them.
 
-All four came straight from the spreadsheet prompts — the `--sref` style is already consistent
-across them (one family). The glowing **core-heart** motif is showing up in all of them, which
-is exactly the grunling identity.
-
-## Direction decided, not yet downloaded (from the Liked review)
-
-Strong picks exist in the Liked set; grab the chosen frame the same way (open → download):
-
-| Creature | Type | Direction |
+| File | Type | Note |
 |---|---|---|
-| Fizzpop | Reactor | the twiggy spark-imp (sparks leaking, over-bright core) |
-| Glowtail | Reactor | the smouldering ember-lantern-tail variant |
-| Ironwall | Bulwark | the gate/arch-shaped golem (matches lore exactly) |
-| Mossback | Mender | the glowing green seed-blob (super readable) |
-| Dewleaf | Mender | the little green fuzzball with a leaf |
-| Rimecaller | Warden | the crystal-CROWNED ice golem (ceremonial) |
-| Blightcap | Hexer | the mushroom-cap imp |
-| Swiftpaw / Dartwing | Striker | the clean teal lizard-dragon / crested "CREST" bird turnarounds |
-| Veilclaw | Assassin | the hooded "VEIL" figure — **use a SOLID-bodied version, not the smoke-wraith** |
-| Shadefang | Assassin | re-roll for a solid silhouette (see prompt) |
-| Buzzline / Tanglewing | Booster | **needs a dedicated pass** — the support/amplifier identity isn't nailed yet (see prompt) |
+| `cinderpaw.png` | Reactor | Ash-grey cracked-stone cat, molten seams, heart-shaped fire core. **First PixelLab test.** |
+| `fizzpop.png` | Reactor | Jittery spark-imp, over-bright core. |
+| `stoneward.png` | Bulwark | Mossy granite wall-golem. Solid, very pixel-friendly. |
+| `ironwall.png` | Bulwark | Ancient riveted iron-and-stone sentinel (gate-like, on-lore). |
+| `mossback.png` | Mender | Gentle mossy grunling, restorative green glow. |
+| `dewleaf.png` | Mender | Delicate leaf-and-dew creature. |
+| `frostward.png` (+ `frostward-alt.png`) | Warden | Rime-coated blue golem, ice shards, bright blue core. Two takes. |
+| `hexmoth.png` (+ `hexmoth-alt.png`) | Hexer | Violet moth, glowing eye-spots, golden heart-core. Two takes. |
+| `blightcap.png` | Hexer | Diseased mushroom-cap, sickly violet spores. |
+| `veil-assassin.png` | Assassin | Your **"Veil"** concept — hooded, solid-bodied (good: not a smoke-wraith). |
+| `crest-striker.png` | Striker | Your **"Crest"** concept — fast/momentum bird-dragon. |
+| `hollow-elder.png` | Booster? | Your **"Hollow"** concept — ancient antlered elder. Tentative Booster/elder; revisit. |
+
+**All 8 types now have at least one pick.** Complete: Bulwark, Mender, Hexer. 
+
+## Still to do
+
+- **Glowtail** (Reactor 3rd) and **Rimecaller** (Warden — the crystal-CROWNED ceremonial ice golem): pick frames not yet grabbed.
+- **Booster** identity still soft — `hollow-elder` is a placeholder; run the dedicated Booster prompt.
+- **A second Assassin** if wanted (Shadefang) — keep it solid-bodied.
+- Confirm `veil`/`crest`/`hollow` (your own named concepts) map to the roles above, or tell me your intended names.
 
 ## Watch-outs for the pixel pipeline
 
