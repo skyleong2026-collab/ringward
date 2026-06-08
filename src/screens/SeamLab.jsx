@@ -934,6 +934,9 @@ function saveAutoPick(on) { try { localStorage.setItem(AUTO_PICK_KEY, on ? '1' :
 const MUSIC_KEY = '8gents_seam_music';
 function loadMusic() { try { return localStorage.getItem(MUSIC_KEY) !== '0'; } catch { return true; } }
 function saveMusic(on) { try { localStorage.setItem(MUSIC_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
+const SFX_KEY = '8gents_seam_sfx'; // combat/UI sound effects on/off (music has its own toggle)
+function loadSfxOn() { try { return localStorage.getItem(SFX_KEY) !== '0'; } catch { return true; } }
+function saveSfxOn(on) { try { localStorage.setItem(SFX_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
 // The opening cutscene plays once on a fresh save (no flag), then is re-watchable.
 const INTRO_KEY = '8gents_seam_intro';
 function introSeen() { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch { return false; } }
@@ -2315,6 +2318,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [eventOutcome, setEventOutcome] = useState(null); // the outcome line after a choice is made
   const eventsSeenRef = useRef([]); // event ids already shown THIS run — no repeats within a run
   const [music, setMusic] = useState(loadMusic); // ambient pad on/off (user toggle, persisted)
+  const [sfxOn, setSfxOn] = useState(loadSfxOn); // combat/UI SFX on/off (persisted; music is separate)
+  useEffect(() => { sfx.setMuted(!sfxOn); }, [sfxOn]); // keep the sound module in sync
   const [showIntro, setShowIntro] = useState(() => !introSeen()); // opening cutscene (first launch + replay)
   const [relics, setRelics] = useState(loadRelics);        // owned relic ids (the collection — found from boss clears)
   const [relicKit, setRelicKit] = useState(loadRelicKit);  // equipped relic loadout (subset, capped at RELIC_SLOTS)
@@ -2327,6 +2332,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [showCodex, setShowCodex] = useState(false);       // THE CHRONICLE — a lore codex that fills as you climb
   const [homeTab, setHomeTab] = useState('raid');          // home shell page: raid | forge | relics | holdfast
   const [showSettings, setShowSettings] = useState(false); // ⚙ settings menu overlay (music/auto-pick/beta/reset)
+  const [confirmReset, setConfirmReset] = useState(false); // two-tap guard on the tester "Start Over" wipe
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
@@ -3803,13 +3809,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
         {/* ═══════════════ ⚙ SETTINGS overlay ═══════════════ */}
         {showSettings && (
-          <div onClick={() => setShowSettings(false)}
+          <div onClick={() => { setShowSettings(false); setConfirmReset(false); }}
             style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(4,4,8,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <div onClick={(e) => e.stopPropagation()}
               style={{ width: '100%', maxWidth: 400, maxHeight: '86vh', overflowY: 'auto', background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 16, padding: '18px 18px 20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
                 <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', letterSpacing: 0.5 }}>⚙ Settings</span>
-                <button onClick={() => setShowSettings(false)} style={{ marginLeft: 'auto', fontSize: T.body, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer', border: `1px solid ${LINE}`, background: PANEL, color: DIM }}>✕</button>
+                <button onClick={() => { setShowSettings(false); setConfirmReset(false); }} style={{ marginLeft: 'auto', fontSize: T.body, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer', border: `1px solid ${LINE}`, background: PANEL, color: DIM }}>✕</button>
               </div>
               {/* Music toggle */}
               <button onClick={() => { sfx.resume(); const m = !music; setMusic(m); saveMusic(m); }}
@@ -3821,6 +3827,17 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   <div style={{ fontSize: T.micro, color: DIM }}>A low pad under the climb.</div>
                 </div>
                 <span style={{ fontSize: T.micro, fontWeight: 900, color: music ? '#9be7ff' : '#777' }}>{music ? 'ON' : 'OFF'}</span>
+              </button>
+              {/* Sound-effects toggle (separate from music) */}
+              <button onClick={() => { const s = !sfxOn; setSfxOn(s); saveSfxOn(s); if (s) { sfx.resume(); sfx.upgradePick(); } }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, marginBottom: 8, cursor: 'pointer', textAlign: 'left',
+                  border: `1px solid ${sfxOn ? '#4a3a66' : LINE}`, background: sfxOn ? '#160f1d' : PANEL }}>
+                <span style={{ fontSize: T.sub }}>{sfxOn ? '🔔' : '🔕'}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: sfxOn ? '#cba6ff' : '#bbb' }}>Sound Effects</div>
+                  <div style={{ fontSize: T.micro, color: DIM }}>Hits, charges, pulls — the combat sounds.</div>
+                </div>
+                <span style={{ fontSize: T.micro, fontWeight: 900, color: sfxOn ? '#9be7ff' : '#777' }}>{sfxOn ? 'ON' : 'OFF'}</span>
               </button>
               {/* Auto-pick toggle */}
               <button onClick={() => setAutoPick(!autoPick)}
@@ -3891,6 +3908,31 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   )}
                 </div>
               )}
+              {/* ── Start Over — a tester-facing full wipe, behind a two-tap confirm. ── */}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${LINE}` }}>
+                {!confirmReset ? (
+                  <button onClick={() => setConfirmReset(true)}
+                    style={{ width: '100%', padding: '11px 0', borderRadius: 10, cursor: 'pointer', border: `1px solid ${LINE}`, background: 'transparent', color: '#9a6a6a', fontSize: T.small, fontWeight: 800 }}>
+                    ↺ Start Over
+                  </button>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: T.micro, color: '#e0a0a0', textAlign: 'center', marginBottom: 8, lineHeight: 1.4 }}>
+                      This erases <b>everything</b> — your squad, progress, the Gauntlet, all of it. No undo.
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => setConfirmReset(false)}
+                        style={{ flex: 1, padding: '11px 0', borderRadius: 10, cursor: 'pointer', border: `1px solid ${LINE}`, background: PANEL, color: '#bbb', fontSize: T.small, fontWeight: 800 }}>
+                        Keep my progress
+                      </button>
+                      <button onClick={() => { try { Object.keys(localStorage).filter((k) => /^8gents/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch { /* best-effort */ } window.location.reload(); }}
+                        style={{ flex: 1, padding: '11px 0', borderRadius: 10, cursor: 'pointer', border: '1px solid #7a3a3a', background: '#2a1010', color: '#ff9a9a', fontSize: T.small, fontWeight: 900 }}>
+                        Erase everything
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

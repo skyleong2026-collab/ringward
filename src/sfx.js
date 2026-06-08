@@ -4,6 +4,12 @@
 // autoplay policy). After that every function just works.
 
 let _ctx = null;
+// SFX mute — gates the synthesis primitives below. Ambient MUSIC has its own toggle
+// (startAmbient/stopAmbient), so muting SFX never touches the music. Set from the
+// Settings overlay; the React layer owns persistence.
+let _muted = false;
+export function setMuted(b) { _muted = !!b; }
+export function isMuted() { return _muted; }
 
 function ctx() {
   if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -17,6 +23,7 @@ function now() { return ctx().currentTime; }
 
 // Fundamental building block: one oscillator with a linear attack + exponential decay.
 function tone(freq, type, start, end, peak, attack = 0.006) {
+  if (_muted) return;
   const c = ctx();
   const o = c.createOscillator();
   const g = c.createGain();
@@ -31,6 +38,7 @@ function tone(freq, type, start, end, peak, attack = 0.006) {
 
 // Frequency sweep with constant gain → exponential decay.
 function sweep(f0, f1, type, dur, peak, delay = 0) {
+  if (_muted) return;
   const start = now() + delay;
   const c = ctx();
   const o = c.createOscillator();
