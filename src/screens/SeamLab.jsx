@@ -292,9 +292,16 @@ function pullFrom(ground, stableIds, accessDepth, pity = 0, rand = Math.random) 
 // wild roster (not a single ring), weighted by rarity, sharing the same PITY as ring-pulls.
 // New → caught (+ a rarity Core head-start); dupe → melts to that creature's Cores. Gives
 // breadth (creatures + Cores), never a shortcut past the climb. Returns {id,rarity,isDupe}.
-const SUMMON_COST = 50;    // slag for a single Wild Call
+const SUMMON_COST = 50;    // slag for a single call
 const SUMMON5_COST = 220;  // slag for a five-fold call (a small discount + a guaranteed Rare+)
-function summonPull(stableIds, pity = 0, rand = Math.random) {
+const SUMMON10_COST = 420; // slag for a ten-fold call (bigger discount + a guaranteed Legendary)
+// Summon banners (vF-BJ2): a choice of pool. Deep Call costs more but pulls Legendaries far
+// more often (boosts their weight). Cost of any draw = base × the banner's costMult.
+const SUMMON_BANNERS = [
+  { id: 'wild', name: 'The Wild Call', legBoost: 1,   costMult: 1,   blurb: 'every grunling, honest rates' },
+  { id: 'deep', name: 'The Deep Call', legBoost: 2.2, costMult: 1.5, blurb: 'pricier — but Legendaries answer far more often' },
+];
+function summonPull(stableIds, pity = 0, rand = Math.random, legBoost = 1) {
   const pool = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id));
   if (!pool.length) return null;
   const legs = pool.filter((x) => rarityOf(x) === 'Legendary');
@@ -304,7 +311,8 @@ function summonPull(stableIds, pity = 0, rand = Math.random) {
     const ls = fresh.length ? fresh : legs;
     id = ls[Math.floor(rand() * ls.length)];
   } else {
-    const w = pool.map((x) => RARITY_INFO[rarityOf(x)].weight || 1);
+    // legBoost > 1 = a "Deep Call" banner: Legendary weight is multiplied, so rares pull more.
+    const w = pool.map((x) => { const b = RARITY_INFO[rarityOf(x)].weight || 1; return rarityOf(x) === 'Legendary' ? b * legBoost : b; });
     let roll = rand() * w.reduce((s, x) => s + x, 0);
     id = pool[pool.length - 1];
     for (let i = 0; i < pool.length; i++) { roll -= w[i]; if (roll < 0) { id = pool[i]; break; } }
@@ -2277,6 +2285,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
   const [summonResults, setSummonResults] = useState(null); // [{id,rarity,isDupe,gainedCores}] — last Summon's pulls
+  const [bannerId, setBannerId] = useState('wild');         // chosen Summon banner (wild | deep)
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
   const [pendingUpgrade, setPendingUpgrade] = useState(null); // unit-scope upgrade awaiting a target pick
   const [targetChoice, setTargetChoice] = useState(null); // who's tentatively selected on the target-pick screen (confirm to commit)
@@ -2733,29 +2742,33 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setShards(ns); saveShards(ns);
     setCraftResult({ ...res, tier: tier.id });
   }
-  function doSummon(times) {
-    const cost = times >= 5 ? SUMMON5_COST : SUMMON_COST;
+  function doSummon(times, ban = SUMMON_BANNERS[0]) {
+    const base = times >= 10 ? SUMMON10_COST : times >= 5 ? SUMMON5_COST : SUMMON_COST;
+    const cost = Math.round(base * (ban.costMult || 1));
     if ((slag || 0) < cost) return;
     onSlag?.(-cost); sfx.resume();
     let curStable = [...stable]; let curPity = pity; const results = [];
-    for (let k = 0; k < times; k++) {
-      const p = summonPull(curStable, curPity); if (!p) break;
+    // Bank a creature into the result + stable/cores. Returns the result row.
+    const take = (p) => {
       const info = RARITY_INFO[p.rarity]; let gainedCores;
       if (p.isDupe) { gainedCores = info.dupeCores; awardCores([p.id], info.dupeCores); }
       else { curStable = [...curStable, p.id]; gainedCores = info.startCores; if (info.startCores > 0) awardCores([p.id], info.startCores); }
       curPity = p.rarity === 'Legendary' ? 0 : curPity + 1;
-      results.push({ ...p, gainedCores });
+      return { ...p, gainedCores };
+    };
+    for (let k = 0; k < times; k++) {
+      const p = summonPull(curStable, curPity, Math.random, ban.legBoost || 1); if (!p) break;
+      results.push(take(p));
     }
-    // five-fold guarantee: if all five came up Common, lift the last to a Rare.
-    if (times >= 5 && results.length && results.every((r) => r.rarity === 'Common')) {
-      const rares = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id) && rarityOf(id) === 'Rare');
-      if (rares.length) {
-        const rid = rares[Math.floor(Math.random() * rares.length)]; const isDupe = curStable.includes(rid); const info = RARITY_INFO.Rare; let gainedCores;
-        if (isDupe) { gainedCores = info.dupeCores; awardCores([rid], info.dupeCores); }
-        else { curStable = [...curStable, rid]; gainedCores = info.startCores; awardCores([rid], info.startCores); }
-        results[results.length - 1] = { id: rid, rarity: 'Rare', isDupe, gainedCores };
-      }
-    }
+    // GUARANTEES: a ten-fold call lands at least a Legendary; a five-fold at least a Rare+.
+    const upgradeTo = (rarity) => {
+      const pool = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id) && rarityOf(id) === rarity);
+      if (!pool.length || !results.length) return;
+      const rid = pool[Math.floor(Math.random() * pool.length)];
+      results[results.length - 1] = take({ id: rid, rarity, isDupe: curStable.includes(rid) });
+    };
+    if (times >= 10 && !results.some((r) => RARITY_INFO[r.rarity].mult >= RARITY_INFO.Legendary.mult)) upgradeTo('Legendary');
+    else if (times >= 5 && results.every((r) => r.rarity === 'Common')) upgradeTo('Rare');
     setStable(curStable); saveStable(curStable);
     setPity(curPity); savePity(curPity);
     setSummonResults(results);
@@ -3277,33 +3290,48 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           const rates = [['Common', 60], ['Rare', 28], ['Legendary', 10]];
           return (
             <div>
-              {/* The banner */}
-              <div style={{ background: 'radial-gradient(120% 100% at 50% 0%, #1a1430, #0c0a14)', border: '1px solid #4a3a66', borderRadius: 14, padding: '16px 16px 14px', marginBottom: 12, textAlign: 'center' }}>
-                <div style={{ fontSize: 30, lineHeight: 1 }}>✨</div>
-                <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', letterSpacing: 0.5, marginTop: 4 }}>The Wild Call</div>
-                <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.5, marginTop: 4, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
-                  Spend slag to wake a grunling from a wild core. A <b style={{ color: '#cba6ff' }}>new</b> one joins your stable; a <b style={{ color: '#cba6ff' }}>dupe</b> melts to that creature's Cores. Calls find <b style={{ color: '#cba6ff' }}>creatures</b>, never run-power — your climb is still yours to earn.
-                </div>
-              </div>
-              {/* Slag + pity */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: T.small, fontWeight: 900, color: '#c9c98a' }}>⚒ {slag} slag</span>
-                <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#ffd166' }}>★ guaranteed within {toLeg} call{toLeg !== 1 ? 's' : ''}</span>
-              </div>
-              {/* Call buttons */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-                {[['Wild Call', 1, SUMMON_COST, 'one pull'], ['Five-fold Call', 5, SUMMON5_COST, 'guarantees a ◆ Rare+']].map(([label, n, cost, sub]) => {
-                  const afford = slag >= cost;
-                  return (
-                    <button key={label} onClick={() => afford && doSummon(n)} disabled={!afford}
-                      style={{ textAlign: 'center', borderRadius: 12, padding: '13px 10px', cursor: afford ? 'pointer' : 'default', background: afford ? 'linear-gradient(180deg,#1a1430,#140e22)' : PANEL, border: `1.5px solid ${afford ? '#7a5aa0' : LINE}`, opacity: afford ? 1 : 0.55 }}>
-                      <div style={{ fontSize: T.body, fontWeight: 900, color: afford ? '#eadcff' : DIM }}>{n >= 5 ? '✨✨ ' : '✨ '}{label}</div>
-                      <div style={{ fontSize: T.small, fontWeight: 900, color: afford ? '#c9c98a' : DIM, marginTop: 3 }}>{cost} ⚒</div>
-                      <div style={{ fontSize: T.micro, color: '#9a7fc0', marginTop: 2 }}>{sub}</div>
-                    </button>
-                  );
-                })}
-              </div>
+              {(() => {
+                const ban = SUMMON_BANNERS.find((b) => b.id === bannerId) || SUMMON_BANNERS[0];
+                const costOf = (n) => Math.round((n >= 10 ? SUMMON10_COST : n >= 5 ? SUMMON5_COST : SUMMON_COST) * ban.costMult);
+                return (
+                  <>
+                    {/* Banner selector — which pool to call from */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      {SUMMON_BANNERS.map((b) => { const on = b.id === bannerId; return (
+                        <button key={b.id} onClick={() => setBannerId(b.id)}
+                          style={{ flex: 1, textAlign: 'center', borderRadius: 12, padding: '12px 8px', cursor: 'pointer',
+                            background: on ? 'radial-gradient(120% 100% at 50% 0%, #1a1430, #0c0a14)' : PANEL, border: `1.5px solid ${on ? '#7a5aa0' : LINE}` }}>
+                          <div style={{ fontSize: 22, lineHeight: 1 }}>{b.id === 'deep' ? '✦' : '✨'}</div>
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: on ? '#eadcff' : '#9a9aaa', marginTop: 3 }}>{b.name}</div>
+                          <div style={{ fontSize: 9, color: on ? '#9a7fc0' : DIM, marginTop: 2, lineHeight: 1.35 }}>{b.blurb}</div>
+                        </button>
+                      ); })}
+                    </div>
+                    <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.5, marginBottom: 12, textAlign: 'center', maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
+                      Wake a grunling from a wild core. A <b style={{ color: '#cba6ff' }}>new</b> one joins your stable; a <b style={{ color: '#cba6ff' }}>dupe</b> melts to its Cores. Calls find <b style={{ color: '#cba6ff' }}>creatures</b>, never run-power — your climb is still yours to earn.
+                    </div>
+                    {/* Slag + pity */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: '#c9c98a' }}>⚒ {slag} slag</span>
+                      <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#ffd166' }}>★ guaranteed within {toLeg} call{toLeg !== 1 ? 's' : ''}</span>
+                    </div>
+                    {/* Call buttons — ×1 / ×5 / ×10 at the banner's price */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+                      {[['Call', 1, 'one pull'], ['Five-fold', 5, 'a ◆ Rare+'], ['Ten-fold', 10, 'a ★ Legendary']].map(([label, n, sub]) => {
+                        const cost = costOf(n); const afford = slag >= cost;
+                        return (
+                          <button key={n} onClick={() => afford && doSummon(n, ban)} disabled={!afford}
+                            style={{ textAlign: 'center', borderRadius: 12, padding: '12px 6px', cursor: afford ? 'pointer' : 'default', background: afford ? 'linear-gradient(180deg,#1a1430,#140e22)' : PANEL, border: `1.5px solid ${afford ? '#7a5aa0' : LINE}`, opacity: afford ? 1 : 0.55 }}>
+                            <div style={{ fontSize: T.small, fontWeight: 900, color: afford ? '#eadcff' : DIM }}>{n >= 10 ? '✨✨✨' : n >= 5 ? '✨✨' : '✨'} {label}</div>
+                            <div style={{ fontSize: T.small, fontWeight: 900, color: afford ? '#c9c98a' : DIM, marginTop: 3 }}>{cost} ⚒</div>
+                            <div style={{ fontSize: 9, color: '#9a7fc0', marginTop: 2, lineHeight: 1.3 }}>{n > 1 ? `guarantees ${sub}` : sub}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
               {/* Results */}
               {summonResults && summonResults.length > 0 && (
                 <div style={{ background: '#0c0e16', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px', marginBottom: 14 }}>
