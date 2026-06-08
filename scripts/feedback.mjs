@@ -48,28 +48,28 @@ ok(ctx.relicCount === 2, 'relic count read');
 ok(ctx.wardsSolved === 1, 'solved wards counted');
 delete globalThis.localStorage;
 
-// --- submitFeedback: unconfigured → queued (saved to outbox) ---
+// --- submitFeedback (now CONFIGURED — Supabase wired 2026-06-08) ---
+// We never hit the real network in the test: inject fetch doubles.
 const outbox = {};
 globalThis.localStorage = {
   getItem: (k) => (k in outbox ? outbox[k] : null),
   setItem: (k, v) => { outbox[k] = v; },
 };
-const q = await submitFeedback('bug', 'something broke', { version: 'v' });
-ok(q.ok && q.mode === 'queued', 'unconfigured submit queues locally');
-ok(JSON.parse(outbox['8gents_feedback_outbox']).length === 1, 'note written to outbox');
-delete globalThis.localStorage;
 
-// --- submitFeedback: with a fake configured fetch (success) ---
-// isConfigured() is false here, so submit would queue; instead prove the POST
-// path shape via buildPayload + a direct fetch double is covered by the
-// integration of buildPayload above. Verify the fetch failure path queues:
-globalThis.localStorage = {
-  getItem: (k) => (k in outbox ? outbox[k] : null),
-  setItem: (k, v) => { outbox[k] = v; },
-};
+// success fetch → POSTed, mode 'sent', nothing queued.
+let posted = null;
+const okFetch = async (url, opts) => { posted = { url, opts }; return { ok: true, status: 201 }; };
+const sent = await submitFeedback('bug', 'something broke', { version: 'v' }, okFetch);
+ok(sent.ok && sent.mode === 'sent', 'configured submit POSTs (mode sent)');
+ok(posted && /\/rest\/v1\/ringward_feedback$/.test(posted.url), 'POST targets the ringward_feedback table');
+ok(posted.opts.method === 'POST' && posted.opts.headers.apikey, 'POST carries method + apikey header');
+ok(!outbox['8gents_feedback_outbox'], 'successful send does NOT touch the outbox');
+
+// failing fetch → saved to outbox so nothing is lost (mode 'queued-error').
 const failFetch = async () => { throw new Error('network down'); };
 const qe = await submitFeedback('idea', 'a thought worth saving', { version: 'v' }, failFetch);
-ok(qe.ok && qe.mode === 'queued', 'error path also queues (unconfigured short-circuits before fetch)');
+ok(qe.ok && qe.mode === 'queued-error', 'network failure queues to outbox (nothing lost)');
+ok(JSON.parse(outbox['8gents_feedback_outbox']).length === 1, 'failed note written to outbox');
 delete globalThis.localStorage;
 
 console.log(`feedback: ${pass} passed, ${fail} failed`);

@@ -4,14 +4,15 @@
 // run context (version, deepest ring, roster, screen) so a report is
 // actionable instead of "it's broken". Submissions land in a Supabase table.
 //
-// WIRING: fill these two constants once the Supabase project + `feedback`
-// table exist (see SUPABASE_SETUP below). The publishable/anon key is meant
-// to live in client code — it's safe ONLY because the table's row-level
-// security allows INSERT but not SELECT, so a tester can post but can't read
-// anyone's feedback. Until these are set, the UI saves notes to a local
-// outbox so nothing is lost and the build never breaks.
-export const SUPABASE_URL = '';        // e.g. 'https://abcd1234.supabase.co'
-export const SUPABASE_ANON_KEY = '';   // e.g. 'sb_publishable_...' (anon/publishable key ONLY)
+// WIRING: filled 2026-06-08. Posts to the `ringward_feedback` table (the
+// Supabase project is shared with other apps, so the table is namespaced).
+// The publishable key is meant to live in client code — it's safe ONLY
+// because the table's row-level security allows INSERT but not SELECT, so a
+// tester can post but can't read anyone's feedback. If these are ever blanked,
+// the UI falls back to saving notes to a local outbox so nothing is lost.
+export const SUPABASE_URL = 'https://hbazhbfhddaouxchvuxr.supabase.co';
+export const SUPABASE_ANON_KEY = 'sb_publishable_G_gevNCGgkVNUWv9NGlrRQ_3SJU8YP-'; // publishable key (INSERT-only RLS)
+export const FEEDBACK_TABLE = 'ringward_feedback';
 
 export const isConfigured = () => Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
@@ -114,7 +115,7 @@ export async function submitFeedback(tag, message, context, fetchImpl) {
   const doFetch = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
   if (!doFetch) { saveToOutbox(payload); return { ok: true, mode: 'queued' }; }
   try {
-    const res = await doFetch(`${SUPABASE_URL}/rest/v1/feedback`, {
+    const res = await doFetch(`${SUPABASE_URL}/rest/v1/${FEEDBACK_TABLE}`, {
       method: 'POST',
       headers: {
         apikey: SUPABASE_ANON_KEY,
@@ -133,9 +134,10 @@ export async function submitFeedback(tag, message, context, fetchImpl) {
 }
 
 // --- SUPABASE_SETUP -------------------------------------------------------
-// Run once in the Supabase SQL editor (or via the MCP apply_migration):
+// APPLIED 2026-06-08 (project hbazhbfhddaouxchvuxr, shared with other apps —
+// hence the `ringward_` prefix). The migration that ran:
 //
-//   create table public.feedback (
+//   create table public.ringward_feedback (
 //     id uuid primary key default gen_random_uuid(),
 //     created_at timestamptz not null default now(),
 //     tag text,
@@ -143,10 +145,10 @@ export async function submitFeedback(tag, message, context, fetchImpl) {
 //     version text,
 //     context jsonb
 //   );
-//   alter table public.feedback enable row level security;
-//   create policy "anon can insert feedback"
-//     on public.feedback for insert to anon with check (true);
+//   alter table public.ringward_feedback enable row level security;
+//   create policy "anon can insert ringward feedback"
+//     on public.ringward_feedback for insert to anon with check (true);
 //   -- intentionally NO select policy: testers can post but never read rows.
 //
-// Then set SUPABASE_URL + SUPABASE_ANON_KEY above to the project's URL and
-// publishable/anon key. That's the whole wiring.
+// To READ submissions: Supabase dashboard → Table editor → ringward_feedback
+// (or the SQL editor with the service role). Testers can't read via the app.
