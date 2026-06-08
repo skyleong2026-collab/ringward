@@ -2354,6 +2354,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [autoPick, setAutoPickState] = useState(loadAutoPick); // auto-resolve upgrade/event screens on FARMED rings
   const setAutoPick = (on) => { setAutoPickState(on); saveAutoPick(on); };
   const farmedRef = useRef(false); // is THIS run a re-clear of an already-beaten ring? (set at run start)
+  const featsAtRunStartRef = useRef(new Set()); // feat ids already earned when THIS run began (for "newly earned" celebration)
   const apTimer = useRef(null);    // the single pending auto-pick action timer
   const apSig = useRef(null);      // signature of the actionable state we've already scheduled for
   // AUTO-PICK: on a farmed ring (already cleared), auto-resolve the upgrade draft + wayside
@@ -2700,6 +2701,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     setRunWaves(wavesForGround(g, crossMult(crossing))); setRunDepth(g.depth);
     setEnteredRing(g); sfx.ringThreshold(g.depth); // crossing the threshold — a beat + a deepening swell
     farmedRef.current = g.depth <= reclaimed; // a re-clear of an already-beaten ring → auto-pick eligible
+    featsAtRunStartRef.current = doneFeatIds(); // remember what's already earned, to celebrate new ones
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
     const base = perkBaseMods(owned, reclaimed, relicKit); // perks + Holdfast boons + equipped relics set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
@@ -2710,6 +2712,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // ── Apex challenge: a one-off fight against a gathered apex creature. Win → recruit. ──
   function startChallenge(apexId) {
     sfx.resume();
+    featsAtRunStartRef.current = doneFeatIds();
     const base = perkBaseMods(owned, reclaimed, relicKit);
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     const aDefs = sq.map((m) => playerDef(m, base, treeModsFor(m.id, treeEquip, treeRanks)));
@@ -2785,11 +2788,30 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const base = perkBaseMods(owned, reclaimed, relicKit); // same opening mods a climb would use
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setEndless(true); setEndlessResult(null);
+    featsAtRunStartRef.current = doneFeatIds();
     setSquad(sq); setRunMods(base); setTaken([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setRunDepth(3);
     sfx.ringThreshold(3);
     startEndlessRound(1, sq, base);
   }
   function exitEndless() { setEndless(false); setEndlessResult(null); setRunPhase('pick'); }
+  // ── FEATS — a snapshot of progress + which were freshly earned this run. ──
+  function featSnapshot() {
+    return {
+      deepestRing: unlocked,
+      reclaimed,
+      caught: stable.length,
+      rosterSize: COMBAT_ROSTER.length,
+      gauntletBest: endlessBest,
+      wardsSolved: Object.values(wards).filter((w) => w && w.solved).length,
+      relicsOwned: relics.length,
+      keystonesOwned: KEYSTONE_IDS.filter((id) => relics.includes(id)).length,
+      crossings: crossing,
+    };
+  }
+  const doneFeatIds = () => new Set(evalFeats(featSnapshot()).filter((f) => f.done).map((f) => f.id));
+  // Feats that became done DURING this run (compared to the snapshot taken at run start).
+  // Used to celebrate milestones on the result screens — pure read, no side effects.
+  const newlyEarnedFeats = () => evalFeats(featSnapshot()).filter((f) => f.done && !featsAtRunStartRef.current.has(f.id));
   function applyUpgrade(up) {
     sfx.upgradePick();
     setUpgradeChoice(null);
@@ -3182,6 +3204,26 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       </div>
     );
   }
+
+  // ── FEAT CELEBRATION — milestones crossed THIS run, shown on the result screens. ──
+  const RESULT_PHASES = ['won', 'lost', 'drop', 'endless-over', 'challenge-won', 'challenge-lost'];
+  const earnedFeats = RESULT_PHASES.includes(runPhase) ? newlyEarnedFeats() : [];
+  const featCelebration = earnedFeats.length > 0 ? (
+    <div style={{ margin: '0 0 14px', padding: '12px 14px', borderRadius: 12, background: 'linear-gradient(180deg,#1c1708,#120e06)', border: '1.5px solid #e8c14a', boxShadow: '0 0 16px #e8c14a33', animation: 'seam-threshold 0.7s ease-out' }}>
+      <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#e8c14a', marginBottom: earnedFeats.length ? 7 : 0, textAlign: 'center' }}>★ FEAT{earnedFeats.length > 1 ? 'S' : ''} EARNED</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {earnedFeats.map((f) => (
+          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0e0a04', border: `1px solid ${TIER_COLOR[f.tier]}66`, borderRadius: 9, padding: '7px 11px' }}>
+            <span style={{ fontSize: 20 }}>{f.icon}</span>
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+              <div style={{ fontSize: T.small, fontWeight: 900, color: TIER_COLOR[f.tier] }}>{f.name} <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>· {f.tier}</span></div>
+              <div style={{ fontSize: T.micro, color: '#b8a87a' }}>{f.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null;
 
   // ── Squad picker ──
   if (runPhase === 'pick') {
@@ -3682,17 +3724,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             </div>
             {/* ── FEATS — milestones across every system; a pure projection of your save. ── */}
             {(() => {
-              const snap = {
-                deepestRing: unlocked,
-                reclaimed,
-                caught: stable.length,
-                rosterSize: COMBAT_ROSTER.length,
-                gauntletBest: endlessBest,
-                wardsSolved: Object.values(wards).filter((w) => w && w.solved).length,
-                relicsOwned: relics.length,
-                keystonesOwned: KEYSTONE_IDS.filter((id) => relics.includes(id)).length,
-                crossings: crossing,
-              };
+              const snap = featSnapshot();
               const feats = evalFeats(snap);
               const tally = featTally(snap);
               return (
@@ -4101,6 +4133,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
           <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>WON OVER</div>
           <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You bested <b>{challenge.name}</b> — it joins your stable.</div>
+          {featCelebration}
           <div style={{ margin: '14px 0', background: '#091a12', border: `2px solid ${cti.accent}`, borderRadius: 12, padding: '14px 16px' }}>
             <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6 }}>★ APEX RECRUITED</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
@@ -4180,6 +4213,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           );
         })()}
         <div style={{ maxWidth: 470, margin: '20px auto 0', animation: `seam-drop-text 1s ease-out ${0.9 + (lines.length + 1) * 0.6}s both` }}>
+          {featCelebration}
           <div style={{ fontSize: T.small, color: '#9a7fc0', lineHeight: 1.55, marginBottom: 12 }}>Step through, and the rings reform <b style={{ color: '#cba6ff' }}>harder</b> — the next crossing, the next of his story. Or carry it home and come again when you're ready.</div>
           <button onClick={stepThrough} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: '#b06bff', color: '#160f1d', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer', marginBottom: 8 }}>{beat.step}</button>
           <button onClick={newRun} style={{ width: '100%', padding: '11px 0', borderRadius: 10, background: 'transparent', border: '1px solid #4a3a66', color: '#9a7fc0', fontSize: T.small, fontWeight: 800, cursor: 'pointer' }}>↩ carry it home {crossing > 0 ? `(stay on Crossing ${roman(crossing)})` : ''}</button>
@@ -4204,6 +4238,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <div style={{ display: 'inline-block', fontSize: T.small, fontWeight: 900, color: '#1a1408', background: ACCENT, borderRadius: 8, padding: '4px 12px', marginBottom: 12 }}>★ NEW BEST</div>
         )}
         <div style={{ fontSize: T.small, color: DIM, marginBottom: 12 }}>Best ever: <b style={{ color: '#cba6ff' }}>R{r.best}</b></div>
+        {featCelebration}
         <SlagBanked earned={earned} balance={slag} />
         <RunRecap taken={taken} stats={stats} squad={squad} />
         <button onClick={startEndless} disabled={picked.length < 2}
@@ -4225,6 +4260,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
           <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
           <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You cleared <b>{caughtFrom ? caughtFrom.name : 'the ring'}</b> to its heart.</div>
+          {featCelebration}
           {enteredRing && RING_CLEAR[enteredRing.id] && (
             <div style={{ background: '#0a0f14', border: '1px solid #2a3f2a', borderRadius: 12, padding: '13px 14px', margin: '0 0 14px', textAlign: 'left' }}>
               <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
@@ -4371,6 +4407,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
         <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVE_COUNT}.</div>
+        {featCelebration}
         <SlagBanked earned={earned} balance={slag} />
         <CoresBanked coresRun={coresRun} />
         <RunRecap taken={taken} stats={stats} squad={squad} />
