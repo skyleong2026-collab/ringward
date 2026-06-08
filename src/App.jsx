@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { SeamLab } from './screens/SeamLab.jsx';
+import SpriteLab from './screens/SpriteLab.jsx';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vF-BW';
+const VERSION = 'vF-BX';
 
 // ── Ringward IS the game. ───────────────────────────────────────────────────────
 // The home screen and the whole experience live in the SEAM run (src/screens/
@@ -41,6 +42,15 @@ function App() {
       return next;
     });
   }
+
+  // Standalone art prototype, reachable at <url>/#spritelab — never part of the game.
+  const [hash, setHash] = useState(() => (typeof window !== 'undefined' ? window.location.hash : ''));
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  if (hash === '#spritelab') return <SpriteLab />;
 
   return <SeamLab slag={currencies.slag ?? 0} onSlag={addSlag} version={VERSION} />;
 }
