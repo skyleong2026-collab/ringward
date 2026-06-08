@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SeamLab } from './screens/SeamLab.jsx';
 import SpriteLab from './screens/SpriteLab.jsx';
+import LayoutLab from './screens/LayoutLab.jsx';
 import { animationStyles } from './ui/animations.js';
 
 const VERSION = 'vF-BZ';
@@ -51,6 +52,7 @@ function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   if (hash === '#spritelab') return <SpriteLab />;
+  if (hash === '#layoutlab') return <LayoutLab />;
 
   return <SeamLab slag={currencies.slag ?? 0} onSlag={addSlag} version={VERSION} />;
 }
