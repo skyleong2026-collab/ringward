@@ -25,3 +25,6 @@ dist-ssr
 dist/
 .claude/
 .vercel
+
+# PixelLab API key — local only, never commit
+scripts/pixellab/.env
