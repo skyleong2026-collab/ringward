@@ -574,6 +574,43 @@ const WAYSIDE_EVENTS = [
           { icon: '🪨', label: 'Lift the stone at the roots', detail: 'He cached something.', apply: (c) => (c.cores(24), c.heal(0.3), '🪨 Under it, wrapped against the rot: rations, salve, a handful of banked Cores he left for whoever came after. For you. +24 ⬡, the squad recovers.') },
         ] },
     } },
+  { id: 'tale_bell', kind: 'story', glyph: '🔔', tint: '#7fd6ff', title: 'The Drowned Bell', scene: 'water', start: 'pool',
+    steps: {
+      pool: {
+        text: "A still pool, and rising from its center a rusted iron bell on a leaning post — a warning-bell, from when the rim still watched this far in. The water around it is black and very deep. Something pale rests at the bottom, just under the surface of seeing.",
+        choices: [
+          { icon: '🔔', label: 'Ring the bell', detail: 'Call out. Who answers?', goto: 'ring' },
+          { icon: '🤿', label: 'Wade for what sank', detail: 'Cold, deep, uncertain.', apply: (c) => c.hurt(0.1), goto: 'wade' },
+          { icon: '🚶', label: 'Leave the dead their quiet', detail: 'Some things stay sunk.', apply: (c) => (c.buff((m) => { m.healMult *= 1.12; }), '🚶 You let it lie and move on, lighter for the respect. The squad climbs a little gentler. +12% healing onward.') },
+        ] },
+      ring: {
+        text: "You strike the bell once. The note rolls out flat across the water and keeps going, far longer than a sound should. When it finally dies the pool has gone glass-still — and a voice, or the memory of one, says only: thank you. Whoever was waiting to hear that bell is at rest now.",
+        choices: [
+          { icon: '✚', label: 'Sit with the quiet', detail: 'Rest in the peace.', apply: (c) => (c.heal(0.4), '✚ You sit a while where the bell still hums in the stone. The squad rests deep in the stillness it leaves behind.') },
+          { icon: '⚡', label: "Take the bell's tongue", detail: 'Old iron, still ringing.', apply: (c) => (c.prime(3), c.cores(15), '⚡ You work the iron tongue free — it carries the note in it still, a thing that wants to wake. The squad starts the next fights Primed. +15 ⬡.') },
+        ] },
+      wade: {
+        text: "You wade in to your chest, the cold a living thing, and your fingers close on it: a climber's core-lamp, sealed, the light inside never gone out. And beneath, the climber, at peace. Your mentor's mark is scratched on the lamp's base — he came this far, and left it for the next.",
+        choices: [
+          { icon: '🏮', label: 'Take the lamp', detail: 'His light, passed on.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.1; m.chargeStart += 1; }), '🏮 The lamp wakes warm in your hands. You climb by his light now — +10% damage and start every fight +1 charge, the rest of the way.') },
+          { icon: '✦', label: 'Take only the cores', detail: 'Leave him his lamp.', apply: (c) => (c.cores(35), '✦ You leave the lamp lit beside him and take only the spare cores from his pack. +35 ⬡ — and the small comfort of doing right by a stranger who did right by you.') },
+        ] },
+    } },
+  { id: 'tale_dark', kind: 'story', glyph: '🕳', tint: '#b06bff', title: 'The Long Dark', scene: 'hollow', start: 'mouth',
+    steps: {
+      mouth: {
+        text: "The trail runs straight into the mouth of a cave and does not come out the other side that you can see. Cold air breathes from it, and far back a glow — not firelight. Something is lit down there. The way around is a long, exposed climb. The way through is short, and dark, and certain of nothing.",
+        choices: [
+          { icon: '🔦', label: 'Go through the dark', detail: 'Short, blind, faster.', goto: 'through' },
+          { icon: '⛰', label: 'Take the long way around', detail: 'Safe, slow, tiring.', apply: (c) => (c.slag(30), '⛰ You take the exposed high road. Hard miles, but you strip good salvage off the old wreckage up there. +30 ⚒.') },
+        ] },
+      through: {
+        text: "Inside, the dark is total but for that glow — and it resolves, as you near it, into a grunling. Wild, alone, its core burning bright enough to light the whole cavern, curled around something it is guarding. It watches you come. It does not run. It has been waiting down here for someone a long time.",
+        choices: [
+          { icon: '🤝', label: 'Approach slow, open-handed', detail: 'Trust the lonely thing.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.08; }), '🤝 You crouch and wait, and after a long moment it comes to you, and lights your way out the far side before slipping back into its dark. The squad climbs Primed and bolder for the company. +8% damage onward.') },
+          { icon: '✦', label: 'Take what it guards', detail: "It can't stop you.", apply: (c) => (c.cores(45), c.hurt(0.12), "✦ You take the cores it was curled around. It doesn't fight you — just watches, and that's worse. +45 ⬡, and a few scrapes finding the exit alone in the dark.") },
+        ] },
+    } },
   // ── MERCHANT nodes (vF-BB): spend the slag you'd otherwise hoard for the Forge on an
   // immediate edge for THIS run. A real trade — power now vs. a permanent perk later. ──
   { id: 'trader', kind: 'merchant', glyph: '🛒', tint: '#c9c98a', title: 'The Wayside Trader',
