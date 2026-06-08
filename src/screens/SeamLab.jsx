@@ -19,6 +19,7 @@ import { KEYSTONE_TIERS, shardYield, resolveCraft } from '../data/keystones.js';
 import { FeedbackButton } from './Feedback.jsx';
 import { setLiveContext } from '../data/feedback.js';
 import { endlessWaveSpec, endlessRoundSlag, endlessReached } from '../data/endless.js';
+import { evalFeats, featTally, FEAT_GROUPS, TIER_COLOR } from '../data/feats.js';
 import {
   createBattleState,
   runBattle,
@@ -3679,6 +3680,50 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 Four trials guard each ring — clear them in one push and the approach is yours. Beat a ring's boss and the next ring <b style={{ color: '#9be7ff' }}>inward</b> opens, with stronger, higher-tier creatures to win over. Wounds carry between fights; you only patch up a little. Choose who goes in.
               </div>
             </div>
+            {/* ── FEATS — milestones across every system; a pure projection of your save. ── */}
+            {(() => {
+              const snap = {
+                deepestRing: unlocked,
+                reclaimed,
+                caught: stable.length,
+                rosterSize: COMBAT_ROSTER.length,
+                gauntletBest: endlessBest,
+                wardsSolved: Object.values(wards).filter((w) => w && w.solved).length,
+                relicsOwned: relics.length,
+                keystonesOwned: KEYSTONE_IDS.filter((id) => relics.includes(id)).length,
+                crossings: crossing,
+              };
+              const feats = evalFeats(snap);
+              const tally = featTally(snap);
+              return (
+                <div style={{ background: '#0e0c16', border: '1px solid #33304a', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: T.sub, color: '#dcdce6', fontWeight: 900, letterSpacing: 0.5 }}>🏅 FEATS</span>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: '#9a9ab0' }}>{tally.done}/{tally.total} earned</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, background: '#1c1a28', margin: '8px 0 12px', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.round(tally.pct * 100)}%`, height: '100%', background: 'linear-gradient(90deg,#c08552,#e8c14a)' }} />
+                  </div>
+                  {FEAT_GROUPS.map((grp) => (
+                    <div key={grp} style={{ marginBottom: 9 }}>
+                      <div style={{ fontSize: T.micro, fontWeight: 900, color: '#7a7a90', letterSpacing: 1, marginBottom: 5 }}>{grp.toUpperCase()}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 6 }}>
+                        {feats.filter((f) => f.group === grp).map((f) => (
+                          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 9,
+                            background: f.done ? '#13140f' : '#121119', border: `1px solid ${f.done ? TIER_COLOR[f.tier] + '88' : '#2a2838'}` }}>
+                            <span style={{ fontSize: 18, filter: f.done ? 'none' : 'grayscale(1)', opacity: f.done ? 1 : 0.45 }}>{f.icon}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: T.small, fontWeight: 800, color: f.done ? TIER_COLOR[f.tier] : '#b6b6c2' }}>{f.name}{f.done ? ' ✓' : ''}</div>
+                              <div style={{ fontSize: T.micro, color: '#8a8a9a', lineHeight: 1.3 }}>{f.desc}{!f.done && f.need > 1 ? ` · ${f.rawHave}/${f.need}` : ''}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             {/* Story + Chronicle — the lore, in one place. */}
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { sfx.resume(); setShowIntro(true); }}
