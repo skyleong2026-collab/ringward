@@ -99,14 +99,14 @@ const CREATURE_LORE = {
 // enemies are the ring's own locals, stat-scaled by depth (see wavesForGround). Outer
 // rings are an auto-able warm-up for little slag/Cores; the deep is a real wall worth more.
 const HUNTING_GROUNDS = [
-  { id: 'outer-ring',  name: 'The Crackling Outer Ring', tag: 'outer ring',     depth: 1, boss: 'The Cinder Maw',  biasIds: ['fizzpop', 'glowtail', 'cinderpaw'] },
-  { id: 'fallen-gate', name: 'The Fallen Gate',          tag: 'the ruined gate', depth: 2, boss: 'The Gatebreaker', biasIds: ['stoneward', 'ironwall'] },
-  { id: 'green-seam',  name: 'The Green Seam',           tag: 'between the rings', depth: 3, boss: 'The Old Grove',  biasIds: ['mossback', 'dewleaf'] },
-  { id: 'storm-wire',  name: 'Storm-Wire Thickets',      tag: 'the storm-wire',  depth: 4, boss: 'The Live Wire',   biasIds: ['buzzline', 'tanglewing'] },
-  { id: 'fast-trails', name: 'The Fast Trails',          tag: 'the narrow trails', depth: 5, boss: 'The Blur',       biasIds: ['swiftpaw', 'dartwing'] },
-  { id: 'lightless',   name: 'The Lightless Deep',       tag: 'past the Warden', depth: 6, boss: 'The Throat-Cutter', biasIds: ['shadefang', 'veilclaw'] },
-  { id: 'witherfen',   name: 'The Witherfen',            tag: 'where the blight pools', depth: 7, boss: 'The Blight-Heart', biasIds: ['blightcap', 'hexmoth'] },
-  { id: 'frostbound',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', depth: 8, boss: 'The Stillness', biasIds: ['frostwarden', 'rimecaller'] },
+  { id: 'outer-ring',  img: '/art/rings/outer-ring.jpg',  name: 'The Crackling Outer Ring', tag: 'outer ring',     depth: 1, boss: 'The Cinder Maw',  biasIds: ['fizzpop', 'glowtail', 'cinderpaw'] },
+  { id: 'fallen-gate', img: '/art/rings/fallen-gate.jpg', name: 'The Fallen Gate',          tag: 'the ruined gate', depth: 2, boss: 'The Gatebreaker', biasIds: ['stoneward', 'ironwall'] },
+  { id: 'green-seam',  img: '/art/rings/green-seam.jpg',  name: 'The Green Seam',           tag: 'between the rings', depth: 3, boss: 'The Old Grove',  biasIds: ['mossback', 'dewleaf'] },
+  { id: 'storm-wire',  img: '/art/rings/storm-wire.jpg',  name: 'Storm-Wire Thickets',      tag: 'the storm-wire',  depth: 4, boss: 'The Live Wire',   biasIds: ['buzzline', 'tanglewing'] },
+  { id: 'fast-trails', img: '/art/rings/fast-trails.jpg', name: 'The Fast Trails',          tag: 'the narrow trails', depth: 5, boss: 'The Blur',       biasIds: ['swiftpaw', 'dartwing'] },
+  { id: 'lightless',   img: '/art/rings/lightless.jpg',   name: 'The Lightless Deep',       tag: 'past the Warden', depth: 6, boss: 'The Throat-Cutter', biasIds: ['shadefang', 'veilclaw'] },
+  { id: 'witherfen',   img: '/art/rings/witherfen.jpg',   name: 'The Witherfen',            tag: 'where the blight pools', depth: 7, boss: 'The Blight-Heart', biasIds: ['blightcap', 'hexmoth'] },
+  { id: 'frostbound',  img: '/art/rings/frostbound.jpg',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', depth: 8, boss: 'The Stillness', biasIds: ['frostwarden', 'rimecaller'] },
 ];
 
 // WARD GATES — data + pure logic now live in ../data/wards.js (imported above) so the
@@ -515,7 +515,7 @@ const WAYSIDE_EVENTS = [
   // terminal — its `apply(ctx)` returns the outcome line, same as a one-shot event. `scene`
   // names a WaysideScene backdrop. Per-choice `icon` shows a glyph on the button. Pure
   // run-meta like every wayside — never touches the engine. ──
-  { id: 'tale_fire', kind: 'story', glyph: '🔥', tint: '#ffae5a', title: 'The Fire and the Stranger', scene: 'camp', start: 'meet',
+  { id: 'tale_fire', kind: 'story', glyph: '🔥', tint: '#ffae5a', title: 'The Fire and the Stranger', scene: 'camp', image: '/art/wayside/camp.jpg', start: 'meet',
     steps: {
       meet: {
         text: "A fire burns low off the trail, and a figure sits beside it — another climber, older, hands scarred. They lift a hand, unhurried. “Long way to come alone,” they say. “Sit. The fire’s warm and I’ve talked to no one in days.”",
@@ -537,7 +537,7 @@ const WAYSIDE_EVENTS = [
           { icon: '🎒', label: 'Take from the pack, slip away', detail: 'Slag, no thanks owed.', apply: (c) => (c.slag(34), '🎒 You lift what won’t be missed and go. It’s the trail’s way, you tell yourself. +34 ⚒ — and a small weight that isn’t slag.') },
         ] },
     } },
-  { id: 'tale_door', kind: 'story', glyph: '🚪', tint: '#b06bff', title: 'The Sealed Door', scene: 'ruin', start: 'door',
+  { id: 'tale_door', kind: 'story', glyph: '🚪', tint: '#b06bff', title: 'The Sealed Door', scene: 'ruin', image: '/art/wayside/ruin.jpg', start: 'door',
     steps: {
       door: {
         text: "Set into a ruined wall is a vault door, blight-eaten at the hinges but whole. Behind it something hums — low and patient, the sound a charged core makes. Sealed this deep in, it was sealed for a reason. Or sealed to keep it safe.",
@@ -559,7 +559,7 @@ const WAYSIDE_EVENTS = [
           { icon: '🔧', label: 'Pry the lock for parts', detail: 'Sure slag, no risk.', apply: (c) => (c.slag(40), '🔧 You take the lock apart for its old, good metal and leave the door to its humming. +40 ⚒ — and you’ll wonder, later, what was behind it.') },
         ] },
     } },
-  { id: 'tale_tree', kind: 'story', glyph: '🌳', tint: '#7ec88a', title: 'The Hollow Tree', scene: 'grove', start: 'tree',
+  { id: 'tale_tree', kind: 'story', glyph: '🌳', tint: '#7ec88a', title: 'The Hollow Tree', scene: 'grove', image: '/art/wayside/grove.jpg', start: 'tree',
     steps: {
       tree: {
         text: "In a stand of pale dead trees, one trunk has grown wrong — half-fused to a grunling that wandered in years ago and never left, the two grown into each other. Its little core still flickers in the hollow of the wood: weak, alive, afraid of you.",
@@ -4170,15 +4170,18 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {waveIdx === 0 && enteredRing && RING_INTRO[enteredRing.id] && (() => {
           const di = diffOf(enteredRing.depth + crossing);
           return (
-            <div style={{ animation: 'seam-threshold 1s ease-out', display: 'flex', gap: 13, alignItems: 'stretch', background: 'linear-gradient(180deg,#0e1320,#0b0d16)', border: `1px solid ${SEL}44`, borderLeft: `3px solid ${di.color}`, borderRadius: 12, padding: '12px 15px', marginBottom: 14 }}>
-              <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 84} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#8fa7c8' }}>⛰ YOU CROSS INTO</span>
-                  <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff' }}>{enteredRing.name}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: di.color }}>ring {enteredRing.depth}/8 · {di.label}</span>
+            <div style={{ animation: 'seam-threshold 1s ease-out', background: 'linear-gradient(180deg,#0e1320,#0b0d16)', border: `1px solid ${SEL}44`, borderLeft: `3px solid ${di.color}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+              {enteredRing.img && <img src={enteredRing.img} alt={enteredRing.name} style={{ width: '100%', aspectRatio: '20/13', objectFit: 'cover', display: 'block' }} />}
+              <div style={{ display: 'flex', gap: 13, alignItems: 'stretch', padding: '12px 15px' }}>
+                {!enteredRing.img && <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 84} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#8fa7c8' }}>⛰ YOU CROSS INTO</span>
+                    <span style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff' }}>{enteredRing.name}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: di.color }}>ring {enteredRing.depth}/8 · {di.label}</span>
+                  </div>
+                  <div style={{ fontSize: T.small, color: '#bcc6d8', lineHeight: 1.55, fontStyle: 'italic', marginTop: 5 }}>{RING_INTRO[enteredRing.id]}</div>
                 </div>
-                <div style={{ fontSize: T.small, color: '#bcc6d8', lineHeight: 1.55, fontStyle: 'italic', marginTop: 5 }}>{RING_INTRO[enteredRing.id]}</div>
               </div>
             </div>
           );
