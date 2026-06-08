@@ -18,6 +18,7 @@ import { WARDS, wardBlocking, activateWard, advanceWardDeeds } from '../data/war
 import { KEYSTONE_TIERS, shardYield, resolveCraft } from '../data/keystones.js';
 import { FeedbackButton } from './Feedback.jsx';
 import { setLiveContext } from '../data/feedback.js';
+import { endlessWaveSpec, endlessRoundSlag, endlessReached } from '../data/endless.js';
 import {
   createBattleState,
   runBattle,
@@ -417,6 +418,9 @@ function saveWards(w) { try { localStorage.setItem(WARDS_KEY, JSON.stringify(w))
 const SHARDS_KEY = '8gents_seam_shards'; // relic-shards — salvaged from relics, spent forging Keystones
 function loadShards() { try { const n = parseInt(localStorage.getItem(SHARDS_KEY), 10); return Number.isFinite(n) ? Math.max(0, n) : 0; } catch { return 0; } }
 function saveShards(n) { try { localStorage.setItem(SHARDS_KEY, String(n)); } catch { /* best-effort */ } }
+const ENDLESS_BEST_KEY = '8gents_seam_endless_best'; // furthest round ever cleared in the Gauntlet
+function loadEndlessBest() { try { const n = parseInt(localStorage.getItem(ENDLESS_BEST_KEY), 10); return Number.isFinite(n) ? Math.max(0, n) : 0; } catch { return 0; } }
+function saveEndlessBest(n) { try { localStorage.setItem(ENDLESS_BEST_KEY, String(n)); } catch { /* best-effort */ } }
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']; // crossing numeral
 const roman = (n) => ROMAN[n] || ('×' + n);
 
@@ -2284,6 +2288,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [ground, setGround] = useState(loadGround); // hunting ground — biases who you catch
   const [runWaves, setRunWaves] = useState(() => wavesForGround(GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0])); // the ring's run
   const [runDepth, setRunDepth] = useState(() => (GROUND_BY_ID[loadGround()] || HUNTING_GROUNDS[0]).depth); // scales Cores
+  // ── THE GAUNTLET (endless) — a parallel survival flow; never enters the climb's win-handler. ──
+  const [endless, setEndless] = useState(false);          // is this run an endless Gauntlet?
+  const [endlessRound, setEndlessRound] = useState(0);    // round currently being fought (1-indexed)
+  const [endlessBest, setEndlessBest] = useState(loadEndlessBest); // furthest round ever cleared
+  const [endlessResult, setEndlessResult] = useState(null); // {reached, best, isRecord, slag} on a fall
   const [clears, setClears] = useState(loadClears); // {ringId: times cleared} — diminishing core farm
   const [runRepeat, setRunRepeat] = useState(1); // this run's repeat-clear core multiplier (fixed at start)
   const [sigils, setSigils] = useState(loadSigils); // {apexId: count} — gathered toward a challenge
@@ -2723,6 +2732,63 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     });
     setRunPhase('challenge-fighting');
   }
+  // ── THE GAUNTLET (endless) ────────────────────────────────────────────────────────
+  // A self-contained survival loop: enter with a squad, fight escalating rounds with
+  // HP carrying over, until you fall. Score = rounds cleared; best persists. It reuses
+  // the frozen combat engine + foe() builder but NEVER touches the climb's win-handler,
+  // its rewards, wards, or unlocks — so the normal run is unaffected.
+  function endlessWave(round) {
+    const spec = endlessWaveSpec(round);
+    const g = HUNTING_GROUNDS[(round - 1) % HUNTING_GROUNDS.length]; // cycle identities for variety
+    const pool = g.biasIds, at = (i) => pool[i % pool.length];
+    const enemies = () => spec.roles.map((r, i) =>
+      foe(at(i), r.temper, r.hp, r.atk, spec.identityDepth, r.anchor ? { name: g.boss, speed: 7 } : {}, spec.cm));
+    return {
+      name: spec.warden ? g.boss : `${g.name} press`, boss: spec.warden, seed: spec.seed, round,
+      blurb: spec.warden ? 'A warden of the deep bars the way — break it to press on.' : `The blight thickens — round ${round}.`,
+      enemies,
+    };
+  }
+  function startEndlessRound(round, sq, mods) {
+    const wave = endlessWave(round);
+    const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
+    const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
+    setEndlessRound(round); setRunWaves([wave]); setWaveIdx(0);
+    fight.begin(aDefs, wave.enemies(), wave.seed, auto ? 'auto' : 'play', (res, finalState) => {
+      const next = sq.map((m) => ({ ...m }));
+      fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
+      const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
+      const won = youLive && res.winner !== 'B';
+      let fightDmg = 0, fightBig = 0;
+      finalState.log.forEach((e) => { if (e.type === 'turn' && e.actor.side === 'A') (e.hits || []).forEach((h) => { fightDmg += h.dmg || 0; if ((h.dmg || 0) > fightBig) fightBig = h.dmg; }); });
+      setStats((s) => ({ dmg: s.dmg + fightDmg, biggest: Math.max(s.biggest, fightBig), waves: s.waves + (won ? 1 : 0) }));
+      if (!won) {
+        const reached = endlessReached(round); // you fell ON this round → cleared round-1
+        const isRecord = reached > endlessBest;
+        if (isRecord) { setEndlessBest(reached); saveEndlessBest(reached); }
+        setSquad(next); sfx.squadDown();
+        setEndlessResult({ reached, best: Math.max(reached, endlessBest), isRecord });
+        setRunPhase('endless-over');
+        return;
+      }
+      const got = endlessRoundSlag(round); onSlag?.(got); setEarned((e) => e + got); // bank a little each round
+      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
+      setSquad(patched); sfx.waveClear();
+      startEndlessRound(round + 1, patched, mods); // press on — round/sq/mods passed so no stale closure
+    });
+    setRunPhase('fighting');
+  }
+  function startEndless() {
+    if (picked.length < 2) return;
+    sfx.resume();
+    const base = perkBaseMods(owned, reclaimed, relicKit); // same opening mods a climb would use
+    const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
+    setEndless(true); setEndlessResult(null);
+    setSquad(sq); setRunMods(base); setTaken([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setRunDepth(3);
+    sfx.ringThreshold(3);
+    startEndlessRound(1, sq, base);
+  }
+  function exitEndless() { setEndless(false); setEndlessResult(null); setRunPhase('pick'); }
   function applyUpgrade(up) {
     sfx.upgradePick();
     setUpgradeChoice(null);
@@ -2818,7 +2884,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const bestMult = results.reduce((m, r) => Math.max(m, RARITY_INFO[r.rarity].mult), 0);
     if (bestMult >= RARITY_INFO.Legendary.mult) setTimeout(() => sfx.caughtCreature(), 200); else sfx.upgradePick();
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setEndless(false); setEndlessResult(null); setEndlessRound(0); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -3216,6 +3282,20 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 );
               })}
             </div>
+            {/* ── THE GAUNTLET — endless survival end-game; enter with the picked squad. ── */}
+            <button onClick={startEndless} disabled={picked.length < 2}
+              style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 11, marginBottom: 16, cursor: picked.length >= 2 ? 'pointer' : 'default',
+                background: 'linear-gradient(180deg,#1a1020,#100a16)', border: '1px solid #5a3a7a', opacity: picked.length >= 2 ? 1 : 0.5 }}>
+              <span style={{ fontSize: 22, lineHeight: 1 }}>♾️</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff' }}>THE GAUNTLET <span style={{ color: DIM, fontWeight: 700 }}>· endless</span></div>
+                <div style={{ fontSize: T.micro, color: '#9a8fb0', lineHeight: 1.4 }}>{picked.length >= 2 ? 'Rounds rise until they break you — no upgrades, just your build. How far can you get?' : 'Pick a squad above to enter.'}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700, letterSpacing: 0.5 }}>BEST</div>
+                <div style={{ fontSize: T.body, fontWeight: 900, color: endlessBest > 0 ? '#cba6ff' : '#555' }}>{endlessBest > 0 ? `R${endlessBest}` : '—'}</div>
+              </div>
+            </button>
             {/* ── Active WARD riddles — the wall ahead + how to solve it (always visible). ── */}
             {WARDS.filter((w) => wards[w.id]?.active && !wards[w.id]?.solved).map((w) => (
               <div key={w.id} style={{ borderRadius: 10, border: `1px solid ${w.tint}66`, background: 'linear-gradient(180deg,#0c1620,#0a0e16)', padding: '11px 13px', marginBottom: 16 }}>
@@ -4063,6 +4143,36 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     );
   }
 
+  // ── THE GAUNTLET result — isolated full screen, never touches the climb's banner. ──
+  if (runPhase === 'endless-over') {
+    const r = endlessResult || { reached: 0, best: endlessBest, isRecord: false };
+    return (
+      <div style={{ background: 'linear-gradient(180deg,#160f22,#0c0814)', border: '2px solid #6a4a9a', borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
+        <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 2, color: '#9a7fc0' }}>♾️ THE GAUNTLET</div>
+        <div style={{ fontSize: T.huge, fontWeight: 900, color: '#cba6ff', marginTop: 4 }}>{r.reached === 0 ? 'OVERRUN' : `${r.reached} ROUND${r.reached !== 1 ? 'S' : ''}`}</div>
+        <div style={{ fontSize: T.body, color: '#b9a9d0', margin: '4px 0 12px' }}>
+          {r.reached === 0
+            ? 'The first round took you. Steel the squad and return.'
+            : <>You held the line <b style={{ color: '#eadcff' }}>{r.reached}</b> round{r.reached !== 1 ? 's' : ''} deep before the tide broke through.</>}
+        </div>
+        {r.isRecord && r.reached > 0 && (
+          <div style={{ display: 'inline-block', fontSize: T.small, fontWeight: 900, color: '#1a1408', background: ACCENT, borderRadius: 8, padding: '4px 12px', marginBottom: 12 }}>★ NEW BEST</div>
+        )}
+        <div style={{ fontSize: T.small, color: DIM, marginBottom: 12 }}>Best ever: <b style={{ color: '#cba6ff' }}>R{r.best}</b></div>
+        <SlagBanked earned={earned} balance={slag} />
+        <RunRecap taken={taken} stats={stats} squad={squad} />
+        <button onClick={startEndless} disabled={picked.length < 2}
+          style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: '#6a4a9a', color: '#fff', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default', marginBottom: 8, opacity: picked.length >= 2 ? 1 : 0.5 }}>
+          ♾️ RUN IT AGAIN →
+        </button>
+        <button onClick={exitEndless}
+          style={{ width: '100%', padding: '11px 0', borderRadius: 10, background: 'transparent', border: '1px solid #4a3a66', color: '#9a7fc0', fontSize: T.small, fontWeight: 800, cursor: 'pointer' }}>
+          ↩ Back to the rim
+        </button>
+      </div>
+    );
+  }
+
   const wave = runWaves[waveIdx];
   const banner = (() => {
     if (runPhase === 'won') {
@@ -4228,7 +4338,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-        {runWaves.map((w, i) => (
+        {endless ? (
+          <div style={{ flex: 1, height: 8, borderRadius: 3, background: wave.boss ? LOSS : '#6a4a9a', boxShadow: `0 0 6px ${wave.boss ? LOSS : '#6a4a9a'}88` }} />
+        ) : runWaves.map((w, i) => (
           <div key={i} title={w.name} style={{ flex: w.boss ? 1.4 : 1, height: 8, borderRadius: 3,
             background: i < waveIdx || runPhase === 'won' ? WIN : i === waveIdx ? (w.boss ? LOSS : ACCENT) : '#26263a',
             border: w.boss ? `1px solid ${LOSS}99` : 'none' }} />
@@ -4236,7 +4348,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ fontSize: T.small, color: DIM, flex: 1 }}>
-          <b style={{ color: wave.boss ? '#ffb38a' : '#ddd' }}>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVE_COUNT} · {wave.name}</b> — {wave.blurb}
+          <b style={{ color: wave.boss ? '#ffb38a' : endless ? '#cba6ff' : '#ddd' }}>
+            {endless ? <>♾️ Round {endlessRound}{wave.boss ? ' · WARDEN' : ''}</> : <>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVE_COUNT} · {wave.name}</>}
+          </b> — {wave.blurb}
         </div>
         {runPhase === 'fighting' && auto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
       </div>
