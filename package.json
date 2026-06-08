@@ -20,7 +20,8 @@
     "test:themes": "node scripts/theme-modewall.mjs",
     "test:wards": "node scripts/ward-gates.mjs",
     "test:keystones": "node scripts/keystones.mjs",
-    "test": "npm run test:smoke && npm run test:golden && npm run test:manual-golden && npm run test:manual-golden-bulwark && npm run test:manual-golden-mender && npm run test:manual-golden-booster && npm run test:manual-golden-striker && npm run test:manual-golden-assassin && npm run test:themes && npm run test:wards && npm run test:keystones"
+    "test:feedback": "node scripts/feedback.mjs",
+    "test": "npm run test:smoke && npm run test:golden && npm run test:manual-golden && npm run test:manual-golden-bulwark && npm run test:manual-golden-mender && npm run test:manual-golden-booster && npm run test:manual-golden-striker && npm run test:manual-golden-assassin && npm run test:themes && npm run test:wards && npm run test:keystones && npm run test:feedback"
   },
   "dependencies": {
     "react": "^19.2.6",

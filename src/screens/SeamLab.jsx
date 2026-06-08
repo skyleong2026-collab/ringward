@@ -16,6 +16,8 @@ import * as sfx from '../sfx.js';
 import { Cutscene, OPENING_SCENES, RingVignette, HoldfastVignette, EventVignette, WaysideScene } from './Cutscene.jsx';
 import { WARDS, wardBlocking, activateWard, advanceWardDeeds } from '../data/wards.js';
 import { KEYSTONE_TIERS, shardYield, resolveCraft } from '../data/keystones.js';
+import { FeedbackButton } from './Feedback.jsx';
+import { setLiveContext } from '../data/feedback.js';
 import {
   createBattleState,
   runBattle,
@@ -2318,6 +2320,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // Ambient pad follows the toggle; stays silent until a user gesture resumes audio, and
   // fades out when the SEAM closes. Combat/UI sfx are unaffected by this.
   useEffect(() => { if (music) sfx.startAmbient(); else sfx.stopAmbient(); return () => sfx.stopAmbient(); }, [music]);
+  // Surface where the player is so the feedback button can attach it to a report.
+  useEffect(() => {
+    setLiveContext({ screen: runPhase === 'pick' ? `home:${homeTab}` : runPhase, phase: runPhase, squad: squad.map((m) => m.id) });
+  }, [runPhase, homeTab, squad]);
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
@@ -4364,6 +4370,7 @@ export function SeamLab({ slag = 0, onSlag, version }) {
       {/* Version badge pinned to the viewport so it's visible everywhere — including
           mid-battle when the header has scrolled away. */}
       {version && <div style={{ position: 'fixed', top: 6, right: 8, zIndex: 10000, fontSize: 10, color: '#cfcfd8', background: 'rgba(26,26,34,0.92)', padding: '3px 8px', borderRadius: 4, letterSpacing: 1, fontFamily: 'monospace', border: '1px solid #444', fontWeight: 600, pointerEvents: 'none' }}>{version}</div>}
+      <FeedbackButton version={version} />
       <div style={{ maxWidth: 920, margin: '0 auto', padding: narrow ? '14px 12px 48px' : '18px 18px 56px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
