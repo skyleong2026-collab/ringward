@@ -24,18 +24,24 @@ All came from your Liked set; most were generated from the spreadsheet prompts, 
 | `frostward.png` (+ `frostward-alt.png`) | Warden | Rime-coated blue golem, ice shards, bright blue core. Two takes. |
 | `hexmoth.png` (+ `hexmoth-alt.png`) | Hexer | Violet moth, glowing eye-spots, golden heart-core. Two takes. |
 | `blightcap.png` | Hexer | Diseased mushroom-cap, sickly violet spores. |
-| `veil-assassin.png` | Assassin | Your **"Veil"** concept — hooded, solid-bodied (good: not a smoke-wraith). |
+| `veil-assassin.png` | Assassin | Your **"Veil"** concept — hooded, solid-bodied. |
+| `assassin-solid.png` | Assassin | **NEW (Claude ran the variation prompt).** Solid cloaked rat-hunter, glowing red core-eye, fangs — the "no smoke / hard silhouette" fix worked. Pixel-friendly. |
 | `crest-striker.png` | Striker | Your **"Crest"** concept — fast/momentum bird-dragon. |
-| `hollow-elder.png` | Booster? | Your **"Hollow"** concept — ancient antlered elder. Tentative Booster/elder; revisit. |
+| `booster.png` | Booster | **NEW (Claude ran the variation prompt).** Round support grunling mid-stride, **cyan energy arcs streaming outward** = the amplify/hype identity, the type that was missing. |
+| `hollow-elder.png` | (elder) | Your **"Hollow"** concept — ancient antlered elder. Was a Booster placeholder; now freed up (real Booster above) — could be a boss/NPC instead. |
 
-**All 8 types now have at least one pick.** Complete: Bulwark, Mender, Hexer. 
+**All 8 types now have a real pick.** Complete: Bulwark, Mender, Hexer, Booster, Assassin.
+
+> The two NEW ones were generated 2026-06-08 by running the variation prompts directly in
+> Midjourney (moodboard "My First Moodboard" applied for style match). Both are hearted in
+> your Likes too. There are runner-up frames in each set worth a look (a sleek quadruped
+> Assassin; friendlier round Boosters).
 
 ## Still to do
 
-- **Glowtail** (Reactor 3rd) and **Rimecaller** (Warden — the crystal-CROWNED ceremonial ice golem): pick frames not yet grabbed.
-- **Booster** identity still soft — `hollow-elder` is a placeholder; run the dedicated Booster prompt.
-- **A second Assassin** if wanted (Shadefang) — keep it solid-bodied.
+- **Glowtail** (Reactor 3rd) and **Rimecaller** (Warden — the crystal-CROWNED ceremonial ice golem): not yet grabbed.
 - Confirm `veil`/`crest`/`hollow` (your own named concepts) map to the roles above, or tell me your intended names.
+- Pick the single winner per type (some have 2 takes) before PixelLab.
 
 ## Watch-outs for the pixel pipeline
 
