@@ -4380,8 +4380,15 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     return null;
   })();
 
+  // A finished fight's result (won / lost / challenge) used to render BELOW the arena,
+  // pushing the payoff + NEW RUN below the fold on a phone. Surface it at the TOP for
+  // these terminal phases — matching how 'drop' and 'endless-over' already present —
+  // and drop the now-redundant wave header. The frozen board + log stay below to review.
+  const resultTop = ['won', 'lost', 'challenge-won', 'challenge-lost'].includes(runPhase);
   return (
     <div>
+      {resultTop && <div style={{ marginBottom: 12 }}>{banner}</div>}
+      {!resultTop && <>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
         {endless ? (
           <div style={{ flex: 1, height: 8, borderRadius: 3, background: wave.boss ? LOSS : '#6a4a9a', boxShadow: `0 0 6px ${wave.boss ? LOSS : '#6a4a9a'}88` }} />
@@ -4399,8 +4406,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         </div>
         {runPhase === 'fighting' && auto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
       </div>
+      </>}
       <BuildStrip taken={taken} />
-      <FightView fight={fight} narrow={narrow} banner={banner} bossUid={wave.boss ? 'B0' : null}
+      <FightView fight={fight} narrow={narrow} banner={resultTop ? null : banner} bossUid={wave.boss ? 'B0' : null}
         auto={auto} onToggleAuto={(n) => { setAuto(n); fight.setLiveAuto(n); }} />
     </div>
   );
