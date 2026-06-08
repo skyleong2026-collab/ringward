@@ -3,7 +3,7 @@ import { SeamLab } from './screens/SeamLab.jsx';
 import SpriteLab from './screens/SpriteLab.jsx';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vF-BY';
+const VERSION = 'vF-BZ';
 
 // ── Ringward IS the game. ───────────────────────────────────────────────────────
 // The home screen and the whole experience live in the SEAM run (src/screens/

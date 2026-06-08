@@ -2001,7 +2001,7 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
 }
 
 // ── FightView — the shared battlefield + center moves + feed for a live battle. ──
-function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAuto }) {
+function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAuto, bgImg }) {
   const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill, cancelTarget } = fight;
   if (!snap) return null;
   const selecting = phase === 'select' || phase === 'select-target';
@@ -2076,7 +2076,7 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
       )}
       {prompt && <div style={{ textAlign: 'center', fontSize: T.body, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>{prompt}</div>}
       {/* The arena: your squad — center move lane — the enemy */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: bgImg ? `radial-gradient(ellipse at center, rgba(20,20,31,0.72) 0%, rgba(11,11,20,0.85) 100%), url(${bgImg}) center/cover no-repeat` : 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
         {side(snap.A, false)}
         <div style={{ flex: moves ? 1.5 : 0.5, minWidth: moves ? 150 : 28, alignSelf: 'center', display: 'flex', justifyContent: 'center' }}>
           <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} onBack={cancelTarget} tgtAllies={tgtAllies} tgtAll={tgtAll} hintSkill={hintSkill} />
@@ -2292,7 +2292,13 @@ function RingMap({ accessDepth, selectedId, clears, onSelect }) {
   });
   return (
     <svg viewBox="0 0 320 320" style={{ width: '100%', maxWidth: 320, display: 'block', margin: '0 auto 8px' }}>
+      <defs>
+        <clipPath id="ring-map-clip">
+          <circle cx={C} cy={C} r={maxR + 8} />
+        </clipPath>
+      </defs>
       <circle cx={C} cy={C} r={maxR + 8} fill="#08080e" stroke="#17171f" />
+      <image href="/art/cutscene/scene-rings.jpg" x={C - (maxR + 8)} y={C - (maxR + 8)} width={(maxR + 8) * 2} height={(maxR + 8) * 2} clipPath="url(#ring-map-clip)" preserveAspectRatio="xMidYMid slice" opacity="0.22" />
       {/* the Drop at the heart */}
       <circle cx={C} cy={C} r={17} fill="#150e22" stroke="#6a4a9a" strokeWidth="1.2" />
       <circle cx={C} cy={C} r={6} fill="#b06bff">
@@ -4541,7 +4547,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       </>}
       <BuildStrip taken={taken} />
       <FightView fight={fight} narrow={narrow} banner={resultTop ? null : banner} bossUid={wave.boss ? 'B0' : null}
-        auto={auto} onToggleAuto={(n) => { setAuto(n); fight.setLiveAuto(n); }} />
+        auto={auto} onToggleAuto={(n) => { setAuto(n); fight.setLiveAuto(n); }} bgImg={enteredRing?.img} />
     </div>
   );
 }
