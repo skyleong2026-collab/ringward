@@ -17,6 +17,8 @@ All came from your Liked set; most were generated from the spreadsheet prompts, 
 |---|---|---|
 | `cinderpaw.png` | Reactor | Ash-grey cracked-stone cat, molten seams, heart-shaped fire core. **First PixelLab test.** |
 | `fizzpop.png` | Reactor | Jittery spark-imp, over-bright core. |
+| `glowtail.png` | Reactor | Smouldering ember beast, warm core + tail. (Claude ran the prompt.) |
+| `rimecaller.png` | Warden | Tall ceremonial frost being, ice-crystal antler-crown, glacial-blue core. Distinct from Frostward (golem). (Claude ran the prompt.) |
 | `stoneward.png` | Bulwark | Mossy granite wall-golem. Solid, very pixel-friendly. |
 | `ironwall.png` | Bulwark | Ancient riveted iron-and-stone sentinel (gate-like, on-lore). |
 | `mossback.png` | Mender | Gentle mossy grunling, restorative green glow. |
@@ -37,11 +39,16 @@ All came from your Liked set; most were generated from the spreadsheet prompts, 
 > your Likes too. There are runner-up frames in each set worth a look (a sleek quadruped
 > Assassin; friendlier round Boosters).
 
-## Still to do
+## Roster complete ✅
 
-- **Glowtail** (Reactor 3rd) and **Rimecaller** (Warden — the crystal-CROWNED ceremonial ice golem): not yet grabbed.
-- Confirm `veil`/`crest`/`hollow` (your own named concepts) map to the roles above, or tell me your intended names.
-- Pick the single winner per type (some have 2 takes) before PixelLab.
+All 17 creatures across all 8 types now have an art pick (20 PNGs — several types have a
+2nd take). Nothing left to *grab*.
+
+## Still to do (next instance)
+
+- **Pick the single winner** where there are 2 takes (Booster, Assassin, Frostward, Hexmoth) — your call.
+- Confirm `veil`/`crest`/`hollow` (your own named concepts) map to the roles, or give intended names.
+- **The Cinderpaw PixelLab test** — drop a key in `scripts/pixellab/.env`, run `--check` then animate.
 
 ## Watch-outs for the pixel pipeline
 
