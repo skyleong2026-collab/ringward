@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { SeamLab } from './screens/SeamLab.jsx';
 import { animationStyles } from './ui/animations.js';
 
-const VERSION = 'vF-BV';
+const VERSION = 'vF-BW';
 
 // ── Ringward IS the game. ───────────────────────────────────────────────────────
 // The home screen and the whole experience live in the SEAM run (src/screens/

@@ -618,6 +618,56 @@ const WAYSIDE_EVENTS = [
           { icon: '✦', label: 'Take what it guards', detail: "It can't stop you.", apply: (c) => (c.cores(45), c.hurt(0.12), "✦ You take the cores it was curled around. It doesn't fight you — just watches, and that's worse. +45 ⬡, and a few scrapes finding the exit alone in the dark.") },
         ] },
     } },
+  { id: 'tale_cairn', kind: 'story', glyph: '🪨', tint: '#e8b06a', title: 'The Crossroads Cairn', scene: 'trail', start: 'fork',
+    steps: {
+      fork: {
+        text: "The trail splits clean in two around a cairn of stacked stones — old, deliberate, the topmost rock marked with a hand you've come to know: your mentor's. One fork climbs into the wind. The other drops into close, green dark. He left no word on which. Only the stones, and the choosing.",
+        choices: [
+          { icon: '⬆️', label: 'Take the high fork', detail: 'Into the wind.', goto: 'high' },
+          { icon: '⬇️', label: 'Take the low fork', detail: 'Into the green dark.', goto: 'low' },
+          { icon: '🪨', label: 'Add a stone first', detail: 'Mark that you passed.', goto: 'cairn' },
+        ] },
+      high: {
+        text: "The high road is all teeth and weather — bare rock, wind that wants you off it. But up here you can see: the rings laid out below like ripples in a pond, and the Drop at the dead center, patient. It steadies something in you to look at it plain.",
+        choices: [
+          { icon: '⚡', label: 'Climb it hard, eyes ahead', detail: 'Primed, +8% damage.', apply: (c) => (c.prime(2), c.buff((m) => { m.dmgMult *= 1.08; }), '⚡ You take the wind head-on and let the sight of the Drop pull you up. The squad climbs Primed and harder-eyed. +8% damage onward.') },
+          { icon: '✚', label: 'Shelter in the lee a while', detail: 'Rest out of the wind.', apply: (c) => (c.heal(0.35), c.buff((m) => { m.healMult *= 1.08; }), '✚ You tuck the squad into a wind-shadow and let them breathe. They come down rested and steadier. +8% healing onward.') },
+        ] },
+      low: {
+        text: "The low fork sinks into a green hush, the air close and wet, the light gone soft. Half-swallowed in the moss off the path is a pack — a climber's, long set down, the buckles gone green but the canvas holding. Whoever left it here did not come back to lift it.",
+        choices: [
+          { icon: '🎒', label: 'Open the pack', detail: 'Take what they left.', apply: (c) => { const r = c.relic(); return r ? `🎒 Wrapped in oilcloth at the bottom: ${r.name}. Their climb ended here; yours carries it on.` : (c.cores(30), '🎒 The gear has long rotted, but a handful of banked cores spill from a side pocket. +30 ⬡.'); } },
+          { icon: '🪦', label: 'Leave it, mark the spot', detail: 'Respect the dead.', apply: (c) => (c.buff((m) => { m.healMult *= 1.12; }), '🪦 You stack a few stones over the pack and leave it to the moss. The squad climbs gentler for the small decency. +12% healing onward.') },
+        ] },
+      cairn: {
+        text: "You set a stone on the pile, and the shift of it tips the marked top-rock aside — and under it, dry in a fold of waxed cloth, a few lines in his hand. Not a map. Just what he had learned this far in, set down for whoever came after with the sense to add a stone.",
+        choices: [
+          { icon: '📜', label: 'Read, and take his road', detail: '+10% damage & healing.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.10; m.healMult *= 1.10; }), '📜 Hard-won lines, plainly put. You climb both harder and kinder for them, the way he must have meant. +10% damage and +10% healing onward.') },
+          { icon: '✦', label: 'Take what he cached with it', detail: 'Cores left for you.', apply: (c) => (c.cores(28), c.heal(0.2), '✦ Folded in with the note: cores he carried up and chose not to spend, saved for the next hand. +28 ⬡, and the squad eases reading it.') },
+        ] },
+    } },
+  { id: 'tale_salt', kind: 'story', glyph: '⚪', tint: '#cfd6e0', title: 'The Salt Ring', scene: 'ruin', start: 'ring',
+    steps: {
+      ring: {
+        text: "A ring of white salt, poured careful on bare stone, mostly unbroken after who knows how long — a warding circle, the old kind, meant to keep something out. Or in. At its center sits a single grunling core, dark and cold and still, set down with intention. The salt line is the only thing between you and it.",
+        choices: [
+          { icon: '👣', label: 'Step over the salt', detail: 'Break the ward, take the core.', goto: 'cross' },
+          { icon: '🧂', label: 'Mend the salt line', detail: "Keep held whatever this held.", apply: (c) => (c.buff((m) => { m.blockMult *= 1.12; }), "🧂 You pour your own ration of salt to close the gaps and leave the ward whole. Some doors you don't open. The squad climbs warier, harder to crack. +12% block onward.") },
+          { icon: '👁', label: 'Read the ward', detail: 'Learn what it warns.', goto: 'read' },
+        ] },
+      cross: {
+        text: "You break the line with your boot and nothing happens — no rush of cold, no waking thing. Just an old dark core, and as you lift it, warmth: it is not dead. It was only sleeping, sealed, waiting out the long blight the way the smart things learned to. It looks at you, very old, not afraid.",
+        choices: [
+          { icon: '🤝', label: 'Wake it the rest of the way', detail: 'Primed, +7% damage.', apply: (c) => (c.prime(3), c.buff((m) => { m.dmgMult *= 1.07; }), '🤝 You warm it back to itself and it falls in beside your squad like it had been waiting for exactly you. Primed, +7% damage onward.') },
+          { icon: '✦', label: 'Take its banked light', detail: 'Cores; let it sleep on.', apply: (c) => (c.cores(40), '✦ You draw off the light it banked over all those sealed years and set it gently down to sleep again. +40 ⬡, and no harm done to the old thing.') },
+        ] },
+      read: {
+        text: "The salt is not just poured — it is written, words spiraling inward, your mentor's hand among older ones. Not a warning against what is inside. A warning to whoever climbs past: of what waits deeper, the thing he names but you cannot quite read, the ink gone where his pen pressed hardest.",
+        choices: [
+          { icon: '📜', label: 'Learn what he warns of', detail: '+15% damage onward.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.15; }), '📜 You cannot read the name, but you read the shape of his fear, and you sharpen for it. The squad climbs ready for worse. +15% damage onward.') },
+          { icon: '🏮', label: 'Take the warding for your own', detail: 'Old protection.', apply: (c) => { const r = c.relic(); return r ? `🏮 You lift the ward's anchor-stone from the salt — ${r.name}, old protection, yours now.` : (c.buff((m) => { m.blockMult *= 1.10; }), '🏮 You take the ward\'s habit if not its stone — the squad climbs harder to break. +10% block onward.'); } },
+        ] },
+    } },
   // ── MERCHANT nodes (vF-BB): spend the slag you'd otherwise hoard for the Forge on an
   // immediate edge for THIS run. A real trade — power now vs. a permanent perk later. ──
   { id: 'trader', kind: 'merchant', glyph: '🛒', tint: '#c9c98a', title: 'The Wayside Trader',
