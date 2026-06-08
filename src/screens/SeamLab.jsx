@@ -3318,12 +3318,15 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 </div>
               );
             })()}
-            {(() => { const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth + crossing); return (
-            <button onClick={startRun} disabled={picked.length < 2}
-              style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: picked.length >= 2 ? ACCENT : '#222', color: picked.length >= 2 ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: picked.length >= 2 ? 'pointer' : 'default' }}>
-              {picked.length < 2 ? 'PICK AT LEAST 2' : <>RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span></>}
-            </button>
-            ); })()}
+            {/* When a squad isn't ready yet, the in-flow hint lives here. Once 2+ are
+                picked the CTA moves to a sticky bar pinned above the nav (below) so a
+                new player never has to scroll past the ring map to find "go". */}
+            {picked.length < 2 && (
+              <button disabled
+                style={{ width: '100%', padding: '16px 0', borderRadius: 12, border: 'none', background: '#222', color: '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: 'default' }}>
+                PICK AT LEAST 2
+              </button>
+            )}
           </>
         )}
 
@@ -3609,6 +3612,21 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             </div>
           </>
         )}
+
+        {/* ═══════════════ STICKY RAID CTA — always-visible "go" once a squad is ready ═══════════════ */}
+        {homeTab === 'raid' && runPhase === 'pick' && picked.length >= 2 && (() => {
+          const g = accessibleGround(ground, accessDepth); const diff = diffOf(g.depth + crossing);
+          return (
+            <div style={{ position: 'fixed', left: 0, right: 0, bottom: 53, zIndex: 10000, padding: '0 12px', pointerEvents: 'none' }}>
+              <div style={{ maxWidth: 920, margin: '0 auto' }}>
+                <button onClick={startRun}
+                  style={{ pointerEvents: 'auto', width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: ACCENT, color: '#1a1408', fontSize: T.sub, fontWeight: 900, letterSpacing: 1, cursor: 'pointer', boxShadow: '0 4px 18px rgba(0,0,0,0.55)' }}>
+                  RAID {g.name} <span style={{ color: '#1a1408', opacity: 0.7 }}>· {diff.label} →</span>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ═══════════════ FIXED BOTTOM NAV ═══════════════ */}
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 10001, background: 'rgba(10,10,16,0.97)', borderTop: `1px solid ${LINE}`, backdropFilter: 'blur(8px)' }}>
@@ -4359,6 +4377,9 @@ export function SeamLab({ slag = 0, onSlag, version }) {
   const vw = useViewport();
   const narrow = vw < 760;
   const [tab, setTab] = useState('run'); // 'learn' | 'run' | 'sandbox'
+  // Sandbox is a dev/debug matchup tool — keep it out of a tester's face.
+  // It reappears once beta mode is toggled on (⚙ Settings → Beta) + a reload.
+  const [devTools] = useState(loadBeta);
 
   const tabBtn = (key, label) => (
     <button onClick={() => setTab(key)} style={{ background: tab === key ? '#16202e' : PANEL, color: tab === key ? '#eaf2ff' : '#999', border: `2px solid ${tab === key ? SEL : LINE}`, borderRadius: 9, padding: '8px 16px', cursor: 'pointer', fontSize: T.body, fontWeight: 800 }}>{label}</button>
@@ -4383,9 +4404,9 @@ export function SeamLab({ slag = 0, onSlag, version }) {
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {tabBtn('learn', '🎓 LEARN')}
           {tabBtn('run', '⚔ RUN')}
-          {tabBtn('sandbox', '🔬 Sandbox')}
+          {devTools && tabBtn('sandbox', '🔬 Sandbox')}
         </div>
-        {tab === 'learn' ? <LearnMode narrow={narrow} onGraduate={() => setTab('run')} /> : tab === 'run' ? <RunMode narrow={narrow} slag={slag} onSlag={onSlag} /> : <Sandbox narrow={narrow} />}
+        {tab === 'learn' ? <LearnMode narrow={narrow} onGraduate={() => setTab('run')} /> : tab === 'sandbox' && devTools ? <Sandbox narrow={narrow} /> : <RunMode narrow={narrow} slag={slag} onSlag={onSlag} />}
       </div>
     </div>
   );

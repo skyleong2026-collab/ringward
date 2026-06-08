@@ -35,7 +35,7 @@ export function FeedbackButton({ version }) {
         onClick={() => setOpen(true)}
         aria-label="Send feedback"
         style={{
-          position: 'fixed', right: 12, bottom: 70, zIndex: 10001,
+          position: 'fixed', right: 12, bottom: 124, zIndex: 10001,
           width: 44, height: 44, borderRadius: 22, cursor: 'pointer',
           background: BTN, color: '#eaf2ff', border: '1px solid #4a4a58',
           fontSize: 20, lineHeight: 1, boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
