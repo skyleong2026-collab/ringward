@@ -28,3 +28,6 @@ dist/
 
 # PixelLab API key — local only, never commit
 scripts/pixellab/.env
+
+# PixelLab generated frames — git-untracked until deliberately committed
+public/art/creatures/
