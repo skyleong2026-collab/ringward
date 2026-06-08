@@ -25,9 +25,9 @@ All came from your Liked set; most were generated from the spreadsheet prompts, 
 | `hexmoth.png` (+ `hexmoth-alt.png`) | Hexer | Violet moth, glowing eye-spots, golden heart-core. Two takes. |
 | `blightcap.png` | Hexer | Diseased mushroom-cap, sickly violet spores. |
 | `veil-assassin.png` | Assassin | Your **"Veil"** concept — hooded, solid-bodied. |
-| `assassin-solid.png` | Assassin | **NEW (Claude ran the variation prompt).** Solid cloaked rat-hunter, glowing red core-eye, fangs — the "no smoke / hard silhouette" fix worked. Pixel-friendly. |
+| `assassin-solid.png` + `assassin-alt.png` | Assassin | **NEW prompt — both YOU hearted.** `-solid` = cloaked rat-hunter (glowing red core-eye, fangs); `-alt` = hunched fanged toad-predator (orange belly core). Both solid-bodied (smoke fix worked). Pick one. |
 | `crest-striker.png` | Striker | Your **"Crest"** concept — fast/momentum bird-dragon. |
-| `booster.png` | Booster | **NEW (Claude ran the variation prompt).** Round support grunling mid-stride, **cyan energy arcs streaming outward** = the amplify/hype identity, the type that was missing. |
+| `booster.png` + `booster-alt.png` | Booster | **NEW prompt — both YOU hearted.** `booster` = mid-stride with cyan energy arcs (amplify/hype); `-alt` = sturdy blue-green orb with antennae. The missing identity, now landed. Pick one. |
 | `hollow-elder.png` | (elder) | Your **"Hollow"** concept — ancient antlered elder. Was a Booster placeholder; now freed up (real Booster above) — could be a boss/NPC instead. |
 
 **All 8 types now have a real pick.** Complete: Bulwark, Mender, Hexer, Booster, Assassin.
