@@ -16,6 +16,9 @@
 //   relicsOwned   : relics owned (count)
 //   keystonesOwned: keystones forged/owned (count)
 //   crossings     : times stepped through the Drop (NG+ level)
+//   typesMastered : distinct Types ever fielded in a ring clear (0..8) — the one stat
+//                   backed by its own persisted set (8gents_seam_types), recorded in
+//                   SeamLab on a boss clear. Still read here as a plain projection.
 
 export const FEATS = [
   // ── The climb ──
@@ -51,6 +54,14 @@ export const FEATS = [
     desc: 'Own 5 relics.', stat: 'relicsOwned', need: 5 },
   { id: 'keystone', group: 'Mastery', tier: 'Gold', icon: '✦', name: 'Forge-True',
     desc: 'Forge a Keystone.', stat: 'keystonesOwned', need: 1 },
+
+  // ── Type mastery (squad rotation — the same muscle R8's law trains) ──
+  { id: 'types_3', group: 'Mastery', tier: 'Bronze', icon: '🎭', name: 'Many Hands',
+    desc: 'Clear a ring fielding 3 different Types.', stat: 'typesMastered', need: 3 },
+  { id: 'types_5', group: 'Mastery', tier: 'Silver', icon: '🎭', name: 'Versatile',
+    desc: 'Clear rings fielding 5 different Types.', stat: 'typesMastered', need: 5 },
+  { id: 'types_all', group: 'Mastery', tier: 'Gold', icon: '🎭', name: 'Every Hand',
+    desc: 'Clear rings fielding all 8 Types.', stat: 'typesMastered', need: 8 },
 ];
 
 export const FEAT_GROUPS = ['Climb', 'Collection', 'Gauntlet', 'Mastery'];

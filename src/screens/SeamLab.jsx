@@ -290,6 +290,11 @@ function saveSigils(m) { saveJson(SIGILS_KEY, m); }
 const PITY_KEY = '8gents_seam_pity'; // pulls since the last Legendary (drives the pity guarantee)
 function loadPity() { try { const n = parseInt(localStorage.getItem(PITY_KEY), 10); return Number.isFinite(n) ? n : 0; } catch { return 0; } }
 function savePity(n) { try { localStorage.setItem(PITY_KEY, String(n)); } catch { /* best-effort */ } }
+// Distinct Types ever fielded in a ring clear (drives the Type-mastery feat). Stored as a
+// Type-string array; the feat reads its length (0..8). Recorded on a boss clear.
+const TYPES_MASTERED_KEY = '8gents_seam_types';
+function loadTypesMastered() { const a = loadJson(TYPES_MASTERED_KEY, []); return Array.isArray(a) ? a : []; }
+function saveTypesMastered(a) { saveJson(TYPES_MASTERED_KEY, a); }
 
 // Which apex creature a clear of this ring drops a sigil toward: an uncaught, not-yet-
 // challengeable apex in the hunted ring, fewest sigils first (focus one at a time), then
@@ -336,24 +341,43 @@ const SUMMON10_COST = 420; // slag for a ten-fold call (bigger discount + a guar
 const SUMMON_BANNERS = [
   { id: 'wild', name: 'The Wild Call', legBoost: 1,   costMult: 1,   blurb: 'every grunling, honest rates' },
   { id: 'deep', name: 'The Deep Call', legBoost: 2.2, costMult: 1.5, blurb: 'pricier — but Legendaries answer far more often' },
+  { id: 'near', name: 'The Near Call', legBoost: 1,   costMult: 1,   biasMult: 5, blurb: 'leans toward where you stand' },
 ];
-function summonPull(stableIds, pity = 0, rand = Math.random, legBoost = 1) {
+// `biasIds` + `biasMult` = a "Near Call": the camped ring's locals get their weight
+// multiplied, so pulls lean toward where you stand (the Pokémon-GO half of the gacha).
+// The pity guarantee is unchanged — if the camped ring owns a Legendary, the bias prefers
+// it among the guaranteed picks so "camp the Frostbound, pull the rimecaller" holds on pity too.
+function summonPull(stableIds, pity = 0, rand = Math.random, legBoost = 1, biasIds = null, biasMult = 1) {
   const pool = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id));
   if (!pool.length) return null;
+  const biased = (id) => !!(biasIds && biasMult > 1 && biasIds.includes(id));
   const legs = pool.filter((x) => rarityOf(x) === 'Legendary');
   let id;
-  if (legs.length && pity >= PITY_AT) {                 // pity: guarantee a Legendary (prefer an unowned one)
+  if (legs.length && pity >= PITY_AT) {                 // pity: guarantee a Legendary (prefer an unowned one; then a camped local)
     const fresh = legs.filter((x) => !stableIds.includes(x));
-    const ls = fresh.length ? fresh : legs;
+    let ls = fresh.length ? fresh : legs;
+    const local = ls.filter(biased); if (local.length) ls = local; // a camped Legendary wins the tie
     id = ls[Math.floor(rand() * ls.length)];
   } else {
     // legBoost > 1 = a "Deep Call" banner: Legendary weight is multiplied, so rares pull more.
-    const w = pool.map((x) => { const b = RARITY_INFO[rarityOf(x)].weight || 1; return rarityOf(x) === 'Legendary' ? b * legBoost : b; });
+    // biasMult > 1 = a "Near Call": the camped ring's locals are weighted up.
+    const w = pool.map((x) => { let b = RARITY_INFO[rarityOf(x)].weight || 1; if (rarityOf(x) === 'Legendary') b *= legBoost; if (biased(x)) b *= biasMult; return b; });
     let roll = rand() * w.reduce((s, x) => s + x, 0);
     id = pool[pool.length - 1];
     for (let i = 0; i < pool.length; i++) { roll -= w[i]; if (roll < 0) { id = pool[i]; break; } }
   }
   return { id, rarity: rarityOf(id), isDupe: stableIds.includes(id) };
+}
+// The chance a single Near Call lands one of the camped ring's locals (folk-honest odds for
+// the summon screen). Mirrors summonPull's weighting exactly; pity calls are excluded (they
+// guarantee a Legendary), so this is the steady-state per-call probability.
+function localPullChance(biasIds, biasMult) {
+  const pool = COMBAT_ROSTER.map((c) => c.id).filter((id) => !isApex(id));
+  if (!pool.length || !biasIds) return 0;
+  const localSet = new Set(biasIds.filter((id) => pool.includes(id)));
+  let total = 0, local = 0;
+  for (const id of pool) { const w = (RARITY_INFO[rarityOf(id)].weight || 1) * (localSet.has(id) ? biasMult : 1); total += w; if (localSet.has(id)) local += w; }
+  return total ? local / total : 0;
 }
 
 function useViewport() {
@@ -2723,6 +2747,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   }, [runPhase, homeTab, squad]);
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
+  const [typesMastered, setTypesMastered] = useState(loadTypesMastered); // Types ever fielded in a ring clear (drives the mastery feat)
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
   const [wonStep, setWonStep] = useState(0);    // staged result reveal: 0 = payoff, 1..n = one spoil at a time, last = onward
   const [resultDetails, setResultDetails] = useState(false); // "▸ run details" expander on the result screens
@@ -3109,6 +3134,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         // ward opens (its gated ring unlocks) + drops a key relic. Never touches the engine.
         setWardSolvedNow(null);
         const squadTypes = squad.map((m) => COMBAT_CREATURES[m.id]?.type).filter(Boolean);
+        // TYPE MASTERY (feat): every Type you fielded in this ring clear earns its check —
+        // collect all 8 across runs (pushes squad rotation, the muscle R8's law trains).
+        setTypesMastered((prev) => {
+          const merged = [...new Set([...prev, ...squadTypes])];
+          if (merged.length !== prev.length) saveTypesMastered(merged);
+          return merged.length !== prev.length ? merged : prev;
+        });
         const deed = advanceWardDeeds(wards, hunted.id, squadTypes);
         if (deed.changed) { setWards(deed.wards); saveWards(deed.wards); }
         if (deed.solved.length) {
@@ -3298,6 +3330,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       relicsOwned: relics.length,
       keystonesOwned: KEYSTONE_IDS.filter((id) => relics.includes(id)).length,
       crossings: crossing,
+      typesMastered: typesMastered.length,
     };
   }
   const doneFeatIds = () => new Set(evalFeats(featSnapshot()).filter((f) => f.done).map((f) => f.id));
@@ -3371,6 +3404,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const cost = Math.round(base * (ban.costMult || 1));
     if ((slag || 0) < cost) return;
     onSlag?.(-cost); sfx.resume();
+    // The Near Call biases toward the ring you're camped at (its reachable, non-apex locals).
+    const campRing = accessibleGround(ground, accessDepth);
+    const biasIds = ban.biasMult ? campRing.biasIds.filter((id) => !isApex(id)) : null;
     let curStable = [...stable]; let curPity = pity; const results = [];
     // Bank a creature into the result + stable/cores. Returns the result row.
     const take = (p) => {
@@ -3381,7 +3417,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       return { ...p, gainedCores };
     };
     for (let k = 0; k < times; k++) {
-      const p = summonPull(curStable, curPity, Math.random, ban.legBoost || 1); if (!p) break;
+      const p = summonPull(curStable, curPity, Math.random, ban.legBoost || 1, biasIds, ban.biasMult || 1); if (!p) break;
       results.push(take(p));
     }
     // GUARANTEES: a ten-fold call lands at least a Legendary; a five-fold at least a Rare+.
@@ -4059,7 +4095,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                         <button key={b.id} onClick={() => setBannerId(b.id)}
                           style={{ flex: 1, textAlign: 'center', borderRadius: 12, padding: '12px 8px', cursor: 'pointer',
                             background: on ? 'radial-gradient(120% 100% at 50% 0%, #1a1430, #0c0a14)' : PANEL, border: `1.5px solid ${on ? '#7a5aa0' : LINE}` }}>
-                          <div style={{ fontSize: 22, lineHeight: 1 }}>{b.id === 'deep' ? '✦' : '✨'}</div>
+                          <div style={{ fontSize: 22, lineHeight: 1 }}>{b.id === 'deep' ? '✦' : b.id === 'near' ? '🧭' : '✨'}</div>
                           <div style={{ fontSize: T.small, fontWeight: 900, color: on ? '#eadcff' : '#9a9aaa', marginTop: 3 }}>{b.name}</div>
                           <div style={{ fontSize: 9, color: on ? '#9a7fc0' : DIM, marginTop: 2, lineHeight: 1.35 }}>{b.blurb}</div>
                         </button>
@@ -4068,6 +4104,22 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.5, marginBottom: 12, textAlign: 'center', maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
                       Wake a grunling from a wild core. A <b style={{ color: '#cba6ff' }}>new</b> one joins your stable; a <b style={{ color: '#cba6ff' }}>dupe</b> melts to its Cores. Calls find <b style={{ color: '#cba6ff' }}>creatures</b>, never run-power — your climb is still yours to earn.
                     </div>
+                    {/* THE NEAR CALL (vF-CH) — folk-honest bias odds: where you stand, who answers, how often. */}
+                    {ban.id === 'near' && (() => {
+                      const camp = accessibleGround(ground, accessDepth);
+                      const localIds = camp.biasIds.filter((id) => !isApex(id));
+                      const pct = Math.round(localPullChance(localIds, ban.biasMult) * 100);
+                      const wildPct = Math.round(localPullChance(localIds, 1) * 100);
+                      const names = localIds.map((id) => COMBAT_CREATURES[id]?.name).filter(Boolean).join(' & ');
+                      return (
+                        <div style={{ background: '#0e1414', border: '1px solid #2a4a44', borderRadius: 10, padding: '9px 12px', marginBottom: 12, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
+                          <div style={{ fontSize: T.micro, fontWeight: 900, color: '#7ee0c0' }}>🧭 Camped at {camp.name}</div>
+                          <div style={{ fontSize: T.micro, color: '#9ec0b8', lineHeight: 1.45, marginTop: 3 }}>
+                            {names ? <>Its locals — <b style={{ color: '#cdeee4' }}>{names}</b> — answer about <b style={{ color: '#7ee0c0' }}>{pct}%</b> of calls here <span style={{ color: '#6a8a82' }}>(≈{wildPct}% on the Wild Call)</span>. Rarity rates are unchanged; the lean is honest. To pull a deeper ring's locals, camp deeper on the Raid map.</> : 'This ring has no callable locals — every one is already a challenge-won Unique.'}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {/* Slag + pity */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: T.small, fontWeight: 900, color: '#c9c98a' }}>⚒ {slag} slag</span>

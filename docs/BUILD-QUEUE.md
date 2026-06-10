@@ -16,10 +16,13 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   → innate card (teal box) → computed opens line (same-type squad check) → stats last; dupe beat
   shows core progress meter. Summon tab: innate box on solo fresh pull, compact innate tag on
   multi-pull fresh; dupe line "+N ⬡ toward [creature]'s build". Lint/build/tests green.
-- [ ] **S4 · MODEL=opus · Ring-biased summons + Type-mastery feat** — summoning biases pulls
-  toward the camped ring's `biasIds` (state the bias % on the summon screen — folk honesty, no
-  hidden odds); feat: clear any ring with each Type as carry (8 checks, existing feats system).
-  Keep PITY_AT intact; sim/spot-check the odds math.
+- [x] **S4 · MODEL=opus · Ring-biased summons + Type-mastery feat** — DONE. NEAR CALL banner biases
+  pulls 5× toward the camped ring's locals; summon screen states the real % ("Frostward answers ~10%
+  here vs ~2% wild") — folk-honest, rarity rates unchanged. summonPull takes biasIds/biasMult;
+  localPullChance mirrors it (Monte-Carlo matched analytic within 0.5pp); pity prefers a camped
+  Legendary on the guarantee. Type-mastery feat: typesMastered set (Types fielded in a ring clear,
+  recorded on boss clear), 3 tiers (Many Hands 3 / Versatile 5 / Every Hand 8). PITY_AT intact.
+  Lint/build/tests green (feats 23 passed, +5 new); Playwright confirmed odds panel + feat progress.
 - [x] **S5 · MODEL=sonnet · Forge Tempering + Holdfast boon choice** — DONE. Tempering in Forge tab
   (+1% HP/tier, cost 40⬡×1.5^tier, T10 cap, resets on crossing, "forge rests" done-state). Holdfast:
   8 alt boons authored, pick-1-of-2 reveal on reclaim, SWAP 30⬡ in Holdfast tab. All perkBaseMods

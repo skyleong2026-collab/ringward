@@ -32,12 +32,19 @@ ok(evalFeat(byId(FEATS, 'collector_all'), { caught: 17, rosterSize: 17 }).done =
 ok(evalFeat(byId(FEATS, 'collector_all'), { caught: 16, rosterSize: 17 }).done === false, '16/17 → not yet');
 ok(evalFeat(byId(FEATS, 'collector_all'), { caught: 20, rosterSize: 0 }).need === 1, 'missing rosterSize falls back to need 1 (no divide-by-zero)');
 
+// --- Type mastery: tiered on typesMastered (distinct Types fielded in ring clears, 0..8) ---
+ok(evalFeat(byId(FEATS, 'types_3'), { typesMastered: 3 }).done === true, '3 Types → Many Hands done');
+ok(evalFeat(byId(FEATS, 'types_3'), { typesMastered: 2 }).done === false, '2 Types → Many Hands not yet');
+ok(evalFeat(byId(FEATS, 'types_all'), { typesMastered: 8 }).done === true, 'all 8 Types → Every Hand done');
+ok(evalFeat(byId(FEATS, 'types_all'), { typesMastered: 7 }).done === false, '7/8 Types → Every Hand not yet');
+ok(evalFeat(byId(FEATS, 'types_all'), {}).done === false, 'no typesMastered stat → not done (defaults 0)');
+
 // --- progress clamps, rawHave preserved ---
 const overshoot = evalFeat(byId(FEATS, 'first_boss'), { reclaimed: 8 });
 ok(overshoot.have === 1 && overshoot.rawHave === 8 && overshoot.pct === 1, 'have clamps to need; pct caps at 1; rawHave kept');
 
 // --- a maxed save: everything done ---
-const maxed = { deepestRing: 8, reclaimed: 8, caught: 17, rosterSize: 17, gauntletBest: 15, wardsSolved: 3, relicsOwned: 12, keystonesOwned: 2, crossings: 2 };
+const maxed = { deepestRing: 8, reclaimed: 8, caught: 17, rosterSize: 17, gauntletBest: 15, wardsSolved: 3, relicsOwned: 12, keystonesOwned: 2, crossings: 2, typesMastered: 8 };
 ok(featTally(maxed).done === FEATS.length, 'a maxed save completes every feat');
 ok(Math.abs(featTally(maxed).pct - 1) < 1e-9, 'maxed completion = 100%');
 
