@@ -4613,6 +4613,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: T.label, fontWeight: 900, color: ti.accent }}>{ti.glyph} {c.name}{chosen && <span style={{ color: up.color }}> ✓</span>}</div>
                     <div style={{ fontSize: T.small, color: '#ccc', fontWeight: 700 }}>{ti.nick}</div>
+                    <div style={{ fontSize: T.micro, color: '#7a8a9a', lineHeight: 1.3, marginTop: 1 }}>{ti.role}</div>
                     <div style={{ fontSize: T.micro, color: '#888', marginTop: 2 }}>{mem.hp}/{maxHpOf(mem, runMods)} HP</div>
                   </div>
                 </div>

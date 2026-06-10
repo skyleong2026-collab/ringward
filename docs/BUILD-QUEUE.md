@@ -5,9 +5,9 @@ changed files, `npm run build`, `npm test`, Playwright for UI) → commit (only 
 App.jsx / art-instance files — see CLAUDE.md) → check the item off here with a one-line result →
 STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
 
-- [ ] **S1 · MODEL=sonnet · Role lines on cards** — one job-sentence per Type (8 lines, copy in
-  TYPE_INFO or alongside), shown on squad-pick cards, draft cards, and the stable. "BULWARK — the
-  wall. Soaks, shields, punishes hitters." Purpose first, lore later. Pure render; goldens untouched.
+- [x] **S1 · MODEL=sonnet · Role lines on cards** — DONE. role field in TYPE_INFO (8 types),
+  shown on squad-pick/stable cards (ti.role line 3837) and unit-target pick card (ti.role added).
+  BUILD_LINE shown on summon results. Lint/build/tests green.
 - [x] **S2 · MODEL=opus · Innates** — DONE (vF-CG, Opus, committed, deploy HELD for Sky's R3 look).
   All 17 implemented as `INNATES` apply(m) wired into `treeModsFor`; shown on pick cards + tree
   header. Goldens byte-identical; live Playwright clean. Sim can't see innates (like trees) → live-
