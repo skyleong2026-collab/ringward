@@ -51,3 +51,23 @@ real choices at depth. (Revisit Ward-Shard / Lifewall-style cuts when authoring 
 - **Needs Sky's live feel-check**: especially R2 ("the Gatebreaker's bulwarks now actually hit") and
   R5 ("the rush is survivable with a tank wall").
 - NG+ crossings multiply on top (cm) — untested at depth; sweep later with `cm = crossMult(n)`.
+
+---
+
+# Addendum (vF-CF, 2026-06-10) — Mirror Elites on the ladder
+
+The Pack-Lord wave (wave 3) now carries a **mirror elite** on R3–R8: one named local wearing ONE
+player keystone (`MIRROR_ELITES` in `engine/waves.js`), telegraphed on the prep screen. The carrier
+is deliberately TALLER than the pack-lord (role 380hp vs 300) with modest atk (40): naive lowest-HP
+targeting eats the lord first while the keystone runs, so focusing the carrier is a real decision.
+
+**Geared sweep (200 runs/cell, greedy policy) after carriers:**
+MEAN 98 / 75 / 76 / 67 / 37 / 41 / 23 / ~0 — within noise of the post-Laws baseline
+(98/75/77/61/43/40/22). The ladder's shape held; nothing collapsed.
+
+**Reading it honestly:** the sim's AI doctrine is fixed, so it cannot measure the auto-vs-manual
+targeting gap the carriers create — that's the point of the feature, and it's invisible to this
+harness in both directions. What the sweep DOES establish: auto-farming stays viable (the carrier
+isn't a stat wall). Side-B keystone plumbing verified directly in engine logs: maestro (R4),
+lifesurge (R3), and timeLock (R8) all fire for enemy carriers. The behavioral proof — "did the
+telegraph change who you killed first?" — is Sky's R3 manual first-clear (vF-CF success metric C).

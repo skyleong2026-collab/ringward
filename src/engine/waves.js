@@ -36,6 +36,53 @@ export function foe(id, temperament, roleHp, roleAtk, depth, extra = {}, cm = 1)
   return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth) * cm), ...extra };
 }
 
+// ─── MIRROR ELITES (vF-CF) — from Ring 3 inward, the Pack-Lord wave carries ONE named
+// local wearing ONE player keystone. The point: "kill the lowest-HP enemy" stops being
+// the answer — the carrier is a PRIORITY-TARGET puzzle the auto-AI can't solve. Side
+// benefit: the enemy advertises the player's own build options ("wait, I can do that?").
+// Curated, not systemic: exactly one borrowed behavior per ring, hand-picked so each
+// asks a different targeting question. R1–R2 stay carrier-free (learning rings).
+//   line — what it does (threshold/prep telegraph);  ask — what to DO about it.
+export const MIRROR_ELITES = {
+  'green-seam': { // R3 — the kill-the-healer lesson, one wave before the boss Tender teaches it again
+    foeId: 'mossback', name: 'The Regrower', keystone: 'Lifesurge',
+    line: 'It carries Lifesurge — it can drag a fallen packmate back to its feet.',
+    ask: 'Cut the Regrower down first, or your kills come back.',
+    mods: { lifesurge: true },
+  },
+  'storm-wire': { // R4 — kill the conductor or their carry stays amped
+    foeId: 'buzzline', name: 'The Conductor', keystone: 'Maestro',
+    line: 'It carries Maestro — every round it amps the meanest thing beside it.',
+    ask: 'The song stops when the Conductor falls.',
+    mods: { maestro: true },
+  },
+  'fast-trails': { // R5 — a raw damage spike: race it down before it draws blood
+    foeId: 'swiftpaw', name: 'The Threecut', keystone: 'Blitz ×3',
+    line: 'It carries the triple Blitz — one turn, three cuts.',
+    ask: 'It kills faster than it dies. Make it die first.',
+    mods: { blitzMulti: true },
+  },
+  'lightless': { // R6 — pairs with the ring law (your carry is marked): guard or behead
+    foeId: 'shadefang', name: 'The Patient Knife', keystone: 'Hunt',
+    line: 'It carries the Hunt — it finds your weakest, wherever they hide.',
+    ask: 'Shield your wounded, or end the hunter before it chooses.',
+    mods: { executeHunt: true },
+  },
+  'witherfen': { // R7 — a clock: every cast curses your whole line
+    foeId: 'hexmoth', name: 'The Widowing Moth', keystone: 'Doom-all',
+    line: 'It carries the wide Doom — its curse settles on your whole line.',
+    ask: 'Every round it lives, everyone owes. Pay it back early.',
+    mods: { doomAll: true },
+  },
+  'frostbound': { // R8 — recurring control: break the caller, break the hold
+    foeId: 'rimecaller', name: 'The Still Hand', keystone: 'Time Lock',
+    line: 'It carries the Time Lock — each round it holds your weakest in ice.',
+    ask: 'Break the Still Hand, break the hold.',
+    mods: { timeLock: true },
+  },
+};
+export const mirrorEliteFor = (ground) => (ground && MIRROR_ELITES[ground.id]) || null;
+
 // Generate a run's four waves from the chosen ring. Enemy IDENTITY (kit/behavior) comes
 // from the ring's locals; HP/ATK come from the wave role scaled by depth × crossing.
 export function wavesForGround(g, cm = 1) {
@@ -47,8 +94,22 @@ export function wavesForGround(g, cm = 1) {
       enemies: () => [ F(at(0), 'Cautious', 110, 26), F(at(1), 'Cautious', 105, 26) ] },
     { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back hard.',
       enemies: () => [ F(at(0), 'Balanced', 175, 40), F(at(1), 'Balanced', 175, 38), F(at(2), 'Balanced', 165, 40) ] },
-    { name: 'The Pack-Lord', seed: 303, blurb: 'The two meanest things in here, paired up. Break through.',
-      enemies: () => [ F(at(0), 'Greedy', 300, 50), F(at(1), 'Greedy', 220, 62) ] },
+    { name: 'The Pack-Lord', seed: 303, mirror: mirrorEliteFor(g),
+      blurb: mirrorEliteFor(g)
+        ? `The pack-lord walks with ⟡ ${mirrorEliteFor(g).name}. ${mirrorEliteFor(g).line}`
+        : 'The two meanest things in here, paired up. Break through.',
+      enemies: () => {
+        const m = mirrorEliteFor(g);
+        return [
+          F(at(0), 'Greedy', 300, 50),
+          // The carrier takes the second slot — TALLER than the lord on purpose: naive
+          // lowest-HP targeting eats the lord first while the keystone runs, so focusing
+          // the carrier is a real DECISION (the gap between auto and manual). Its atk is
+          // modest; the keystone is the threat, the bulk is the question.
+          m ? F(m.foeId, 'Greedy', 380, 40, { name: `⟡ ${m.name}`, mods: m.mods })
+            : F(at(1), 'Greedy', 220, 62),
+        ];
+      } },
     { name: g.boss, boss: true, seed: 404,
       blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
       enemies: () => [ F(at(0), 'Greedy', 540, 68, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 240, 24, d, { name: 'Tender' }, cm) ] },

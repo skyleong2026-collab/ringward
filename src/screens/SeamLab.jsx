@@ -1041,6 +1041,12 @@ const EQUIP_KEY = '8gents_creature_equip'; // EQUIPPED nodes (the loadout — a 
 // The loadout GROWS with investment: more nodes unlocked → more slots (4 → 8), so deep
 // investment keeps raising your POWER, not just your options.
 const RANKS_KEY = '8gents_creature_ranks'; // {creatureId: {nodeId: rank}} for repeatable nodes
+// ONE KEYSTONE PER CREATURE (vF-CF): the tier-5 ★ is the build's oath — a creature swears
+// one. Buying a second offers a SWAP instead: the old ★ refunds in full, the new one costs
+// its price plus this fee. Lower tiers stay stackable (dabbling is how builds are found);
+// only the keystone is the commitment. Legacy saves with 2+ keystones get a one-time
+// pick-one (full refund on the rest) when that creature's tree is next opened.
+const RESPEC_FEE = 12;
 const slotsForUnlocked = (n) => Math.min(8, 4 + Math.floor((n || 0) / 4));
 function loadCores() { try { return JSON.parse(localStorage.getItem(CORES_KEY) || '{}') || {}; } catch { return {}; } }
 function saveCores(m) { try { localStorage.setItem(CORES_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
@@ -2454,20 +2460,32 @@ function RunRecap({ taken, stats, squad }) {
 // AUTO vs MANUAL toggle — pick who drives YOUR squad this wave. AUTO lets the AI
 // fight (paced, ~2× speed) so you blitz content you've mastered; flip to MANUAL for
 // the fights that actually need you. This is the auto-battler-with-spikes loop.
-function AutoToggle({ auto, setAuto }) {
-  const opt = (on, icon, label, sub) => (
-    <button onClick={() => setAuto(on)}
-      style={{ flex: 1, textAlign: 'center', cursor: 'pointer', borderRadius: 10, padding: '8px 10px',
-        background: auto === on ? (on ? '#14233a' : '#1a1410') : PANEL,
-        border: `2px solid ${auto === on ? (on ? '#5aa9ff' : ACCENT) : LINE}`, opacity: auto === on ? 1 : 0.7 }}>
-      <div style={{ fontSize: T.small, fontWeight: 900, color: auto === on ? (on ? '#9be7ff' : ACCENT) : '#9a9aaa' }}>{icon} {label}</div>
-      <div style={{ fontSize: T.micro, color: DIM, marginTop: 1 }}>{sub}</div>
-    </button>
-  );
+// On a FRONTIER ring (never cleared), AUTO is locked — first clears are walked by hand
+// (vF-CF); pass `locked` and the AUTO half goes dim with the Spotter's line under it.
+function AutoToggle({ auto, setAuto, locked }) {
+  const opt = (on, icon, label, sub) => {
+    const dead = locked && on; // AUTO half, locked out on new ground
+    return (
+      <button onClick={dead ? undefined : () => setAuto(on)}
+        style={{ flex: 1, textAlign: 'center', cursor: dead ? 'default' : 'pointer', borderRadius: 10, padding: '8px 10px',
+          background: auto === on ? (on ? '#14233a' : '#1a1410') : PANEL,
+          border: `2px solid ${auto === on ? (on ? '#5aa9ff' : ACCENT) : LINE}`, opacity: dead ? 0.35 : auto === on ? 1 : 0.7 }}>
+        <div style={{ fontSize: T.small, fontWeight: 900, color: auto === on ? (on ? '#9be7ff' : ACCENT) : '#9a9aaa' }}>{dead ? '🔒' : icon} {label}</div>
+        <div style={{ fontSize: T.micro, color: DIM, marginTop: 1 }}>{dead ? 'after first clear' : sub}</div>
+      </button>
+    );
+  };
   return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-      {opt(true, '⚡', 'AUTO', 'AI fights for you')}
-      {opt(false, '🎮', 'MANUAL', 'you drive every turn')}
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {opt(true, '⚡', 'AUTO', 'AI fights for you')}
+        {opt(false, '🎮', 'MANUAL', 'you drive every turn')}
+      </div>
+      {locked && (
+        <div style={{ fontSize: T.micro, color: '#9a8a6a', fontStyle: 'italic', textAlign: 'center', marginTop: 5 }}>
+          “New ground. Walk it yourself the first time — once it's yours, I'll mind the reins.”
+        </div>
+      )}
     </div>
   );
 }
@@ -2620,9 +2638,16 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [treeEquip, setTreeEquip] = useState(loadEquip); // {creatureId: [nodeId]} equipped loadout
   const [treeRanks, setTreeRanks] = useState(loadRanks); // {creatureId: {nodeId: rank}} for Refinement
   const [treeFor, setTreeFor] = useState(null); // creatureId whose skill tree is open (overlay)
+  const [keystoneSwap, setKeystoneSwap] = useState(null); // {creatureId, from, to} — pending ★ swap awaiting confirm
   const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
   const [auto, setAutoState] = useState(loadAuto); // AUTO: let the AI fight your squad
   const setAuto = (on) => { setAutoState(on); saveAuto(on); };
+  // FIRST-CLEARS ARE MANUAL (vF-CF): a ring you haven't beaten yet is walked by hand —
+  // AUTO is locked until its boss falls, then unlocks for re-farming. New ground is where
+  // the kits, laws, and targeting actually teach; auto is for mastery, not discovery.
+  // The saved AUTO preference is never mutated — it's just overridden for frontier runs.
+  const frontierRun = runDepth > reclaimed;
+  const runAuto = auto && !frontierRun;
   const [autoPick, setAutoPickState] = useState(loadAutoPick); // auto-resolve upgrade/event screens on FARMED rings
   const setAutoPick = (on) => { setAutoPickState(on); saveAutoPick(on); };
   const farmedRef = useRef(false); // is THIS run a re-clear of an already-beaten ring? (set at run start)
@@ -2775,6 +2800,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       return;
     }
     if (isUnlocked) return;
+    // One ★ per creature: buying a second keystone routes to a SWAP confirm instead.
+    if (node.keystone) {
+      const other = owned.map((id) => NODE_BY_ID[id]).find((n) => n?.keystone && n.id !== node.id);
+      if (other) { setKeystoneSwap({ creatureId, from: other, to: node }); return; }
+    }
     if ((cores[creatureId] || 0) < node.cost) return;
     setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) - node.cost }; saveCores(n); return n; });
     setTreeAlloc((a) => { const n = { ...a, [creatureId]: [...(a[creatureId] || []), node.id] }; saveTreeAlloc(n); return n; });
@@ -2783,6 +2813,39 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       if (cur.length >= slotsForUnlocked(owned.length + 1)) return e; // loadout full — unlock only, equip manually
       const n = { ...e, [creatureId]: [...cur, node.id] }; saveEquip(n); return n;
     });
+    sfx.upgradePick();
+  }
+  // Commit a pending ★ swap: the old keystone refunds in full; the new one costs its
+  // price + RESPEC_FEE. Net cores: -(to.cost + fee - from.cost). If the old ★ was in the
+  // loadout, the new one takes its slot; otherwise it auto-equips if there's room.
+  function swapKeystone({ creatureId, from, to }) {
+    const delta = to.cost + RESPEC_FEE - from.cost;
+    // Stale confirm (the old ★ was already let go some other way) → just dismiss.
+    if (!(treeAlloc[creatureId] || []).includes(from.id)) { setKeystoneSwap(null); return; }
+    if ((cores[creatureId] || 0) < delta) return;
+    setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) - delta }; saveCores(n); return n; });
+    setTreeAlloc((a) => { const cur = (a[creatureId] || []).filter((id) => id !== from.id); const n = { ...a, [creatureId]: [...cur, to.id] }; saveTreeAlloc(n); return n; });
+    setTreeEquip((e) => {
+      const cur = e[creatureId] || [];
+      let next;
+      if (cur.includes(from.id)) next = cur.map((id) => (id === from.id ? to.id : id));
+      else if (cur.length < slotsForUnlocked((treeAlloc[creatureId] || []).length)) next = [...cur, to.id];
+      else return e;
+      const n = { ...e, [creatureId]: next }; saveEquip(n); return n;
+    });
+    setKeystoneSwap(null); sfx.upgradePick();
+  }
+  // Legacy-save migration: a creature holding 2+ keystones picks ONE to keep; the rest
+  // refund in full (no fee — the rule changed, not the player's choice).
+  function resolveKeystoneOath(creatureId, keepId) {
+    const ownedIds = treeAlloc[creatureId] || [];
+    const drop = ownedIds.map((id) => NODE_BY_ID[id]).filter((n) => n?.keystone && n.id !== keepId);
+    if (!drop.length) return;
+    const dropIds = new Set(drop.map((n) => n.id));
+    const refund = drop.reduce((s, n) => s + n.cost, 0);
+    setCores((c) => { const n = { ...c, [creatureId]: (c[creatureId] || 0) + refund }; saveCores(n); return n; });
+    setTreeAlloc((a) => { const n = { ...a, [creatureId]: (a[creatureId] || []).filter((id) => !dropIds.has(id)) }; saveTreeAlloc(n); return n; });
+    setTreeEquip((e) => { const cur = e[creatureId] || []; if (!cur.some((id) => dropIds.has(id))) return e; const n = { ...e, [creatureId]: cur.filter((id) => !dropIds.has(id)) }; saveEquip(n); return n; });
     sfx.upgradePick();
   }
   // Toggle a node in/out of the creature's equipped loadout (capped at its slot count).
@@ -2877,7 +2940,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const eHp = Math.round(base.hp * D_HP(runDepth) * cm * 2.0), eAtk = Math.round(base.atk * D_ATK(runDepth) * cm * 1.4);
     const foeDef = { ...makeUnitDef(elite.foeId, 'Greedy'), name: elite.title, hp: eHp, maxHp: eHp, atk: eAtk, speed: 7 };
     setPendingElite(null);
-    fight.begin(aDefs, [foeDef], 555, auto ? 'auto' : 'play', (res, finalState) => {
+    fight.begin(aDefs, [foeDef], 555, runAuto ? 'auto' : 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
       const won = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0) && res.winner !== 'B';
@@ -2895,7 +2958,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startWave(idx, sq, mods) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
     const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
-    fight.begin(aDefs, runWaves[idx].enemies(), runWaves[idx].seed, auto ? 'auto' : 'play', (res, finalState) => {
+    fight.begin(aDefs, runWaves[idx].enemies(), runWaves[idx].seed, runAuto ? 'auto' : 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
       const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
@@ -3083,7 +3146,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const fielded = sq.map((m, i) => i).filter((i) => sq[i].hp > 0);
     const aDefs = fielded.map((i) => playerDef(sq[i], mods, treeModsFor(sq[i].id, treeEquip, treeRanks)));
     setEndlessRound(round); setRunWaves([wave]); setWaveIdx(0);
-    fight.begin(aDefs, wave.enemies(), wave.seed, auto ? 'auto' : 'play', (res, finalState) => {
+    fight.begin(aDefs, wave.enemies(), wave.seed, runAuto ? 'auto' : 'play', (res, finalState) => {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
       const youLive = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0);
@@ -3250,6 +3313,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const slotsFull = slotsUsed >= slotMax;
     // A path locked "until a capstone" opens once you've UNLOCKED any tier-3 capstone.
     const hasCapstone = tree ? tree.paths.some((p) => p.nodes.some((n) => n.capstone && isOwned(n.id))) : false;
+    // ★ oath state: which keystone (if any) this creature has sworn; 2+ = legacy save → migrate.
+    const ownedKeystones = owned.map((id) => NODE_BY_ID[id]).filter((n) => n?.keystone);
+    const swornKeystone = ownedKeystones[0] || null;
 
     if (!tree) {
       return (
@@ -3259,11 +3325,38 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         </div>
       );
     }
+    // ── Legacy migration: 2+ keystones owned → pick the one oath before the tree opens. ──
+    if (ownedKeystones.length > 1) {
+      return (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+            <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={48} />
+            <div style={{ fontSize: T.head, fontWeight: 900, color: ti.accent }}>{ti.glyph} {c.name}</div>
+          </div>
+          <div style={{ background: '#16130a', border: '1.5px solid #ffd166', borderRadius: 14, padding: '14px 14px', marginBottom: 12 }}>
+            <div style={{ fontSize: T.body, fontWeight: 900, color: '#ffd166', marginBottom: 4 }}>★ A CORE SWEARS ONE OATH</div>
+            <div style={{ fontSize: T.small, color: '#d8cba0', lineHeight: 1.5, marginBottom: 12 }}>
+              The deep paths have settled: a creature carries <b>one</b> keystone now. {c.name} holds {ownedKeystones.length} — choose which to keep. The rest refund in full.
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {ownedKeystones.map((ks) => (
+                <button key={ks.id} onClick={() => resolveKeystoneOath(treeFor, ks.id)}
+                  style={{ textAlign: 'left', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: '#0c0c14', border: '1.5px solid #ffd16688' }}>
+                  <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffd166' }}>★ KEEP {ks.name.toUpperCase()}</div>
+                  <div style={{ fontSize: T.micro, color: '#9a9aaa', marginTop: 2, lineHeight: 1.35 }}>{ks.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => setTreeFor(null)} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${LINE}`, background: PANEL, color: '#ddd', fontWeight: 800, fontSize: T.small, cursor: 'pointer' }}>← decide later</button>
+        </div>
+      );
+    }
     return (
       <div>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <button onClick={() => setTreeFor(null)} style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${LINE}`, background: PANEL, color: '#ddd', fontWeight: 800, fontSize: T.small, cursor: 'pointer' }}>←</button>
+          <button onClick={() => { setTreeFor(null); setKeystoneSwap(null); }} style={{ padding: '8px 12px', borderRadius: 10, border: `1px solid ${LINE}`, background: PANEL, color: '#ddd', fontWeight: 800, fontSize: T.small, cursor: 'pointer' }}>←</button>
           <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={48} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: T.head, fontWeight: 900, color: ti.accent, lineHeight: 1.1 }}>{ti.glyph} {c.name}</div>
@@ -3301,8 +3394,30 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700, marginLeft: 'auto' }}>{slotsUsed}/{slotMax} active{slotsFull ? ' · full' : ''}{slotMax < 8 ? ' · unlock more for +slots' : ''}</span>
         </div>
         <div style={{ fontSize: T.small, color: '#cdb6ff', background: '#0c0c16', border: `1px solid ${LINE}`, borderRadius: 10, padding: '9px 12px', marginBottom: 14, lineHeight: 1.45 }}>
-          {tree.blurb} <span style={{ color: DIM }}>Unlocking is forever; you run <b style={{ color: '#9be7ff' }}>{slotMax}</b> at once (more slots as you unlock more). Tap an unlocked path to equip or bench it. <b style={{ color: '#9be7ff' }}>Refinement</b> nodes can be bought again and again.</span>
+          {tree.blurb} <span style={{ color: DIM }}>Unlocking is forever; you run <b style={{ color: '#9be7ff' }}>{slotMax}</b> at once (more slots as you unlock more). Tap an unlocked path to equip or bench it. <b style={{ color: '#9be7ff' }}>Refinement</b> nodes can be bought again and again. A creature swears <b style={{ color: '#ffd166' }}>one ★ keystone</b> — swapping refunds the old one ({RESPEC_FEE} ⬡ fee).</span>
         </div>
+        {/* ★ SWAP confirm — trading the sworn keystone for another. */}
+        {keystoneSwap && keystoneSwap.creatureId === treeFor && (() => {
+          const { from, to } = keystoneSwap;
+          const delta = to.cost + RESPEC_FEE - from.cost;
+          const can = bal >= delta;
+          return (
+            <div style={{ background: '#16130a', border: '1.5px solid #ffd166', borderRadius: 14, padding: '12px 14px', marginBottom: 14 }}>
+              <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffd166', marginBottom: 3 }}>↔ TRADE THE OATH?</div>
+              <div style={{ fontSize: T.micro, color: '#d8cba0', lineHeight: 1.5, marginBottom: 10 }}>
+                Let <b>★ {from.name}</b> go ({from.cost} ⬡ back) and swear <b>★ {to.name}</b> ({to.cost} ⬡ + {RESPEC_FEE} ⬡ fee) — <b style={{ color: can ? '#9be7ff' : LOSS }}>{delta} ⬡ all told</b>.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => can && swapKeystone(keystoneSwap)} disabled={!can}
+                  style={{ flex: 1, borderRadius: 9, padding: '8px 0', cursor: can ? 'pointer' : 'default', background: can ? '#ffd16622' : PANEL, border: `1.5px solid ${can ? '#ffd166' : LINE}`, color: can ? '#ffd166' : '#6a6a7a', fontSize: T.small, fontWeight: 900 }}>
+                  {can ? `↔ SWAP · ${delta} ⬡` : `need ${delta} ⬡`}
+                </button>
+                <button onClick={() => setKeystoneSwap(null)}
+                  style={{ width: 90, borderRadius: 9, padding: '8px 0', cursor: 'pointer', background: PANEL, border: `1px solid ${LINE}`, color: '#9a9aaa', fontSize: T.small, fontWeight: 800 }}>keep it</button>
+              </div>
+            </div>
+          );
+        })()}
         {/* Paths */}
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
           {tree.paths.map((path) => {
@@ -3388,7 +3503,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     // Desc visibility (fog): see two tiers ahead, and ALWAYS show the
                     // capstone (◆) + keystone (★) — a column must advertise its payoff.
                     const revealed = node.tier <= maxOwnedTier + 2 || node.capstone || node.keystone || ownedNode;
-                    const afford = bal >= node.cost;
+                    // Another ★ already sworn → this keystone is a SWAP (old refunds, fee applies).
+                    const ksSwap = node.keystone && !ownedNode && swornKeystone && swornKeystone.id !== node.id ? swornKeystone : null;
+                    const buyCost = ksSwap ? node.cost + RESPEC_FEE - ksSwap.cost : node.cost;
+                    const afford = bal >= buyCost;
                     const buyable = prereqOwned && !node.sealed && !ownedNode && afford;
                     const clickable = buyable || (ownedNode && (equippedNode || !slotsFull));
                     const onClick = () => {
@@ -3400,7 +3518,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     const op = (!revealed && !ownedNode) ? 0.6 : node.sealed && !ownedNode ? 0.78 : 1;
                     const tag = equippedNode ? '● EQUIPPED'
                       : ownedNode ? (slotsFull ? '○ benched' : '+ equip')
-                      : node.sealed ? '🚧 SOON' : `${node.cost} ⬡`;
+                      : node.sealed ? '🚧 SOON' : ksSwap ? `↔ swap ★ · ${buyCost} ⬡` : `${node.cost} ⬡`;
                     const tagColor = equippedNode ? WIN : ownedNode ? (slotsFull ? DIM : '#9be7ff') : node.sealed ? DIM : afford ? '#9be7ff' : '#6a6a7a';
                     return (
                       <div key={node.id}>
@@ -4614,8 +4732,16 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           {(() => { const law = ringLawFor(enteredRing); return law && waveIdx > 0 && (
             <div title={law.line} style={{ display: 'inline-block', fontSize: T.micro, fontWeight: 800, color: '#ffd166', background: '#16130a', border: '1px solid #4a3f1c', borderRadius: 999, padding: '2px 9px', marginTop: 5 }}>{law.icon} {law.name}</div>
           ); })()}
+          {/* MIRROR ELITE telegraph (vF-CF): the next wave carries a keystone-bearer —
+              name the threat + what to do, BEFORE the fight, so targeting it is a plan. */}
+          {nextWave.mirror && (
+            <div style={{ marginTop: 7 }}>
+              <div style={{ display: 'inline-block', fontSize: T.micro, fontWeight: 800, color: '#cdb6ff', background: '#120c1c', border: '1px solid #4a3a6a', borderRadius: 999, padding: '2px 9px' }}>⟡ {nextWave.mirror.name} · {nextWave.mirror.keystone}</div>
+              <div style={{ fontSize: T.micro, color: '#9a8ab8', marginTop: 3 }}>{nextWave.mirror.line} <b style={{ color: '#cdb6ff' }}>{nextWave.mirror.ask}</b></div>
+            </div>
+          )}
         </div>
-        <AutoToggle auto={auto} setAuto={setAuto} />
+        <AutoToggle auto={runAuto} setAuto={setAuto} locked={frontierRun} />
         {/* Tap an upgrade to SELECT it (highlights), then CONFIRM — so a whole-squad / AOE
             pick can't be committed by a stray tap that starts the next wave. Color shows up
             ONLY on the live decision: neutral cards, ★ pick in accent, chosen in its color. */}
@@ -5020,12 +5146,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             {endless ? <>♾️ Round {endlessRound}{wave.boss ? ' · WARDEN' : ''}</> : <>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVE_COUNT} · {wave.name}</>}
           </b> — {wave.blurb}
         </div>
-        {runPhase === 'fighting' && auto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
+        {runPhase === 'fighting' && runAuto && <span style={{ flexShrink: 0, fontSize: T.micro, fontWeight: 900, color: '#9be7ff', background: '#14233a', border: '1px solid #5aa9ff', borderRadius: 8, padding: '3px 8px' }}>⚡ AUTO</span>}
       </div>
       </>}
       <BuildStrip taken={taken} />
       <FightView fight={fight} narrow={narrow} banner={resultTop ? null : banner} bossUid={wave.boss ? 'B0' : null}
-        auto={auto} onToggleAuto={(n) => { setAuto(n); fight.setLiveAuto(n); }} bgImg={enteredRing?.img} />
+        auto={runAuto} onToggleAuto={frontierRun ? null : (n) => { setAuto(n); fight.setLiveAuto(n); }} bgImg={enteredRing?.img} />
     </div>
   );
 }
