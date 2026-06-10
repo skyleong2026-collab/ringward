@@ -239,8 +239,8 @@ const HOLDFAST_KEY = '8gents_seam_holdfast'; // deepest ring boss ever beaten (0
 function loadReclaimed() { try { const n = parseInt(localStorage.getItem(HOLDFAST_KEY), 10); return Number.isFinite(n) ? Math.min(HOLDFAST_MAX, Math.max(0, n)) : 0; } catch { return 0; } }
 function saveReclaimed(n) { try { localStorage.setItem(HOLDFAST_KEY, String(n)); } catch { /* best-effort */ } }
 const HOLDFAST_PICKS_KEY = '8gents_seam_holdfast_picks';
-function loadHoldfastPicks() { try { const s = localStorage.getItem(HOLDFAST_PICKS_KEY); return s ? JSON.parse(s) : {}; } catch { return {}; } }
-function saveHoldfastPicks(p) { try { localStorage.setItem(HOLDFAST_PICKS_KEY, JSON.stringify(p)); } catch { /* best-effort */ } }
+function loadHoldfastPicks() { return loadJson(HOLDFAST_PICKS_KEY, {}); }
+function saveHoldfastPicks(p) { saveJson(HOLDFAST_PICKS_KEY, p); }
 const TEMPERING_KEY = '8gents_seam_tempering';
 const TEMPERING_CAP = 10;
 function loadTempering() { try { const n = parseInt(localStorage.getItem(TEMPERING_KEY), 10); return Number.isFinite(n) ? Math.min(TEMPERING_CAP, Math.max(0, n)) : 0; } catch { return 0; } }
@@ -281,8 +281,12 @@ const APEX_IDS = new Set(Object.keys(RARITY_OF).filter((id) => RARITY_OF[id] ===
 const isApex = (id) => APEX_IDS.has(id);
 const APEX_SIGILS = 3; // sigils needed before a Unique can be challenged
 const SIGILS_KEY = '8gents_seam_sigils';
-function loadSigils() { try { return JSON.parse(localStorage.getItem(SIGILS_KEY) || '{}') || {}; } catch { return {}; } }
-function saveSigils(m) { try { localStorage.setItem(SIGILS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+// Generic JSON persistence helpers — used by the plain-object and array load/save pairs below.
+function loadJson(key, fallback) { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; } }
+function saveJson(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* best-effort */ } }
+
+function loadSigils() { return loadJson(SIGILS_KEY, {}); }
+function saveSigils(m) { saveJson(SIGILS_KEY, m); }
 const PITY_KEY = '8gents_seam_pity'; // pulls since the last Legendary (drives the pity guarantee)
 function loadPity() { try { const n = parseInt(localStorage.getItem(PITY_KEY), 10); return Number.isFinite(n) ? n : 0; } catch { return 0; } }
 function savePity(n) { try { localStorage.setItem(PITY_KEY, String(n)); } catch { /* best-effort */ } }
@@ -418,8 +422,8 @@ const CROSSING_KEY = '8gents_seam_crossing'; // how many times you've stepped th
 function loadCrossing() { try { return Math.max(0, parseInt(localStorage.getItem(CROSSING_KEY), 10) || 0); } catch { return 0; } }
 function saveCrossing(n) { try { localStorage.setItem(CROSSING_KEY, String(n)); } catch { /* best-effort */ } }
 const WARDS_KEY = '8gents_seam_wards'; // {wardId: {active, progress, solved}} — gate-riddle state
-function loadWards() { try { return JSON.parse(localStorage.getItem(WARDS_KEY) || '{}') || {}; } catch { return {}; } }
-function saveWards(w) { try { localStorage.setItem(WARDS_KEY, JSON.stringify(w)); } catch { /* best-effort */ } }
+function loadWards() { return loadJson(WARDS_KEY, {}); }
+function saveWards(w) { saveJson(WARDS_KEY, w); }
 const SHARDS_KEY = '8gents_seam_shards'; // relic-shards — salvaged from relics, spent forging Keystones
 function loadShards() { try { const n = parseInt(localStorage.getItem(SHARDS_KEY), 10); return Number.isFinite(n) ? Math.max(0, n) : 0; } catch { return 0; } }
 function saveShards(n) { try { localStorage.setItem(SHARDS_KEY, String(n)); } catch { /* best-effort */ } }
@@ -853,10 +857,10 @@ const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
 const RELIC_KEY = '8gents_seam_relics';          // owned relic ids (the collection)
 const RELIC_LOADOUT_KEY = '8gents_seam_relic_kit'; // equipped subset, capped at RELIC_SLOTS
 const RELIC_DROP_WEIGHT = { Common: 50, Rare: 34, Legendary: 16 };
-function loadRelics() { try { return JSON.parse(localStorage.getItem(RELIC_KEY) || '[]') || []; } catch { return []; } }
-function saveRelics(ids) { try { localStorage.setItem(RELIC_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
-function loadRelicKit() { try { return JSON.parse(localStorage.getItem(RELIC_LOADOUT_KEY) || '[]') || []; } catch { return []; } }
-function saveRelicKit(ids) { try { localStorage.setItem(RELIC_LOADOUT_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
+function loadRelics() { return loadJson(RELIC_KEY, []); }
+function saveRelics(ids) { saveJson(RELIC_KEY, ids); }
+function loadRelicKit() { return loadJson(RELIC_LOADOUT_KEY, []); }
+function saveRelicKit(ids) { saveJson(RELIC_LOADOUT_KEY, ids); }
 // ── RELIC SETS (vF-AT) — thematic synergies. Equip 2+ relics from a set into your kit and
 // it activates a bonus on top of the relics themselves. With only RELIC_SLOTS=3 to spend,
 // this makes the loadout a real decision: chase a set synergy, or just take your best three.
@@ -933,10 +937,10 @@ const RELIC_CUTS = {
 };
 const RELIC_CUT_KEY = '8gents_seam_relic_cut';        // {relicId: activeCutIdx} — 0 = default
 const RELIC_CUT_OWN_KEY = '8gents_seam_relic_cut_own'; // {relicId: [unlockedIdx,…]} — slag-unlocked cuts
-function loadCutMap() { try { return JSON.parse(localStorage.getItem(RELIC_CUT_KEY) || '{}') || {}; } catch { return {}; } }
-function saveCutMap(o) { try { localStorage.setItem(RELIC_CUT_KEY, JSON.stringify(o)); } catch { /* best-effort */ } }
-function loadCutOwn() { try { return JSON.parse(localStorage.getItem(RELIC_CUT_OWN_KEY) || '{}') || {}; } catch { return {}; } }
-function saveCutOwn(o) { try { localStorage.setItem(RELIC_CUT_OWN_KEY, JSON.stringify(o)); } catch { /* best-effort */ } }
+function loadCutMap() { return loadJson(RELIC_CUT_KEY, {}); }
+function saveCutMap(o) { saveJson(RELIC_CUT_KEY, o); }
+function loadCutOwn() { return loadJson(RELIC_CUT_OWN_KEY, {}); }
+function saveCutOwn(o) { saveJson(RELIC_CUT_OWN_KEY, o); }
 const cutsFor = (id) => RELIC_CUTS[id] || [];          // the ALTERNATE cuts (cut 1+)
 // Effective {name, desc, apply} for a relic at an active index (0 = its original effect).
 function cutEffect(r, idx) {
@@ -1074,14 +1078,14 @@ const RANKS_KEY = '8gents_creature_ranks'; // {creatureId: {nodeId: rank}} for r
 // pick-one (full refund on the rest) when that creature's tree is next opened.
 const RESPEC_FEE = 12;
 const slotsForUnlocked = (n) => Math.min(8, 4 + Math.floor((n || 0) / 4));
-function loadCores() { try { return JSON.parse(localStorage.getItem(CORES_KEY) || '{}') || {}; } catch { return {}; } }
-function saveCores(m) { try { localStorage.setItem(CORES_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
-function loadTreeAlloc() { try { return JSON.parse(localStorage.getItem(TREE_KEY) || '{}') || {}; } catch { return {}; } }
-function saveTreeAlloc(m) { try { localStorage.setItem(TREE_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
-function loadEquip() { try { return JSON.parse(localStorage.getItem(EQUIP_KEY) || '{}') || {}; } catch { return {}; } }
-function saveEquip(m) { try { localStorage.setItem(EQUIP_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
-function loadRanks() { try { return JSON.parse(localStorage.getItem(RANKS_KEY) || '{}') || {}; } catch { return {}; } }
-function saveRanks(m) { try { localStorage.setItem(RANKS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
+function loadCores() { return loadJson(CORES_KEY, {}); }
+function saveCores(m) { saveJson(CORES_KEY, m); }
+function loadTreeAlloc() { return loadJson(TREE_KEY, {}); }
+function saveTreeAlloc(m) { saveJson(TREE_KEY, m); }
+function loadEquip() { return loadJson(EQUIP_KEY, {}); }
+function saveEquip(m) { saveJson(EQUIP_KEY, m); }
+function loadRanks() { return loadJson(RANKS_KEY, {}); }
+function saveRanks(m) { saveJson(RANKS_KEY, m); }
 const AUTO_KEY = '8gents_seam_auto';
 function loadAuto() { try { return localStorage.getItem(AUTO_KEY) === '1'; } catch { return false; } }
 function saveAuto(on) { try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch { /* best-effort */ } }
@@ -2377,6 +2381,30 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Ring-law display, three sizes:
+//  'detail' — boxed chip with full line + ask (ring-select screen)
+//  'line'   — inline bold text (first-wave pre-battle reveal)
+//  'pill'   — compact badge with title tooltip (upgrade header)
+function RingLawChip({ law, variant = 'detail' }) {
+  if (!law) return null;
+  if (variant === 'line') return (
+    <div style={{ fontSize: T.micro, fontWeight: 800, color: '#ffd166', marginTop: 7 }}>
+      {law.icon} {law.name} — <span style={{ color: '#d8cba0', fontWeight: 600 }}>{law.line}</span>
+    </div>
+  );
+  if (variant === 'pill') return (
+    <div title={law.line} style={{ display: 'inline-block', fontSize: T.micro, fontWeight: 800, color: '#ffd166', background: '#16130a', border: '1px solid #4a3f1c', borderRadius: 999, padding: '2px 9px', marginTop: 5 }}>
+      {law.icon} {law.name}
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 6, padding: '6px 9px', borderRadius: 8, background: '#16130a', border: '1px solid #4a3f1c' }}>
+      <div style={{ fontSize: T.micro, fontWeight: 900, color: '#ffd166' }}>{law.icon} RING LAW — {law.name}</div>
+      <div style={{ fontSize: T.micro, color: '#d8cba0', lineHeight: 1.4, marginTop: 2 }}>{law.line} <span style={{ color: '#9a8c5a', fontStyle: 'italic' }}>{law.ask}</span></div>
     </div>
   );
 }
@@ -3947,12 +3975,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                           Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
                         </div>
                         {/* RING LAW (vF-CC) — the ring's one rule, read BEFORE you pick a squad. */}
-                        {(() => { const law = ringLawFor(sel); return law && (
-                          <div style={{ marginTop: 6, padding: '6px 9px', borderRadius: 8, background: '#16130a', border: '1px solid #4a3f1c' }}>
-                            <div style={{ fontSize: T.micro, fontWeight: 900, color: '#ffd166' }}>{law.icon} RING LAW — {law.name}</div>
-                            <div style={{ fontSize: T.micro, color: '#d8cba0', lineHeight: 1.4, marginTop: 2 }}>{law.line} <span style={{ color: '#9a8c5a', fontStyle: 'italic' }}>{law.ask}</span></div>
-                          </div>
-                        ); })()}
+                        <RingLawChip law={ringLawFor(sel)} />
                       </div>
                     );
                   })()}
@@ -4874,9 +4897,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: di.color }}>ring {enteredRing.depth}/8 · {di.label}</span>
                   </div>
                   <div style={{ fontSize: T.small, color: '#bcc6d8', lineHeight: 1.55, fontStyle: 'italic', marginTop: 5 }}>{RING_INTRO[enteredRing.id]}</div>
-                  {(() => { const law = ringLawFor(enteredRing); return law && (
-                    <div style={{ fontSize: T.micro, fontWeight: 800, color: '#ffd166', marginTop: 7 }}>{law.icon} {law.name} — <span style={{ color: '#d8cba0', fontWeight: 600 }}>{law.line}</span></div>
-                  ); })()}
+                  <RingLawChip law={ringLawFor(enteredRing)} variant="line" />
                 </div>
               </div>
             </div>
@@ -4889,9 +4910,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <div style={{ fontSize: T.head, fontWeight: 900, color: '#eee', textShadow: `0 0 14px ${ACCENT}44` }}>Pick one → {nextWave.boss ? '💀 ' : ''}{nextWave.name}</div>
           {nextWave.boss && <div style={{ fontSize: T.small, fontWeight: 800, color: '#ffb38a', marginTop: 4 }}>Final stand — choose well.</div>}
           {waveIdx > 0 && <div style={{ fontSize: T.micro, color: DIM, marginTop: 3 }}>✓ wave {waveIdx} cleared · patched +{Math.round(patchup * 100)}%</div>}
-          {(() => { const law = ringLawFor(enteredRing); return law && waveIdx > 0 && (
-            <div title={law.line} style={{ display: 'inline-block', fontSize: T.micro, fontWeight: 800, color: '#ffd166', background: '#16130a', border: '1px solid #4a3f1c', borderRadius: 999, padding: '2px 9px', marginTop: 5 }}>{law.icon} {law.name}</div>
-          ); })()}
+          {waveIdx > 0 && <RingLawChip law={ringLawFor(enteredRing)} variant="pill" />}
           {/* MIRROR ELITE telegraph (vF-CF): the next wave carries a keystone-bearer —
               name the threat + what to do, BEFORE the fight, so targeting it is a plan. */}
           {nextWave.mirror && (

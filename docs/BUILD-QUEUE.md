@@ -24,10 +24,10 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   (+1% HP/tier, cost 40⬡×1.5^tier, T10 cap, resets on crossing, "forge rests" done-state). Holdfast:
   8 alt boons authored, pick-1-of-2 reveal on reclaim, SWAP 30⬡ in Holdfast tab. All perkBaseMods
   call sites pass temperingTier+holdfastPicks. Lint/build/tests green.
-- [ ] **S6 · MODEL=sonnet · Debt: law-chip component + localStorage helper** — the law-chip JSX
-  appears ×3 in SeamLab → one component; add a `usePersistent(key, default)` (or plain helper)
-  and collapse the load/save boilerplate pairs. Pure refactor: zero behavior change, goldens +
-  Playwright smoke prove it.
+- [x] **S6 · MODEL=sonnet · Debt: law-chip component + localStorage helper** — DONE. RingLawChip
+  component (3 variants: detail/line/pill) replaces the 3 inline law-chip JSX blocks. loadJson/
+  saveJson helpers collapse 10 identical JSON load/save pairs to 1-line wrappers. Zero behavior
+  change; goldens byte-identical; Playwright smoke confirms law chip renders.
 - [ ] **S7 · MODEL=opus · Sim mirror extraction** — RELIC_CUTS/UPGRADES are hand-mirrored in the
   sim (the drift-bug class waves.js extraction killed). Extract to a shared module the same way.
   Verify: sim outputs identical before/after on a fixed seed set.
