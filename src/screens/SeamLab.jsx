@@ -36,6 +36,7 @@ import {
   HUNTING_GROUNDS, D_HP, D_ATK, crossMult, foe, wavesForGround,
   ringLawFor, applyRingLaw, ringLawMods,
 } from '../engine/waves.js';
+import { DEEP_INSCRIPTIONS, loadStones, saveStones } from '../data/lore.js';
 
 const ACCENT = '#e8a040';
 const CHG = '#f5a623';
@@ -1542,6 +1543,43 @@ function Bar({ value, max, color, h = 10 }) {
   );
 }
 
+// ── THE WORLD MAP (vF-CE) — the whole world, code-drawn: eight rings around the Drop.
+// Pure SVG, no assets. Visual canon (LORE-BIBLE §IV): the world is circles — the only
+// direction that exists is INWARD. Unlocked rings lit, locked rings dark; found carved
+// stones marked on their bands; the Drop breathes (a held note, ~4s); the blight reads
+// as a soft pooling toward the center — a bandage, never a monster.
+function WorldMap({ unlocked = 1, stones = [], size = 320 }) {
+  const C = 200;
+  const bands = HUNTING_GROUNDS.map((g, i) => ({ g, rOut: 190 - i * 17 })); // depth 1 = outermost
+  const litColor = (d) => (d <= 2 ? '#7ed321' : d <= 4 ? '#9be7ff' : d <= 6 ? '#e8a040' : '#ff6b6b');
+  return (
+    <svg viewBox="0 0 400 400" width={size} height={size} style={{ display: 'block', margin: '0 auto' }} role="img" aria-label="Map of the eight rings around the Drop">
+      <defs>
+        <radialGradient id="wm-drop"><stop offset="0%" stopColor="#f2e8ff" /><stop offset="45%" stopColor="#b06bff" /><stop offset="100%" stopColor="#1a0f2a" /></radialGradient>
+        <radialGradient id="wm-blight"><stop offset="55%" stopColor="rgba(95,240,208,0)" /><stop offset="100%" stopColor="rgba(95,240,208,0.07)" /></radialGradient>
+      </defs>
+      <circle cx={C} cy={C} r={197} fill="#0a0c12" stroke="#2a2a3a" strokeWidth="1" />
+      {bands.map(({ g, rOut }) => {
+        const open = g.depth <= unlocked; const col = open ? litColor(g.depth) : '#23232f';
+        const a = -Math.PI / 2 + g.depth * 0.75; // stone markers spiral inward, clear of the label column
+        return (
+          <g key={g.id}>
+            <circle cx={C} cy={C} r={rOut} fill="none" stroke={col} strokeOpacity={open ? 0.5 : 0.6} strokeWidth={open ? 2 : 1.2} />
+            <text x={C} y={C - rOut + 12} fontSize="8.5" fill={open ? '#9aa7b8' : '#3a3a4a'} textAnchor="middle" fontWeight="700">{g.name.replace('The ', '')}</text>
+            {stones.includes(g.id) && <text x={C + Math.cos(a) * (rOut - 8)} y={C + Math.sin(a) * (rOut - 8)} fontSize="9" fill="#cfc6ae" textAnchor="middle">🪨</text>}
+          </g>
+        );
+      })}
+      <circle cx={C} cy={C} r={120} fill="url(#wm-blight)" pointerEvents="none" />
+      <circle cx={C} cy={C} r={24} fill="url(#wm-drop)">
+        <animate attributeName="r" values="22;27;22" dur="4s" repeatCount="indefinite" />
+      </circle>
+      <text x={C} y={C + 3} fontSize="9" fill="#eadcff" textAnchor="middle" fontWeight="900" letterSpacing="2">DROP</text>
+      <text x={C} y={16} fontSize="9" fill="#6f86a8" textAnchor="middle" fontWeight="800" letterSpacing="3">THE RIM</text>
+    </svg>
+  );
+}
+
 // Battle animation keyframes (injected once at the SeamLab root).
 const FX_STYLE = `
 @keyframes seam-idle { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }
@@ -2569,6 +2607,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [resultDetails, setResultDetails] = useState(false); // "▸ run details" expander on the result screens
   const runGroundRef = useRef(null);            // the active run's ring — ring laws read it at each battle start
   const repeatIdsRef = useRef(new Set());       // creatures repeated from LAST run ("The Cold Remembers")
+  const [stones, setStones] = useState(loadStones); // CARVED STONES found (ring ids) — the deep-past lore collection
+  const [stoneNow, setStoneNow] = useState(null);   // the stone found on THIS clear (first clear of a ring), for the reveal
   const [summonResults, setSummonResults] = useState(null); // [{id,rarity,isDupe,gainedCores}] — last Summon's pulls
   const [bannerId, setBannerId] = useState('wild');         // chosen Summon banner (wild | deep)
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
@@ -2879,6 +2919,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         onSlag?.(winSlag); setEarned(winSlag);
         const hunted = accessibleGround(ground, accessDepth); // the ring you actually raided
         setCaughtFrom(hunted);
+        // CARVED STONE (vF-CE): the FIRST clear of each ring uncovers the old folk's stone —
+        // the deep-past lore drip, one quiet revelation per ring.
+        if (DEEP_INSCRIPTIONS[hunted.id] && !stones.includes(hunted.id)) {
+          const ns = [...stones, hunted.id]; setStones(ns); saveStones(ns);
+          setStoneNow({ ringId: hunted.id, ...DEEP_INSCRIPTIONS[hunted.id] });
+        } else setStoneNow(null);
         // Record the clear — repeats of this ring pay diminishing Cores from here on.
         setClears((c) => { const n = { ...c, [hunted.id]: (c[hunted.id] || 0) + 1 }; saveClears(n); return n; });
         // Strict inward + WARD GATES: beating a ring's boss at your frontier opens the next
@@ -3186,7 +3232,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const bestMult = results.reduce((m, r) => Math.max(m, RARITY_INFO[r.rarity].mult), 0);
     if (bestMult >= RARITY_INFO.Legendary.mult) setTimeout(() => sfx.caughtCreature(), 200); else sfx.upgradePick();
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setEndless(false); setEndlessResult(null); setEndlessRound(0); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setEndless(false); setEndlessResult(null); setEndlessRound(0); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); setStoneNow(null); }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -3420,6 +3466,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <button onClick={() => setShowCodex(false)} style={{ fontSize: T.small, fontWeight: 800, color: DIM, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 8, padding: '6px 13px', cursor: 'pointer' }}>← back</button>
         </div>
         <div style={{ fontSize: T.small, color: DIM, marginBottom: 6 }}>The story so far — <b style={{ color: '#cba6ff' }}>{found}</b> of <b style={{ color: '#cba6ff' }}>{total}</b> remembered. It fills as you climb.</div>
+        <div style={{ background: '#0a0c12', border: `1px solid ${LINE}`, borderRadius: 14, padding: '10px 0 4px', margin: '8px 0 4px' }}>
+          <WorldMap unlocked={unlocked} stones={stones} size={narrow ? 300 : 360} />
+          <div style={{ textAlign: 'center', fontSize: T.micro, color: '#6f86a8', padding: '4px 0 8px' }}>Eight rings. One direction. {stones.length > 0 ? `🪨 ${stones.length}/8 stones read.` : 'The old folk left stones — clear a ring to find its words.'}</div>
+        </div>
+        {cHead('THE CARVED STONES — the deep past')}
+        {HUNTING_GROUNDS.map((g) => DEEP_INSCRIPTIONS[g.id] &&
+          cEntry('st' + g.id, DEEP_INSCRIPTIONS[g.id].title + ' · ' + g.name, DEEP_INSCRIPTIONS[g.id].text, stones.includes(g.id))
+        )}
         {cHead('THE OPENING')}
         {OPENING_SCENES.map((s, i) => cEntry('op' + i, s.title, s.text, true))}
         {cHead('THE RINGS')}
@@ -4065,6 +4119,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {/* ═══════════════ HOLDFAST — home, progress, lore ═══════════════ */}
         {homeTab === 'holdfast' && (
           <>
+            {/* ── THE WORLD (vF-CE): home is where you see the whole climb — the map of the rings. ── */}
+            <div style={{ background: '#0a0c12', border: `1px solid ${LINE}`, borderRadius: 14, padding: '10px 0 2px', marginBottom: 12 }}>
+              <WorldMap unlocked={unlocked} stones={stones} size={narrow ? 290 : 340} />
+              <div style={{ textAlign: 'center', fontSize: T.micro, color: '#6f86a8', padding: '3px 0 8px' }}>{stones.length}/8 carved stones read · the rest wait on first clears</div>
+            </div>
             {/* ── NG+ banner: which crossing you're on (rings reform harder past the Drop). ── */}
             {crossing > 0 && (
               <div style={{ background: 'linear-gradient(90deg, #1a0f2a, #150d22)', border: '1.5px solid #6a4a9a', borderRadius: 12, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -4734,6 +4793,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       const calm = { background: 'rgba(10,13,17,0.85)', border: `1px solid ${LINE}`, borderRadius: 12, padding: '14px 16px', margin: '12px 0', textAlign: 'left' };
       const spoils = [];
       if (enteredRing && RING_CLEAR[enteredRing.id]) spoils.push('beat');
+      if (stoneNow) spoils.push('stone');
       if (pullNow) spoils.push('pull');
       if (sigilGain) spoils.push('sigil');
       if (unlockedNow) spoils.push('unlock');
@@ -4777,6 +4837,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             </div>
           )}
 
+          {step === 'stone' && stoneNow && (
+            <div style={{ ...calm, background: 'rgba(16,15,13,0.9)', border: '1px solid #3a362c' }}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#b8ab8a' }}>🪨 A CARVED STONE — {stoneNow.title}</div>
+              <div style={{ fontSize: T.small, color: '#cfc6ae', lineHeight: 1.7, fontStyle: 'italic', margin: '8px 0 6px' }}>{stoneNow.text}</div>
+              <div style={{ fontSize: T.micro, color: '#8a8068', fontStyle: 'italic' }}>Old words. Heavy, though. — kept in ❖ The Chronicle ({stones.length}/8 stones)</div>
+            </div>
+          )}
           {step === 'pull' && pullNow && (() => {
             const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
             return (
