@@ -20,10 +20,10 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   toward the camped ring's `biasIds` (state the bias % on the summon screen — folk honesty, no
   hidden odds); feat: clear any ring with each Type as carry (8 checks, existing feats system).
   Keep PITY_AT intact; sim/spot-check the odds math.
-- [ ] **S5 · MODEL=sonnet · Forge Tempering + Holdfast boon choice** — Tempering: +1% squad max
-  HP per tier, cost 40⬡×1.5^tier slag, cap T10 per crossing, "the forge rests" done-state.
-  Holdfast: pick 1-of-2 boons per reclaimed stage (author 8 alternates), 30-slag swap at the
-  Holdfast. Both fully spec'd in the design doc.
+- [x] **S5 · MODEL=sonnet · Forge Tempering + Holdfast boon choice** — DONE. Tempering in Forge tab
+  (+1% HP/tier, cost 40⬡×1.5^tier, T10 cap, resets on crossing, "forge rests" done-state). Holdfast:
+  8 alt boons authored, pick-1-of-2 reveal on reclaim, SWAP 30⬡ in Holdfast tab. All perkBaseMods
+  call sites pass temperingTier+holdfastPicks. Lint/build/tests green.
 - [ ] **S6 · MODEL=sonnet · Debt: law-chip component + localStorage helper** — the law-chip JSX
   appears ×3 in SeamLab → one component; add a `usePersistent(key, default)` (or plain helper)
   and collapse the load/save boilerplate pairs. Pure refactor: zero behavior change, goldens +

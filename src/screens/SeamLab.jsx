@@ -200,21 +200,37 @@ function saveUnlocked(n) { try { localStorage.setItem(UNLOCKED_KEY, String(n)); 
 // mods as perks — opt-in, so combat goldens stay byte-identical. Stage 8 = you stand at
 // the Drop itself: the destination the whole climb points toward.
 const HOLDFAST_STAGES = [
-  { depth: 1, part: 'The Hearth',        boon: { icon: '🔥', name: 'Hearthlight',  desc: '+8% max HP, every run.',                  apply: (m) => { m.hpMult *= 1.08; } },
+  { depth: 1, part: 'The Hearth',
+    boon: { icon: '🔥', name: 'Hearthlight',   desc: '+8% max HP, every run.',         apply: (m) => { m.hpMult *= 1.08; } },
+    alt:  { icon: '⚔️', name: 'First Mark',     desc: '+5% squad damage, every run.',   apply: (m) => { m.dmgMult *= 1.05; } },
     beat: '"You lit it. Good." His voice, first night home. "A holdfast with a cold hearth is just a grave with walls." Three cores he left you, humming on the mantel.' },
-  { depth: 2, part: 'The Storeroom',     boon: { icon: '🌿', name: 'Full Stores',  desc: 'Healing is 25% stronger, every run.',     apply: (m) => { m.healMult *= 1.25; } },
+  { depth: 2, part: 'The Storeroom',
+    boon: { icon: '🌿', name: 'Full Stores',    desc: 'Healing is 25% stronger, every run.',        apply: (m) => { m.healMult *= 1.25; } },
+    alt:  { icon: '⚡', name: 'Quick Cache',    desc: 'Squad starts each run with +2 extra charge.', apply: (m) => { m.chargeStart += 2; } },
     beat: 'Behind the fallen gate, his old caches — dried feed, spare core-casings. "Never raid hungry," he used to say. "The blight\'s got nothing but time. Don\'t you forget it."' },
-  { depth: 3, part: 'The Drill-Yard',    boon: { icon: '⚔️', name: 'Old Drills',   desc: '+8% squad damage, every run.',            apply: (m) => { m.dmgMult *= 1.08; } },
+  { depth: 3, part: 'The Drill-Yard',
+    boon: { icon: '⚔️', name: 'Old Drills',    desc: '+8% squad damage, every run.',   apply: (m) => { m.dmgMult *= 1.08; } },
+    alt:  { icon: '🛡', name: 'Stone Posts',   desc: '+8% max HP, every run.',          apply: (m) => { m.hpMult *= 1.08; } },
     beat: 'The green seam, where things still grow wrong. He drilled his grunlings here. "Grown, not made — earth and old machine. That glow in their chest is the heart. Mind it."' },
-  { depth: 4, part: "The Menders' Well", boon: { icon: '💧', name: 'Clean Water',  desc: '+6% max HP, every run.',                  apply: (m) => { m.hpMult *= 1.06; } },
+  { depth: 4, part: "The Menders' Well",
+    boon: { icon: '💧', name: 'Clean Water',   desc: '+6% max HP, every run.',           apply: (m) => { m.hpMult *= 1.06; } },
+    alt:  { icon: '🌿', name: "Tender's Shelf", desc: 'Healing is 15% stronger, every run.', apply: (m) => { m.healMult *= 1.15; } },
     beat: 'The well still runs clean — the one thing the blight never fouled. "It fell seventy-five years back," he told you once. "Out of a clear sky. We\'ve called it the Drop ever since."' },
-  { depth: 5, part: 'The Watchtower',    boon: { icon: '⚡', name: 'The Watch',    desc: 'One grunling starts each run already Primed.', apply: (m) => { m.chargeStart += 2; } },
+  { depth: 5, part: 'The Watchtower',
+    boon: { icon: '⚡', name: 'The Watch',     desc: 'One grunling starts each run already Primed.', apply: (m) => { m.chargeStart += 2; } },
+    alt:  { icon: '🗡️', name: 'Murder Holes',  desc: '+6% squad damage, every run.',                 apply: (m) => { m.dmgMult *= 1.06; } },
     beat: 'From the tower you can finally see inward — ring on ring, closing like a wound. "He went in," says the wind, or memory. "Past the fifth. Came back wrong. Then went in again."' },
-  { depth: 6, part: 'The Deep Cellar',   boon: { icon: '🗡️', name: 'Cold Edge',    desc: '+8% squad damage, every run.',            apply: (m) => { m.dmgMult *= 1.08; } },
+  { depth: 6, part: 'The Deep Cellar',
+    boon: { icon: '🗡️', name: 'Cold Edge',     desc: '+8% squad damage, every run.',   apply: (m) => { m.dmgMult *= 1.08; } },
+    alt:  { icon: '🔥', name: 'Wrapped Wool',  desc: '+6% max HP, every run.',          apply: (m) => { m.hpMult *= 1.06; } },
     beat: "Past the Warden, the cold gets honest. You understand now why he kept climbing. Down here the blight isn't spreading. It's remembering — and it remembers you." },
-  { depth: 7, part: 'The Map-Room',      boon: { icon: '❤️', name: "Hunter's Heart", desc: '+6% max HP, every run.',                 apply: (m) => { m.hpMult *= 1.06; } },
+  { depth: 7, part: 'The Map-Room',
+    boon: { icon: '❤️', name: "Hunter's Heart", desc: '+6% max HP, every run.',          apply: (m) => { m.hpMult *= 1.06; } },
+    alt:  { icon: '🌿', name: 'Honed Hands',   desc: 'Healing is 20% stronger, every run.', apply: (m) => { m.healMult *= 1.20; } },
     beat: 'His last map — every ring marked, annotated, crossed out. Except the center. By the Drop he\'d written one word, twice: "Not it. Not it."' },
-  { depth: 8, part: "The Drop's Edge",   boon: { icon: '✦', name: "The Drop's Edge", desc: '+10% damage AND +10% max HP, every run.', apply: (m) => { m.dmgMult *= 1.10; m.hpMult *= 1.10; } },
+  { depth: 8, part: "The Drop's Edge",
+    boon: { icon: '✦', name: "The Drop's Edge", desc: '+10% damage AND +10% max HP, every run.',   apply: (m) => { m.dmgMult *= 1.10; m.hpMult *= 1.10; } },
+    alt:  { icon: '⚔️', name: 'The Vigil',       desc: '+14% damage AND +6% max HP, every run.',    apply: (m) => { m.dmgMult *= 1.14; m.hpMult *= 1.06; } },
     beat: "Frostbound. The rings end. You stand where he stood. The Drop isn't a crater — it's a door, and it's been open the whole time, waiting on someone to come the rest of the way." },
 ];
 const HOLDFAST_MAX = HOLDFAST_STAGES.length; // 8 — reaching the Drop
@@ -222,8 +238,17 @@ const stageAtDepth = (d) => HOLDFAST_STAGES.find((s) => s.depth === d) || null;
 const HOLDFAST_KEY = '8gents_seam_holdfast'; // deepest ring boss ever beaten (0..8) = reclaim depth
 function loadReclaimed() { try { const n = parseInt(localStorage.getItem(HOLDFAST_KEY), 10); return Number.isFinite(n) ? Math.min(HOLDFAST_MAX, Math.max(0, n)) : 0; } catch { return 0; } }
 function saveReclaimed(n) { try { localStorage.setItem(HOLDFAST_KEY, String(n)); } catch { /* best-effort */ } }
+const HOLDFAST_PICKS_KEY = '8gents_seam_holdfast_picks';
+function loadHoldfastPicks() { try { const s = localStorage.getItem(HOLDFAST_PICKS_KEY); return s ? JSON.parse(s) : {}; } catch { return {}; } }
+function saveHoldfastPicks(p) { try { localStorage.setItem(HOLDFAST_PICKS_KEY, JSON.stringify(p)); } catch { /* best-effort */ } }
+const TEMPERING_KEY = '8gents_seam_tempering';
+const TEMPERING_CAP = 10;
+function loadTempering() { try { const n = parseInt(localStorage.getItem(TEMPERING_KEY), 10); return Number.isFinite(n) ? Math.min(TEMPERING_CAP, Math.max(0, n)) : 0; } catch { return 0; } }
+function saveTempering(n) { try { localStorage.setItem(TEMPERING_KEY, String(n)); } catch { /* best-effort */ } }
+const temperCost = (tier) => Math.round(40 * Math.pow(1.5, tier));
 // Fold every reclaimed stage's standing boon into a run's opening mods (mutates m).
-function holdfastMods(reclaimed, m) { HOLDFAST_STAGES.forEach((s) => { if (s.depth <= reclaimed) s.boon.apply(m); }); }
+// picks = {depth: 0|1} — 0 (or absent) = main boon, 1 = alt boon.
+function holdfastMods(reclaimed, m, picks = {}) { HOLDFAST_STAGES.forEach((s) => { if (s.depth <= reclaimed) (picks[s.depth] === 1 && s.alt ? s.alt : s.boon).apply(m); }); }
 
 // ── Beta / test switch. Fast-forwards content (unlocks every ring + grant buttons) so
 // the deep game can be tested from the start; toggle it OFF to play the real gated build.
@@ -967,10 +992,11 @@ function saveStable(ids) {
 // Build the starting mods for a run from the perks you own AND the Holdfast stages
 // you've reclaimed (vs. EMPTY_MODS before). Both are opt-in mods — goldens never set
 // them, so combat stays byte-identical.
-function perkBaseMods(owned, reclaimed = 0, relicKit = [], cutMap = {}) {
+function perkBaseMods(owned, reclaimed = 0, relicKit = [], cutMap = {}, temperingTier = 0, holdfastPicks = {}) {
   const m = { ...EMPTY_MODS };
   PERKS.forEach((p) => { if (owned.includes(p.id)) p.apply(m); });
-  holdfastMods(reclaimed, m);
+  holdfastMods(reclaimed, m, holdfastPicks);
+  if (temperingTier > 0) m.hpMult *= (1 + 0.01 * temperingTier);
   relicMods(relicKit, m, cutMap); // equipped relic loadout (with active cuts) — opt-in, golden-safe
   return m;
 }
@@ -2631,6 +2657,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [reclaimed, setReclaimed] = useState(loadReclaimed); // deepest ring boss ever beaten (0..8) = Holdfast reclaim depth
   const [crossing, setCrossing] = useState(loadCrossing);    // NG+ level — times stepped through the Drop (0 = first climb)
   const [holdfastNow, setHoldfastNow] = useState(null); // a Holdfast stage just reclaimed this clear (won-screen reveal)
+  const [holdfastPicks, setHoldfastPicks] = useState(loadHoldfastPicks); // {depth: 0|1} — 0=main boon, 1=alt boon
+  const [temperingTier, setTemperingTier] = useState(loadTempering);     // Forge Tempering level (0..TEMPERING_CAP, resets per crossing)
+  const [pendingHoldfastPick, setPendingHoldfastPick] = useState(0);     // depth of freshly-reclaimed stage waiting for a pick (0=none)
   const [enteredRing, setEnteredRing] = useState(null); // the ring you just stepped into (threshold beat on wave 0)
   const [pendingEvent, setPendingEvent] = useState(null); // a wayside event awaiting a choice (or null)
   const [eventStep, setEventStep] = useState(null); // current step id within a branching TALE (null = start / not a tale)
@@ -3065,7 +3094,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         if (hunted.depth > reclaimed) {
           setReclaimed(hunted.depth); saveReclaimed(hunted.depth);
           setHoldfastNow(stageAtDepth(hunted.depth));
-        } else setHoldfastNow(null);
+          setPendingHoldfastPick(hunted.depth);
+        } else { setHoldfastNow(null); setPendingHoldfastPick(0); }
         // PULL — a weighted draw from the ring (new creature, or a dupe → Cores).
         const pull = pullFrom(hunted, stable, accessDepth, pity);
         if (pull) {
@@ -3136,7 +3166,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     farmedRef.current = g.depth <= reclaimed; // a re-clear of an already-beaten ring → auto-pick eligible
     featsAtRunStartRef.current = doneFeatIds(); // remember what's already earned, to celebrate new ones
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
-    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut); // perks + Holdfast boons + equipped relics set the run's opening mods
+    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut, temperingTier, holdfastPicks); // perks + Holdfast boons + equipped relics set the run's opening mods
     ringLawMods(g, base); // the ring's LAW bends the run (e.g. Witherfen: healing halved)
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
@@ -3147,7 +3177,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startChallenge(apexId) {
     sfx.resume();
     featsAtRunStartRef.current = doneFeatIds();
-    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut);
+    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut, temperingTier, holdfastPicks);
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     const aDefs = sq.map((m) => playerDef(m, base, treeModsFor(m.id, treeEquip, treeRanks)));
     const apex = COMBAT_CREATURES[apexId];
@@ -3219,7 +3249,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startEndless() {
     if (picked.length < 2) return;
     sfx.resume();
-    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut); // same opening mods a climb would use
+    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut, temperingTier, holdfastPicks); // same opening mods a climb would use
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setEndless(true); setEndlessResult(null);
     featsAtRunStartRef.current = doneFeatIds();
@@ -4115,6 +4145,38 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               })}
             </div>
           </div>
+          {/* ── FORGE TEMPERING — repeatable sink: +1% squad max HP per tier, resets each crossing. ── */}
+          {(() => {
+            const atCap = temperingTier >= TEMPERING_CAP;
+            const cost = atCap ? 0 : temperCost(temperingTier);
+            const afford = !atCap && slag >= cost;
+            const buyTempering = () => {
+              if (!afford) return;
+              onSlag?.(-cost);
+              const nt = temperingTier + 1; setTemperingTier(nt); saveTempering(nt);
+            };
+            return (
+              <div style={{ background: '#0c1016', border: `1px solid ${LINE}`, borderRadius: 12, padding: '12px 14px', marginTop: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: T.sub, color: '#c9c98a', fontWeight: 900, letterSpacing: 0.5 }}>🔩 FORGE TEMPERING</div>
+                  <div style={{ fontSize: T.micro, fontWeight: 800, color: '#9a9a5a' }}>T{temperingTier}/{TEMPERING_CAP} · +{temperingTier}% max HP</div>
+                </div>
+                <div style={{ fontSize: T.micro, color: DIM, lineHeight: 1.4, marginBottom: 10 }}>
+                  Work the metal past its limits — each tier tempers the squad's constitution. Resets when you step through the Drop. <b style={{ color: '#c9c98a' }}>+1% max HP per tier, cap T{TEMPERING_CAP}.</b>
+                </div>
+                {atCap ? (
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: '#c9c98a', textAlign: 'center', padding: '8px 0' }}>⚒ The forge rests — tempering is capped for this crossing.</div>
+                ) : (
+                  <button onClick={buyTempering} disabled={!afford}
+                    style={{ width: '100%', textAlign: 'left', borderRadius: 10, padding: '9px 12px', cursor: afford ? 'pointer' : 'default',
+                      background: afford ? '#151208' : PANEL, border: `1.5px solid ${afford ? '#6a6a30' : LINE}`, opacity: afford ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: T.small, fontWeight: 900, color: afford ? '#c9c98a' : DIM }}>🔩 Temper to T{temperingTier + 1} — +{temperingTier + 1}% max HP</span>
+                    <span style={{ fontSize: T.micro, fontWeight: 800, color: afford ? '#c9c98a' : DIM }}>{cost} ⚒</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
           {/* ── FORGE A KEYSTONE — gamble shards + slag for the craft-only top relic tier. ── */}
           {(() => {
             const ownedK = KEYSTONE_IDS.filter((id) => relics.includes(id));
@@ -4364,12 +4426,34 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   </div>
                   {latest && <div style={{ fontSize: T.micro, color: '#9a7fc0', fontStyle: 'italic', lineHeight: 1.5, marginTop: 6 }}>“{latest.beat.replace(/^"|"$/g, '')}”</div>}
                   {boons.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
-                      {boons.map((s) => (
-                        <span key={s.depth} title={s.boon.desc} style={{ fontSize: T.micro, fontWeight: 800, color: '#cba6ff', background: '#0e0a14', border: '1px solid #4a3a66', borderRadius: 7, padding: '3px 7px' }}>
-                          {s.boon.icon} {s.boon.name}
-                        </span>
-                      ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>
+                      {boons.map((s) => {
+                        const pickIdx = holdfastPicks[s.depth] ?? 0;
+                        const active = pickIdx === 1 && s.alt ? s.alt : s.boon;
+                        const other = pickIdx === 0 && s.alt ? s.alt : s.boon;
+                        const canSwap = s.alt && slag >= 30;
+                        const doSwap = () => {
+                          if (!canSwap) return;
+                          onSlag?.(-30);
+                          const np = { ...holdfastPicks, [s.depth]: pickIdx === 0 ? 1 : 0 };
+                          setHoldfastPicks(np); saveHoldfastPicks(np);
+                        };
+                        return (
+                          <div key={s.depth} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#0e0a14', border: '1px solid #4a3a66', borderRadius: 8, padding: '5px 8px' }}>
+                            <span style={{ fontSize: T.micro, fontWeight: 800, color: '#cba6ff', flex: 1 }}>
+                              {active.icon} <b>{active.name}</b> <span style={{ fontWeight: 400, color: '#9a7fc0' }}>— {active.desc}</span>
+                            </span>
+                            {s.alt && (
+                              <button onClick={doSwap} disabled={!canSwap} title={`Swap to: ${other.icon} ${other.name} — ${other.desc}`}
+                                style={{ flexShrink: 0, fontSize: 9, fontWeight: 900, color: canSwap ? '#c9c98a' : DIM,
+                                  background: 'transparent', border: `1px solid ${canSwap ? '#6a6a30' : LINE}`, borderRadius: 5,
+                                  padding: '2px 5px', cursor: canSwap ? 'pointer' : 'default', opacity: canSwap ? 1 : 0.5 }}>
+                                SWAP 30⚒
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -4912,7 +4996,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const motes = [{ l: 10, d: 0 }, { l: 22, d: 1.1 }, { l: 35, d: 0.5 }, { l: 48, d: 1.7 }, { l: 60, d: 0.3 }, { l: 72, d: 1.3 }, { l: 84, d: 0.8 }, { l: 92, d: 2.0 }];
     const beat = crossingBeat(crossing); // this crossing's story; STEP THROUGH advances to crossing+1
     const lines = beat.lines;
-    const stepThrough = () => { const n = crossing + 1; setCrossing(n); saveCrossing(n); newRun(); };
+    const stepThrough = () => { const n = crossing + 1; setCrossing(n); saveCrossing(n); setTemperingTier(0); saveTempering(0); newRun(); };
     return (
       <div style={{ textAlign: 'center', padding: '6px 0 4px' }}>
         {/* the portal stage */}
@@ -5138,18 +5222,47 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             </div>
           ); })()}
 
-          {step === 'holdfast' && holdfastNow && (
-            <div style={calm}>
-              <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
-                <HoldfastVignette size={narrow ? 66 : 84} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>🏚 THE HOLDFAST RECLAIMS — {holdfastNow.part} · {holdfastNow.depth}/{HOLDFAST_MAX}</div>
-                  <div style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.5, fontStyle: 'italic', marginTop: 5 }}>{holdfastNow.beat}</div>
-                  <div style={{ fontSize: T.small, fontWeight: 800, color: '#cba6ff', marginTop: 8 }}>{holdfastNow.boon.icon} {holdfastNow.boon.name} <span style={{ fontWeight: 400, color: '#bfa8da' }}>— {holdfastNow.boon.desc}</span></div>
+          {step === 'holdfast' && holdfastNow && (() => {
+            const picked0 = holdfastPicks[holdfastNow.depth] ?? 0;
+            const needsPick = pendingHoldfastPick === holdfastNow.depth;
+            const chooseBoon = (idx) => {
+              const np = { ...holdfastPicks, [holdfastNow.depth]: idx };
+              setHoldfastPicks(np); saveHoldfastPicks(np);
+              setPendingHoldfastPick(0);
+            };
+            return (
+              <div style={calm}>
+                <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start', marginBottom: needsPick ? 10 : 0 }}>
+                  <HoldfastVignette size={narrow ? 66 : 84} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>🏚 THE HOLDFAST RECLAIMS — {holdfastNow.part} · {holdfastNow.depth}/{HOLDFAST_MAX}</div>
+                    <div style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.5, fontStyle: 'italic', marginTop: 5 }}>{holdfastNow.beat}</div>
+                    {!needsPick && (
+                      <div style={{ fontSize: T.small, fontWeight: 800, color: '#cba6ff', marginTop: 8 }}>
+                        {(picked0 === 1 ? holdfastNow.alt : holdfastNow.boon).icon} {(picked0 === 1 ? holdfastNow.alt : holdfastNow.boon).name}
+                        <span style={{ fontWeight: 400, color: '#bfa8da' }}> — {(picked0 === 1 ? holdfastNow.alt : holdfastNow.boon).desc}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                {needsPick && (
+                  <div>
+                    <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1, color: '#cba6ff', marginBottom: 6 }}>CHOOSE A BOON — this stage's standing gift, every run:</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {[holdfastNow.boon, holdfastNow.alt].map((b, idx) => (
+                        <button key={idx} onClick={() => chooseBoon(idx)}
+                          style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer',
+                            background: '#0e0a1a', border: '1.5px solid #6a4a9a' }}>
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: '#eadcff' }}>{b.icon} {b.name}</div>
+                          <div style={{ fontSize: T.micro, color: '#bfa8da', lineHeight: 1.35, marginTop: 2 }}>{b.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {step === 'relic' && relicChoices.length > 0 && (
             <div style={calm}>
