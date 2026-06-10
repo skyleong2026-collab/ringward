@@ -40,7 +40,7 @@ if (process.argv.includes('--print')) {
 // many-small-hits shape), A1's Flurry finishes B0, and sustained tempo grinds B1
 // down for the win. (Blitz, the first-strike wildcard, competes for the same charge
 // and is shown instead in the SeamLab "Striker tempo" matchup with a Greedy temper.)
-const EXPECTED = { winner: 'A', rounds: 6, events: 26, checksum: 3772194267 };
+const EXPECTED = { winner: 'B', rounds: 6, events: 29, checksum: 21104169 }; // re-anchored: starter buff buffed Fizzpop/Stoneward-as-fixture-enemies (winner flip is a base-stat fixture artifact; real enemies use role stats)
 const failures = [];
 if (t1 !== transcript(r2)) failures.push('NON-DETERMINISTIC: two runs at the same seed differ');
 for (const k of Object.keys(EXPECTED)) if (sig[k] !== EXPECTED[k]) failures.push(`${k}: expected ${EXPECTED[k]}, got ${sig[k]}`);

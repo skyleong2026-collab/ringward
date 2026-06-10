@@ -1,6 +1,6 @@
 import { MENDER } from '../dials.js';
 import { alliesOf, enemiesOf } from '../state.js';
-import { dealDamage, heal, applyRegen, addBlock, applyAmp } from './combatMath.js';
+import { dealDamage, heal, applyRegen, addBlock, applyAmp, seedReflect } from './combatMath.js';
 
 // ─── Mender — "sustain: charge into healing" (§23) ──────────────────────────────
 // Same charge spine; the payoff is a HEAL. Adds the last missing combat primitive
@@ -30,10 +30,13 @@ function stripOneDebuff(u) {
 // than being wasted. Opt-in — without the mod it is a plain heal, byte-identical.
 function mendHeal(target, amount, actor) {
   const res = heal(target, amount, actor);
-  if (actor.mods?.overgrowth) {
+  // Overheal → shield (Overgrowth keystone, OR base-kit for any PLAYER Mender, side A). That shield
+  // also REFLECTS via seedReflect's side-A base — the Mender's sustain converts into return damage,
+  // an always-on tempo contribution with no targeting. Enemy Menders (the boss Tender, side B) untouched.
+  if (actor.mods?.overgrowth || actor.side === 'A') {
     const want = Math.max(0, Math.round(amount * (actor.mods?.healMult ?? 1)));
     const overheal = want - res.healed;
-    if (overheal > 0) addBlock(target, overheal, actor);
+    if (overheal > 0) { addBlock(target, overheal, actor); seedReflect(target, actor); }
   }
   return res;
 }

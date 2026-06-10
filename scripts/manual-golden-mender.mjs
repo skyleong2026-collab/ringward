@@ -38,7 +38,7 @@ if (process.argv.includes('--print')) {
   process.exit(0);
 }
 
-const EXPECTED = { winner: 'A', rounds: 6, events: 50, checksum: 2585358517 };
+const EXPECTED = { winner: 'A', rounds: 5, events: 55, checksum: 665795899 }; // re-anchored: support rebalance (Mender blight tick + overheal→reflect → wins a round sooner)
 const failures = [];
 if (t1 !== transcript(r2)) failures.push('NON-DETERMINISTIC: two runs at the same seed differ');
 for (const k of Object.keys(EXPECTED)) if (sig[k] !== EXPECTED[k]) failures.push(`${k}: expected ${EXPECTED[k]}, got ${sig[k]}`);

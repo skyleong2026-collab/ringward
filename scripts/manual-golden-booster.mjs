@@ -41,7 +41,7 @@ if (process.argv.includes('--print')) {
 // and the amplified Overload then lands for 218 — the buffed carry out-trades a raw
 // squad. (Resonate, the line-wide wildcard, competes for the same charge and is
 // shown instead in the SeamLab "Booster combo" matchup with a Greedy temperament.)
-const EXPECTED = { winner: 'A', rounds: 4, events: 31, checksum: 1114647994 };
+const EXPECTED = { winner: 'A', rounds: 3, events: 22, checksum: 2090267637 }; // re-anchored: roster audit (Buzzline ATK 24 → 20)
 const failures = [];
 if (t1 !== transcript(r2)) failures.push('NON-DETERMINISTIC: two runs at the same seed differ');
 for (const k of Object.keys(EXPECTED)) if (sig[k] !== EXPECTED[k]) failures.push(`${k}: expected ${EXPECTED[k]}, got ${sig[k]}`);

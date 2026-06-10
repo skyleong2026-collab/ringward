@@ -45,7 +45,19 @@ export const AMP = {
 // freeze drops by one each time it would have acted (its natural thaw). Opt-in —
 // no existing creature carries freeze, so every current golden is untouched. ──
 export const FREEZE = {
-  maxStacks: 3, // a unit can be locked for at most this many of its turns
+  maxStacks: 3, // a unit can be locked for at most this many of its turns (single-freeze strength intact)
+  // Post-thaw guard (the principled Control fix — replaces the blunt maxStacks 3→2 cap): when a unit
+  // THAWS (its freeze hits 0) it is owed ONE GUARANTEED ACTION before it can be re-frozen. The engine
+  // sets `freezeImmune` on thaw, applyFreeze no-ops while it's set, and it's cleared the moment the unit
+  // acts. This kills the degenerate PERMA-LOCK (two Wardens chain-freezing the line into near-permanent
+  // denial — no enemy actions = no fight) while a single freeze stays fully effective. Tunes Control off
+  // the 99% dominant ceiling toward ~80% (strong, rarity-appropriate control) without gutting the fantasy.
+  thawGuard: true,
+  brittle: 1.35, // PLAYER base-kit: side-A hits on a FROZEN enemy deal ×this (the "control → damage efficiency"
+  // lever). With the immunity window capping the lock, this is what lifts the Warden comp back off mid-pack
+  // toward the target — Wardens stay low-attack (identity intact); their lock becomes the carry's kill-speed.
+  // Held BELOW the Shatter keystone's 1.5× so investing a node into Shatter still meaningfully out-scales base.
+  // (Raising it further saturates: frozen-window uptime is capped by the thaw guard — by design.)
 };
 
 // ── Vulnerability: a curse Hexers lay on an enemy. While vulnerable, it takes MORE
@@ -104,6 +116,8 @@ export const BULWARK = {
     chargeGain: 2,
     blockGain: 40, // self shield now
     chipMult: 0.4, // small poke so the builder still acts
+    reflectBase: 0.35, // PLAYER Bulwark base-kit: shielded allies reflect a slice of blocked damage (always-on)
+    thornChip: 0.6,    // PLAYER Bulwark base-kit: chip the lowest-HP enemy every round (× ATK) — the tempo fix
   },
   aegis: {
     minCharge: 2,
@@ -122,6 +136,7 @@ export const MENDER = {
     chargeGain: 2,
     healNow: 18, // trickle heal to the most-wounded ally now
     chipMult: 0.3, // small poke on an enemy
+    bloomChip: 0.7, // PLAYER Mender base-kit: blight the lowest-HP enemy every round (× ATK) — the tempo fix
   },
   bloom: {
     minCharge: 2,
@@ -143,6 +158,7 @@ export const BOOSTER = {
     chargeGain: 2,
     ampStacks: 1, // small prime on the strongest ally now
     chipMult: 0.4, // builder still pokes an enemy
+    auraStacks: 2, // PLAYER Booster base-kit: steady the WHOLE squad's amp every round (always-on aura) — the tempo fix
   },
   overdrive: {
     minCharge: 2,
@@ -246,6 +262,9 @@ export const HEXER = {
     perCharge: 0.25, // line damage = atk * perCharge * charge vented
     vuln: 1, // vent HALF charge → curse the whole enemy line
   },
+  // PLAYER Hexer base-kit: a cursed (vuln'd) enemy BLEEDS this per stack each round — converts the
+  // vuln multiplier (wasted on AUTO, which won't focus-fire the cursed target) into AI-agnostic DoT.
+  bleedPerStack: 14,
 };
 
 // ── Temperament → payoff threshold (§24.2). One knob, three real defenses. ──

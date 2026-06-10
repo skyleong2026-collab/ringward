@@ -1,0 +1,85 @@
+=== VERBOSE TRACE: seed=42, squad=[cinderpaw, fizzpop, stoneward] ===
+
+--- Wave 1: Scouts ---
+Squad entering: Cinderpaw(290/290 HP, 49 ATK, spd 6), Fizzpop(220/220 HP, 30 ATK, spd 5), Stoneward(320/320 HP, 18 ATK, spd 3)
+Enemies: Fizzpop(110/110 HP, 26 ATK, spd 5), Glowtail(105/105 HP, 26 ATK, spd 4)
+  Round 1 (first: A)
+    Cinderpaw(A) → chargeUp [charge 0→2] hits:[B1:25dmg]
+    Fizzpop(A) → chargeUp [charge 0→2] hits:[B0:15dmg]
+    Stoneward(A) → brace [charge 0→2] hits:[B0:7dmg] shields:[A2:+undefinedblk]
+    Fizzpop(B) → chargeUp [charge 0→2] hits:[A0:13dmg]
+    Glowtail(B) → chargeUp [charge 0→2] hits:[A0:13dmg]
+    BURN: Cinderpaw(A) -24hp (1 stacks left)
+    BURN: Fizzpop(B) -12hp (0 stacks left)
+    BURN: Glowtail(B) -12hp (0 stacks left)
+  Round 2 (first: A)
+    Cinderpaw(A) → chargeUp [charge 2→4] hits:[B1:25dmg]
+    Fizzpop(A) → chargeUp [charge 2→4] hits:[B0:15dmg]
+    Stoneward(A) → brace [charge 2→4] hits:[B0:7dmg] shields:[A2:+undefinedblk]
+    Fizzpop(B) → backdraft [charge 2→1] hits:[A0:13dmg, A1:13dmg, A2:0dmg]
+    Glowtail(B) → backdraft [charge 2→1] hits:[A0:13dmg, A1:13dmg, A2:0dmg]
+    BURN: Cinderpaw(A) -36hp (2 stacks left)
+    BURN: Fizzpop(A) -24hp (1 stacks left)
+    BURN: Stoneward(A) -24hp (1 stacks left)
+    BURN: Fizzpop(B) -12hp (0 stacks left)
+    BURN: Glowtail(B) -12hp (0 stacks left)
+  Round 3 (first: A)
+    Cinderpaw(A) → overload [charge 4→0] hits:[B1:157dmg KILL]
+    Fizzpop(A) → overload [charge 4→0] hits:[B0:96dmg KILL]
+  >> BATTLE END: winner=A, rounds=3
+  Result: WIN, 3 survivors, 644/830 HP (77.6%)
+  After PATCHUP (+18%): Cinderpaw(230/290), Fizzpop(210/220), Stoneward(320/320)
+
+--- Wave 2: The Pack ---
+Squad entering: Cinderpaw(230/290 HP, 49 ATK, spd 6), Fizzpop(210/220 HP, 30 ATK, spd 5), Stoneward(320/320 HP, 18 ATK, spd 3)
+Enemies: Fizzpop(175/175 HP, 40 ATK, spd 5), Glowtail(175/175 HP, 38 ATK, spd 4), Cinderpaw(165/165 HP, 40 ATK, spd 6)
+  Round 1 (first: B)
+    Fizzpop(B) → chargeUp [charge 0→2] hits:[A0:20dmg]
+    Glowtail(B) → chargeUp [charge 0→2] hits:[A0:19dmg]
+    Cinderpaw(B) → chargeUp [charge 0→2] hits:[A0:20dmg]
+    Cinderpaw(A) → chargeUp [charge 0→2] hits:[B0:25dmg]
+    Fizzpop(A) → chargeUp [charge 0→2] hits:[B2:15dmg]
+    Stoneward(A) → brace [charge 0→2] hits:[B2:7dmg] shields:[A2:+undefinedblk]
+    BURN: Cinderpaw(A) -36hp (2 stacks left)
+    BURN: Fizzpop(B) -12hp (0 stacks left)
+    BURN: Cinderpaw(B) -12hp (0 stacks left)
+  Round 2 (first: B)
+    Fizzpop(B) → backdraft [charge 2→1] hits:[A0:20dmg, A1:20dmg, A2:0dmg]
+    Glowtail(B) → backdraft [charge 2→1] hits:[A0:19dmg, A1:19dmg, A2:0dmg]
+    Cinderpaw(B) → backdraft [charge 2→1] hits:[A0:20dmg, A1:20dmg, A2:19dmg]
+    Cinderpaw(A) → backdraft [charge 2→1] hits:[B0:25dmg, B1:25dmg, B2:25dmg]
+    Fizzpop(A) → backdraft [charge 2→1] hits:[B0:15dmg, B1:15dmg, B2:15dmg]
+    Stoneward(A) → bodyguard [charge 2→1] shields:[A0:+undefinedblk]
+    BURN: Cinderpaw(A) -48hp (3 stacks left)
+    BURN: Fizzpop(A) -36hp (2 stacks left)
+    BURN: Stoneward(A) -36hp (2 stacks left)
+    BURN: Fizzpop(B) -24hp (1 stacks left)
+    BURN: Glowtail(B) -24hp (1 stacks left)
+    BURN: Cinderpaw(B) -24hp (1 stacks left)
+  Round 3 (first: B)
+    Fizzpop(B) → chargeUp [charge 1→3] hits:[A0:0dmg]
+    Glowtail(B) → chargeUp [charge 1→3] hits:[A0:9dmg]
+    Cinderpaw(B) → chargeUp [charge 1→3] hits:[A0:20dmg KILL]
+    Fizzpop(A) → chargeUp [charge 1→3] hits:[B2:15dmg]
+    Stoneward(A) → brace [charge 1→3] hits:[B0:7dmg] shields:[A2:+undefinedblk]
+    BURN: Fizzpop(A) -24hp (1 stacks left)
+    BURN: Stoneward(A) -24hp (1 stacks left)
+    BURN: Fizzpop(B) -12hp (0 stacks left)
+    BURN: Glowtail(B) -12hp (0 stacks left)
+    BURN: Cinderpaw(B) -24hp (1 stacks left)
+  Round 4 (first: B)
+    Fizzpop(B) → chargeUp [charge 3→5] hits:[A1:20dmg]
+    Glowtail(B) → chargeUp [charge 3→5] hits:[A1:19dmg]
+    Cinderpaw(B) → chargeUp [charge 3→5] hits:[A1:20dmg]
+    Fizzpop(A) → backdraft [charge 3→2] hits:[B0:15dmg, B1:15dmg, B2:15dmg]
+    Stoneward(A) → bodyguard [charge 3→2] shields:[A1:+undefinedblk]
+    BURN: Fizzpop(A) -48hp KILLED (3 stacks left)
+    BURN: Stoneward(A) -12hp (0 stacks left)
+    BURN: Fizzpop(B) -12hp (0 stacks left)
+    BURN: Glowtail(B) -12hp (0 stacks left)
+    BURN: Cinderpaw(B) -24hp KILLED (1 stacks left)
+  Round 5 (first: B)
+    Fizzpop(B) → overload [charge 5→0] hits:[A2:112dmg]
+    Glowtail(B) → overload [charge 5→0] hits:[A2:144dmg KILL]
+  >> BATTLE END: winner=B, rounds=5
+  Result: LOSS, 0 survivors, 0/830 HP (0.0%)

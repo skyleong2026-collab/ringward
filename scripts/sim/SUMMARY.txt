@@ -1,0 +1,8 @@
+Outer Ring AUTO win-rate: 1.4% overall (0-10.8% per comp, 10 comps x 500 runs).
+Boss conditional clear-rate: 2.8-12.7% for the 3 comps that reach it.
+Wave 1 is 100% trivial; wave 2 (The Pack, 3 enemies) kills 6/10 comps.
+Anchor comp (Cinderpaw+Fizzpop+Stoneward) dies at wave 2 without upgrades.
+Upgrades are load-bearing: the "trivial early waves" from the playtest are upgrade-driven.
+Best comp: Glass Cannon (Cinderpaw+Shadefang+Dartwing) at 10.8% — pure damage wins.
+Tier 2 (upgrades/wayside) NOT simulated — that's the key missing variable.
+Full report: docs/RINGWARD-OUTER-RING-BALANCE.md

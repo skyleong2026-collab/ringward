@@ -65,6 +65,12 @@ const TYPE_INFO = {
   Warden: { glyph: '❄', accent: '#8fd8ff', nick: 'The Jailer', role: 'Freezes enemies out of their turns.' },
   Hexer: { glyph: '💀', accent: '#b06bff', nick: 'The Curse', role: 'Makes enemies take more from the whole squad.' },
 };
+// The BUILD each Type opens — shown on a pull so a NEW creature reads as a new build
+// PATH opening, not just a sticker (the collection → buildcraft bridge). Short + plain.
+const BUILD_LINE = {
+  Reactor: 'Burn-stacking', Bulwark: 'Wall + thorns', Mender: 'Sustain engine', Booster: 'Carry buffer',
+  Striker: 'Fast-hits', Assassin: 'Finisher', Warden: 'Freeze-lock', Hexer: 'Curse-spread',
+};
 
 // ── Rumors of the grunlings still out there (preview/hint lore). Folk-mystery tone:
 // each is a whisper about a creature you haven't caught yet + where it's said to roam.
@@ -364,11 +370,22 @@ function foe(id, temperament, roleHp, roleAtk, depth, extra = {}, cm = 1) {
   const hp = Math.round(roleHp * D_HP(depth) * cm);
   return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth) * cm), ...extra };
 }
+// Kit-threat normalization (vF-CA, sim-calibrated): an enemy's KIT converts the same stats
+// into wildly different real threat — a Striker triple-hits and acts first, a Mender mostly
+// heals. Unnormalized, the kit DOMINATED the depth curve (sim: rings 2-3 were 100% free for
+// every comp while rings 5-8 were 0% walls even geared). These per-Type ATK coefficients
+// level the locals so DEPTH drives difficulty and the kit drives the ring's TEXTURE (rush,
+// attrition, curse, freeze-lock). Reactor=1.0 anchors Ring 1 byte-identical; the boss-wave
+// Tender is a fixed set-piece (no coefficient). Calibrated ladder (geared, greedy):
+// 98→88→89→77→50→43→34→9 — and rings now favor DIFFERENT comps (R5 rush rewards tanks 88%
+// vs 10% for greed comps; R8 freeze demands freeze-tech: Control 67% vs ~5% others).
+const KIT_THREAT = { Reactor: 1.0, Bulwark: 2.8, Mender: 2.4, Booster: 1.35, Striker: 0.33, Assassin: 0.34, Hexer: 1.0, Warden: 0.5 };
 // Generate a run's four waves from the chosen ring. Enemy IDENTITY (kit/behavior) comes
 // from the ring's locals; HP/ATK come from the wave role scaled by depth × the crossing mult.
 function wavesForGround(g, cm = 1) {
   const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
-  const F = (id, temp, hp, atk, extra) => foe(id, temp, hp, atk, d, extra, cm);
+  const kt = (id) => KIT_THREAT[COMBAT_CREATURES[id].type] || 1;
+  const F = (id, temp, hp, atk, extra) => foe(id, temp, hp, Math.round(atk * kt(id)), d, extra, cm);
   return [
     { name: 'Scouts', seed: 101, blurb: `The edge of ${g.name} — a jumpy pair. Warm up, hit fast.`,
       enemies: () => [ F(at(0), 'Cautious', 110, 26), F(at(1), 'Cautious', 105, 26) ] },
@@ -378,7 +395,7 @@ function wavesForGround(g, cm = 1) {
       enemies: () => [ F(at(0), 'Greedy', 300, 50), F(at(1), 'Greedy', 220, 62) ] },
     { name: g.boss, boss: true, seed: 404,
       blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
-      enemies: () => [ F(at(0), 'Greedy', 540, 68, { name: g.boss, speed: 7 }), F('mossback', 'Balanced', 240, 24, { name: 'Tender' }) ] },
+      enemies: () => [ F(at(0), 'Greedy', 540, 68, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 240, 24, d, { name: 'Tender' }, cm) ] },
   ];
 }
 const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
@@ -752,8 +769,8 @@ const EMPTY_UNIT_MODS = {
 // ONE creature to receive it, so you build a named carry instead of a flat buff.
 const UPGRADES = [
   { id: 'sharpen',    scope: 'squad', icon: '⚔️', color: '#ff8a4a', name: 'Sharpened Edge', desc: '+30% damage from every attack.',            apply: (m) => { m.dmgMult   *= 1.3; } },
-  { id: 'wellspring', scope: 'squad', icon: '💚', color: WIN,        name: 'Wellspring',     desc: 'Heals are 40% stronger.',                    apply: (m) => { m.healMult  *= 1.4; } },
-  { id: 'bastion',    scope: 'squad', icon: '🛡️', color: '#7fd6ff',  name: 'Bastion',        desc: 'Shields hold 40% more.',                     apply: (m) => { m.blockMult *= 1.4; } },
+  { id: 'wellspring', scope: 'squad', needsCap: 'heal',  icon: '💚', color: WIN,        name: 'Wellspring',     desc: 'Heals are 40% stronger.',                    apply: (m) => { m.healMult  *= 1.4; } },
+  { id: 'bastion',    scope: 'squad', needsCap: 'shield', icon: '🛡️', color: '#7fd6ff',  name: 'Bastion',        desc: 'Shields hold 40% more.',                     apply: (m) => { m.blockMult *= 1.4; } },
   { id: 'primed',     scope: 'squad', icon: '⚡', color: CHG,        name: 'Primed',         desc: 'Start every fight with +2 charge.',          apply: (m) => { m.chargeStart += 2; } },
   { id: 'thickhide',  scope: 'squad', icon: '❤️', color: '#ff6b6b',  name: 'Thick Hide',     desc: '+20% max HP for the whole squad.',           apply: (m) => { m.hpMult    *= 1.2; } },
   { id: 'wildfire',   scope: 'squad', icon: '🔥', color: BURN,       name: 'Wildfire',       desc: 'Your Burns land +1 extra stack.',            apply: (m) => { m.burnBonus += 1; } },
@@ -876,10 +893,75 @@ function activeRelicSets(equippedIds) {
   const ids = equippedIds || [];
   return RELIC_SETS.filter((s) => s.members.filter((id) => ids.includes(id)).length >= s.need);
 }
-// Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe) — the
-// relics themselves, then any active SET bonuses on top.
-function relicMods(equippedIds, m) {
-  (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) r.apply(m); });
+// ── RELIC RECUT (§31, vF-CA) — the build-EXPRESSION slag sink. Each listed relic can be
+// re-forged into an alternate "cut": SAME power budget, DIFFERENT build role (e.g. raw
+// damage → tempo, or → freeze-synergy). The relic's own desc/apply is the DEFAULT (cut 0);
+// RELIC_CUTS[id] holds the alternates (cut 1, 2…). Slag UNLOCKS a cut permanently; once
+// unlocked, swapping among your cuts is free. No power creep (cuts are sidegrades, sim-
+// tuned in Phase 2) → respects the §22 anti-treadmill lock. "Opens a build, not a stat."
+const RELIC_CUTS = {
+  r_whetfang: [
+    { name: 'Tempo Edge', desc: '+28% damage, start every fight +1 charge.', apply: (m) => { m.dmgMult *= 1.28; m.chargeStart += 1; } },
+    { name: 'Frostfang', desc: '+30% damage; hits on FROZEN enemies shatter for more.', apply: (m) => { m.dmgMult *= 1.3; m.shatter = true; } },
+  ],
+  r_ironwood: [
+    { name: 'Thornwood', desc: '+12% max HP; attackers take 5% of their hit back.', apply: (m) => { m.hpMult *= 1.12; m.thorns = (m.thorns || 0) + 0.05; } },
+  ],
+  r_bulwark: [
+    { name: 'Bastion', desc: '+24% max HP, +24% shields; attackers take 10% back.', apply: (m) => { m.hpMult *= 1.24; m.blockMult *= 1.24; m.thorns = (m.thorns || 0) + 0.1; } },
+    { name: 'Lifewall', desc: '+24% max HP, +14% healing.', apply: (m) => { m.hpMult *= 1.24; m.healMult *= 1.14; } },
+  ],
+  r_bloodpact: [
+    { name: "Berserker's Pact", desc: '+48% damage, −10% max HP.', apply: (m) => { m.dmgMult *= 1.48; m.hpMult *= 0.9; } },
+    { name: 'Bloodwell', desc: '+17% damage, heal 9% of damage dealt, −10% HP.', apply: (m) => { m.dmgMult *= 1.17; m.lifesteal = (m.lifesteal || 0) + 0.09; m.hpMult *= 0.9; } },
+  ],
+  r_dropshard: [
+    { name: 'Edge-Shard', desc: '+25% damage, start +1 charge.', apply: (m) => { m.dmgMult *= 1.25; m.chargeStart += 1; } },
+  ],
+  // ── Phase 2 (sim-tuned 2026-06-09; pure-verb relics left single-purpose by design) ──
+  r_stoneblood: [
+    { name: 'Spineblood', desc: '+16% max HP; attackers take 5% of their hit back.', apply: (m) => { m.hpMult *= 1.16; m.thorns = (m.thorns || 0) + 0.05; } },
+  ],
+  r_emberbrand: [
+    { name: 'Searbrand', desc: '+16% damage; burns +1 stack.', apply: (m) => { m.dmgMult *= 1.16; m.burnBonus += 1; } },
+  ],
+  r_reckless: [
+    { name: 'Bloodrage', desc: '+48% damage, start +1 charge, −15% max HP.', apply: (m) => { m.dmgMult *= 1.48; m.chargeStart += 1; m.hpMult *= 0.85; } },
+  ],
+  r_wrathcore: [
+    { name: 'Warcry', desc: '+34% damage, start +1 charge, −12% healing.', apply: (m) => { m.dmgMult *= 1.34; m.chargeStart += 1; m.healMult *= 0.88; } },
+  ],
+  r_bramble: [
+    { name: 'Razorvine', desc: '+8% damage; attackers take 12% of their hit back.', apply: (m) => { m.dmgMult *= 1.08; m.thorns = (m.thorns || 0) + 0.12; } },
+  ],
+  r_reservoir: [
+    { name: 'Surge Core', desc: 'Every kill banks +1 charge, and +8% damage.', apply: (m) => { m.killCharge = (m.killCharge || 0) + 1; m.dmgMult *= 1.08; } },
+  ],
+  r_glassedge: [
+    { name: 'Edgewalker', desc: '+56% damage, start +1 charge, −25% max HP.', apply: (m) => { m.dmgMult *= 1.56; m.chargeStart += 1; m.hpMult *= 0.75; } },
+  ],
+  r_frenzy: [
+    { name: 'Onslaught', desc: '+26% damage (trades the charge for raw power).', apply: (m) => { m.dmgMult *= 1.26; } },
+  ],
+};
+const RELIC_CUT_KEY = '8gents_seam_relic_cut';        // {relicId: activeCutIdx} — 0 = default
+const RELIC_CUT_OWN_KEY = '8gents_seam_relic_cut_own'; // {relicId: [unlockedIdx,…]} — slag-unlocked cuts
+function loadCutMap() { try { return JSON.parse(localStorage.getItem(RELIC_CUT_KEY) || '{}') || {}; } catch { return {}; } }
+function saveCutMap(o) { try { localStorage.setItem(RELIC_CUT_KEY, JSON.stringify(o)); } catch { /* best-effort */ } }
+function loadCutOwn() { try { return JSON.parse(localStorage.getItem(RELIC_CUT_OWN_KEY) || '{}') || {}; } catch { return {}; } }
+function saveCutOwn(o) { try { localStorage.setItem(RELIC_CUT_OWN_KEY, JSON.stringify(o)); } catch { /* best-effort */ } }
+const cutsFor = (id) => RELIC_CUTS[id] || [];          // the ALTERNATE cuts (cut 1+)
+// Effective {name, desc, apply} for a relic at an active index (0 = its original effect).
+function cutEffect(r, idx) {
+  if (idx > 0) { const c = cutsFor(r.id)[idx - 1]; if (c) return c; }
+  return { name: 'Original', desc: r.desc, apply: r.apply };
+}
+const recutCost = (rarity) => ({ Common: 40, Rare: 70, Legendary: 90 }[rarity] || 60); // slag to UNLOCK a cut
+
+// Apply the equipped relic loadout into a run's mod object (opt-in, golden-safe) — each
+// relic's ACTIVE cut (default unless recut), then any active SET bonuses on top.
+function relicMods(equippedIds, m, cutMap = {}) {
+  (equippedIds || []).forEach((id) => { const r = RELIC_BY_ID[id]; if (r) cutEffect(r, cutMap[id] || 0).apply(m); });
   activeRelicSets(equippedIds).forEach((s) => s.apply(m));
 }
 // A ring boss offers a CHOICE of up to n relics — a weighted draw of DISTINCT relics from
@@ -923,11 +1005,11 @@ function saveStable(ids) {
 // Build the starting mods for a run from the perks you own AND the Holdfast stages
 // you've reclaimed (vs. EMPTY_MODS before). Both are opt-in mods — goldens never set
 // them, so combat stays byte-identical.
-function perkBaseMods(owned, reclaimed = 0, relicKit = []) {
+function perkBaseMods(owned, reclaimed = 0, relicKit = [], cutMap = {}) {
   const m = { ...EMPTY_MODS };
   PERKS.forEach((p) => { if (owned.includes(p.id)) p.apply(m); });
   holdfastMods(reclaimed, m);
-  relicMods(relicKit, m); // equipped relic loadout — found gear, opt-in, golden-safe
+  relicMods(relicKit, m, cutMap); // equipped relic loadout (with active cuts) — opt-in, golden-safe
   return m;
 }
 
@@ -936,6 +1018,49 @@ function perkBaseMods(owned, reclaimed = 0, relicKit = []) {
 const WIN_SLAG = 100;
 const lossSlag = (wavesCleared) => Math.max(5, wavesCleared * 15);
 const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
+// ── Reward recommendation (teaches drafting): score each OFFERED upgrade for THIS squad +
+//    build so the card can flag a ★ pick and a one-line "why". Mirrors the sim-validated
+//    `greedy` draft heuristic (which hits the ~47% ceiling); honest — derived from the squad's
+//    live Types + current run mods, never hand-waved. The auto-pick AI stays dumb; this just
+//    SHOWS the player what's good so a beginner can out-draft it (and learn the game). ──
+function upgradeScore(up, ctx) {
+  const has = (t) => ctx.types.has(t), m = ctx.mods || {}, boss = ctx.boss;
+  if (up.scope === 'unit') return has(up.needsType) ? (up.chain ? 6 : 5) : 0;
+  switch (up.id) {
+    case 'sharpen':     return 10;
+    case 'thickhide':   return 8;
+    case 'secondwind':  return boss ? 9 : 7;
+    case 'killingblow': return 6 + (m.executioner ? 1.5 : 0);
+    case 'leech':       return has('Mender') ? 4 : 6;                       // sustain matters more without a healer
+    case 'wildfire':    return has('Reactor') ? 7 + (m.burnBonus ? 1.5 : 0) : 2;
+    case 'overhype':    return has('Booster') ? 6 + (m.ampBonus ? 1 : 0) : 1;
+    case 'bastion':     return has('Bulwark') ? 5 : 1;                      // (gated, so usually relevant)
+    case 'wellspring':  return (has('Mender') || m.lifesteal) ? 6 : 1;      // (gated)
+    case 'primed':      return 4 + (m.chargeStart ? 0.5 : 0);
+    case 'firststrike': return 4;
+    case 'bloodrush':   return 3;
+    default:            return 3;
+  }
+}
+function upgradeWhy(up, ctx) {
+  const has = (t) => ctx.types.has(t), m = ctx.mods || {}, boss = ctx.boss;
+  if (up.scope === 'unit') return has(up.needsType) ? `Empowers your ${up.needsType}` : null;
+  switch (up.id) {
+    case 'sharpen':     return 'Most raw damage';
+    case 'thickhide':   return 'Tankier whole squad';
+    case 'secondwind':  return boss ? 'Cheats death — clutch vs the boss' : 'Cheats death once';
+    case 'killingblow': return m.executioner ? 'Stacks your execute' : 'Finishes wounded foes';
+    case 'leech':       return has('Mender') ? 'Extra sustain' : 'Sustain — no healer needed';
+    case 'wildfire':    return m.burnBonus ? 'Stacks your burn build' : (has('Reactor') ? 'Feeds your Reactors' : 'Burn — no source yet');
+    case 'overhype':    return has('Booster') ? 'Feeds your Booster' : null;
+    case 'bastion':     return 'Hardens your shields';
+    case 'wellspring':  return 'Stronger heals';
+    case 'primed':      return 'Faster payoffs';
+    case 'firststrike': return 'Big opening hits';
+    case 'bloodrush':   return 'Snowballs charge on kills';
+    default:            return null;
+  }
+}
 // Player creature max HP — scaled by the run's mods AND its TIER (deeper-ring creatures
 // are simply tankier; that's the pull to chase them). Tier mult is player-side only.
 const maxHpOf = (member, mods) => Math.round(COMBAT_CREATURES[member.id].hp * (mods?.hpMult ?? 1) * rarityMult(member.id));
@@ -1309,6 +1434,22 @@ Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => {
 const NODE_BY_ID = {};
 Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => p.nodes.forEach((n) => { NODE_BY_ID[n.id] = { ...n, pathId: p.id }; })));
 const treeForCreature = (id) => TYPE_TREES[COMBAT_CREATURES[id]?.type] ?? null;
+// ── Build identity (visibility): name a creature's build from its EQUIPPED loadout's dominant
+//    path — using the path's OWN name + tag, never invented. Honest by construction (the label
+//    can't lie: it's whatever you actually equipped). null = no build yet; 'VERSATILE' = spread
+//    across paths. This turns "12 nodes unlocked" into "this is my PYRE Cinderpaw". ──
+function deriveArchetype(type, equippedNodeIds) {
+  const tree = TYPE_TREES[type];
+  if (!tree || !equippedNodeIds || !equippedNodeIds.length) return null;
+  const counts = {};
+  for (const nid of equippedNodeIds) { const p = NODE_BY_ID[nid]?.pathId; if (p) counts[p] = (counts[p] || 0) + 1; }
+  let domId = null, domN = 0, total = 0;
+  for (const pid in counts) { total += counts[pid]; if (counts[pid] > domN) { domN = counts[pid]; domId = pid; } }
+  if (!total) return null;
+  const path = tree.paths.find((p) => p.id === domId);
+  if (path && domN / total >= 0.6 && domN >= 2) return { name: path.name, tag: path.tag, icon: path.icon, color: path.color };
+  return { name: 'VERSATILE', tag: 'a little of each path', icon: '✦', color: '#9fb0c4' };
+}
 // Combat reads only the EQUIPPED loadout. Normal nodes apply(); repeatable Refinement
 // nodes scale by their rank (from the ranks map).
 function treeModsFor(id, equipMap, ranksMap) {
@@ -1466,6 +1607,13 @@ const FX_STYLE = `
 @keyframes seam-hintglow { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,.15)} 50%{box-shadow:0 0 16px 3px rgba(232,160,64,.85)} }
 /* bend proc callout — pill that floats up off the actor, distinct from damage numbers */
 @keyframes seam-procfloat { 0%{transform:translate(-50%,6px) scale(.75);opacity:0} 20%{opacity:1;transform:translate(-50%,-4px) scale(1)} 100%{transform:translate(-50%,-52px) scale(.9);opacity:0} }
+/* ── impact juice (vF-CA) — hits LAND: arena kicks, struck unit pops, big swings bloom, KOs shatter ── */
+@keyframes seam-arenashake { 0%{transform:translate(0,0)} 15%{transform:translate(-5px,2px)} 30%{transform:translate(5px,-2px)} 45%{transform:translate(-4px,-2px)} 60%{transform:translate(4px,2px)} 78%{transform:translate(-2px,1px)} 100%{transform:translate(0,0)} }
+@keyframes seam-arenashake-sm { 0%{transform:translate(0,0)} 25%{transform:translate(-2px,1px)} 50%{transform:translate(2px,-1px)} 75%{transform:translate(-1px,1px)} 100%{transform:translate(0,0)} }
+@keyframes seam-hitpop { 0%{transform:scale(1)} 35%{transform:scale(1.1)} 70%{transform:scale(.95)} 100%{transform:scale(1)} }
+@keyframes seam-hitpop-big { 0%{transform:scale(1)} 22%{transform:scale(1.18)} 55%{transform:scale(.9)} 78%{transform:scale(1.04)} 100%{transform:scale(1)} }
+@keyframes seam-bigflash { 0%{opacity:0;transform:translate(-50%,-50%) scale(.5)} 22%{opacity:.95} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)} }
+@keyframes seam-koburst { 0%{opacity:1;transform:translate(-50%,-50%) scale(1)} 100%{opacity:0;transform:translate(calc(-50% + var(--kx)),calc(-50% + var(--ky))) scale(.25)} }
 /* ── The Drop ending ceremony (vF-Z) ── */
 @keyframes seam-drop-portal { 0%{transform:scale(.2);opacity:0;box-shadow:0 0 0 0 rgba(176,107,255,0)} 30%{opacity:1} 100%{transform:scale(1);opacity:1;box-shadow:0 0 60px 18px rgba(176,107,255,.5),inset 0 0 50px 8px rgba(232,220,255,.6)} }
 @keyframes seam-drop-ring { 0%{transform:translate(-50%,-50%) scale(.3);opacity:0} 18%{opacity:.7} 100%{transform:translate(-50%,-50%) scale(2.6);opacity:0} }
@@ -1598,8 +1746,9 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire, heavy, justKilled }) {
   const dead = !u.alive;
+  const struck = burst === 'attack'; // taking a hit this action → pop the sprite
   const hurt = u.alive && u.maxHp > 0 && u.hp / u.maxHp <= 0.3; // badly wounded — show distress so the player KNOWS to heal/guard it
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
   const size = boss ? (big ? 122 : 108) : big ? 92 : 78; // the boss looms larger
@@ -1657,6 +1806,15 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
           const dx = ((i * 37) % 50) - 25; // scattered horizontal spread, deterministic
           return <div key={`e${fxN}-${i}`} style={{ position: 'absolute', top: '50%', left: `calc(50% + ${dx}px)`, width: size * 0.13, height: size * 0.13, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${c} 50%, transparent 75%)`, boxShadow: `0 0 7px 2px ${c}`, animation: 'seam-ember .7s ease-out forwards', animationDelay: `${i * 0.06}s`, pointerEvents: 'none', zIndex: 5 }} />;
         })}
+        {/* heavy-hit bloom — a big swing reads as a SPIKE, a white flash that blooms out in the type color */}
+        {heavy && struck && !dead && <div key={`bf${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.3, height: size * 1.3, borderRadius: '50%', background: `radial-gradient(circle, #ffffffee 0%, ${ti.accent}aa 36%, transparent 70%)`, animation: 'seam-bigflash .4s ease-out forwards', pointerEvents: 'none', zIndex: 6 }} />}
+        {/* KO shatter — the core bursts apart in its type color the instant it dies */}
+        {justKilled && Array.from({ length: 9 }).map((_, i) => {
+          const ang = (i / 9) * Math.PI * 2;
+          const dx = Math.round(Math.cos(ang) * size * 0.72);
+          const dy = Math.round(Math.sin(ang) * size * 0.72);
+          return <div key={`ko${fxN}-${i}`} style={{ position: 'absolute', top: '48%', left: '50%', width: size * 0.16, height: size * 0.16, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${ti.accent} 55%, transparent 78%)`, boxShadow: `0 0 9px 2px ${ti.accent}`, '--kx': `${dx}px`, '--ky': `${dy}px`, animation: 'seam-koburst .6s ease-out forwards', pointerEvents: 'none', zIndex: 7 }} />;
+        })}
         {/* ── persistent CONDITION overlays — show how the creature FEELS without numbers ── */}
         {/* hurt: low on HP → a red distress halo + a bobbing ❗ that says "I need help" */}
         {hurt && <div style={{ position: 'absolute', top: '48%', left: '50%', width: size * 0.95, height: size * 0.95, borderRadius: '50%', background: `radial-gradient(circle, transparent 52%, ${LOSS}66 100%)`, animation: 'seam-hurtring 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 2 }} />}
@@ -1677,7 +1835,9 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
           <div key={`rg${i}`} style={{ position: 'absolute', bottom: size * 0.18, left: `calc(50% + ${(i * 23 % 34) - 17}px)`, fontSize: size * 0.16, animation: `seam-rise 1.4s ease-out ${i * 0.45}s infinite`, pointerEvents: 'none', zIndex: 5, color: WIN }}>🌿</div>
         ))}
         <div style={{ animation: hurt ? 'seam-hurtshake .5s ease-in-out infinite' : 'none' }}>
-          <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
+          <div key={struck && !dead ? `hp${fxN}` : 'sprite'} style={{ animation: struck && !dead ? (heavy ? 'seam-hitpop-big .34s ease-out' : 'seam-hitpop .26s ease-out') : 'none' }}>
+            <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
+          </div>
         </div>
         {/* shield: a glowing blue dome wrapping the body — clearly "protected", over everything */}
         {u.block > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', width: size * 1.18, height: size * 1.18, borderRadius: '50%', border: `2px solid #bfeaff`, background: `radial-gradient(circle, transparent 55%, #7fd6ff33 80%, #7fd6ff66 100%)`, boxShadow: '0 0 14px #7fd6ffaa, inset 0 0 18px #7fd6ff55', animation: 'seam-shield 1.6s ease-in-out infinite', pointerEvents: 'none', zIndex: 6 }} />}
@@ -1721,6 +1881,7 @@ function pacedAIDriver(holdRef) {
 
 let POP_ID = 0; // unique id for floating-number popups
 let FX_NONCE = 0; // bumped per action so the burst/cast animations remount + replay
+const HEAVY_HIT_FRAC = 0.25; // a single hit ≥ this share of the target's max HP reads as a "big swing" (pop + bloom + arena shake)
 
 // Floating numbers to spawn for one event (damage red, heal green, etc.).
 function popupsForEvent(event) {
@@ -1731,6 +1892,9 @@ function popupsForEvent(event) {
     (event.amps || []).forEach((a) => out.push({ uid: a.uid, text: `✦${a.amp}`, color: AMP }));
   } else if (event.type === 'burn') out.push({ uid: event.target.uid, text: `−${event.dmg}🔥`, color: BURN });
   else if (event.type === 'regen') out.push({ uid: event.target.uid, text: `+${event.healed}🌿`, color: WIN });
+  else if (event.type === 'poison') out.push({ uid: event.target.uid, text: `−${event.dmg}🧪`, color: '#9acd32' });
+  else if (event.type === 'doom') out.push({ uid: event.target.uid, text: `−${event.dmg}💀`, color: '#c77dff' });
+  else if (event.type === 'hexbleed') out.push({ uid: event.target.uid, text: `−${event.dmg}🩸`, color: AMP });
   return out;
 }
 
@@ -1808,11 +1972,19 @@ function useFight(opts = {}) {
     if (event.type === 'turn') {
       const bursts = {};
       const hitCounts = {}; // a multi-hit move (Jab/Flurry) lands several hits on one uid — count them so the streak staggers into a real barrage
-      (event.hits || []).forEach((h) => { if (h.dmg > 0 || h.killed) { bursts[h.uid] = 'attack'; hitCounts[h.uid] = (hitCounts[h.uid] || 0) + 1; } });
+      const heavy = {}; const killed = {}; // big swings + KOs get amplified (pop, bloom, shatter, arena kick)
+      const findU = (uid) => stateRef.current ? (stateRef.current.units.A.find((u) => u.uid === uid) || stateRef.current.units.B.find((u) => u.uid === uid)) : null;
+      (event.hits || []).forEach((h) => {
+        if (h.dmg > 0 || h.killed) { bursts[h.uid] = 'attack'; hitCounts[h.uid] = (hitCounts[h.uid] || 0) + 1; }
+        if (h.killed) { killed[h.uid] = true; heavy[h.uid] = true; }
+        else if (h.dmg > 0) { const t = findU(h.uid); if (t && t.maxHp > 0 && h.dmg >= t.maxHp * HEAVY_HIT_FRAC) heavy[h.uid] = true; }
+      });
       (event.shields || []).forEach((s) => { if (s.block > 0 && s.uid) bursts[s.uid] = 'shield'; });
       (event.heals || []).forEach((h) => { if (h.healed > 0) bursts[h.uid] = 'heal'; });
       (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
-      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, fire: FIRE_MOVES.has(event.skill.id), n: ++FX_NONCE });
+      const anyDmg = (event.hits || []).some((h) => h.dmg > 0 || h.killed);
+      const shake = (Object.keys(killed).length || Object.keys(heavy).length) ? 'big' : anyDmg ? 'small' : null;
+      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, heavy, killed, shake, fire: FIRE_MOVES.has(event.skill.id), n: ++FX_NONCE });
       startHold(HOLD_MS[event.skill.kind] ?? 1300); // big payoffs land heavier than chip builders
       // ── Sound: cast type sets the signature, then secondary effects layer on top ──
       const kind = event.skill.kind;
@@ -1823,13 +1995,20 @@ function useFight(opts = {}) {
       if ((event.heals  || []).some((h) => h.healed > 0)) sfx.healLand();
       if ((event.amps   || []).length)                     sfx.ampStack();
     } else if (event.type === 'burn') {
-      setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, fire: true, n: ++FX_NONCE });
+      const koMap = event.killed ? { [event.target.uid]: true } : {};
+      setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, killed: koMap, heavy: koMap, shake: event.killed ? 'big' : null, fire: true, n: ++FX_NONCE });
       startHold(TICK_HOLD_MS);
       sfx.burnTick();
     } else if (event.type === 'regen') {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'heal' }, n: ++FX_NONCE });
       startHold(TICK_HOLD_MS);
       sfx.regenTick();
+    } else if (event.type === 'poison' || event.type === 'doom' || event.type === 'hexbleed') {
+      // Damage-over-time ticks read like any other hit now — an impact + a floating number,
+      // and the KO shatter when they finish a unit off (was silent before).
+      const koMap = event.killed ? { [event.target.uid]: true } : {};
+      setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'attack' }, killed: koMap, heavy: koMap, shake: event.killed ? 'big' : null, n: ++FX_NONCE });
+      startHold(TICK_HOLD_MS);
     }
     const adds = [
       ...popupsForEvent(event).map((a) => ({ ...a, id: ++POP_ID })),
@@ -2003,6 +2182,16 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
 // ── FightView — the shared battlefield + center moves + feed for a live battle. ──
 function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAuto, bgImg }) {
   const { snap, feed, phase, pool, previewUid, fx, popups, feedBoxRef, previewUnit, chooseTarget, chooseSkill, cancelTarget } = fight;
+  // Kick the whole arena on a heavy hit / KO — replay the shake without remounting the
+  // units (style toggle + forced reflow), so floating numbers and sprites don't reset.
+  const arenaRef = useRef(null);
+  useEffect(() => {
+    const el = arenaRef.current;
+    if (!el || !fx.shake) return;
+    el.style.animation = 'none';
+    void el.offsetWidth; // force reflow so the next assignment restarts the animation
+    el.style.animation = fx.shake === 'big' ? 'seam-arenashake .42s ease-out' : 'seam-arenashake-sm .26s ease-out';
+  }, [fx.n, fx.shake]);
   if (!snap) return null;
   const selecting = phase === 'select' || phase === 'select-target';
   const moves = selecting ? fight.previewMoves() : null;
@@ -2034,6 +2223,7 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
             isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={targetLabel}
             targetMark={mark} aoe={isTgt && tgtAll && !tgtAllies}
             burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move} hitN={fx.hitCounts?.[u.uid]} fire={fx.fire}
+            heavy={fx.heavy?.[u.uid]} justKilled={fx.killed?.[u.uid]}
             boss={u.uid === bossUid}
             onSelect={previewUnit}
             onPick={chooseTarget} popups={popsFor(u.uid)} />
@@ -2076,7 +2266,7 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
       )}
       {prompt && <div style={{ textAlign: 'center', fontSize: T.body, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>{prompt}</div>}
       {/* The arena: your squad — center move lane — the enemy */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: bgImg ? `radial-gradient(ellipse at center, rgba(20,20,31,0.72) 0%, rgba(11,11,20,0.85) 100%), url(${bgImg}) center/cover no-repeat` : 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
+      <div ref={arenaRef} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: bgImg ? `radial-gradient(ellipse at center, rgba(20,20,31,0.72) 0%, rgba(11,11,20,0.85) 100%), url(${bgImg}) center/cover no-repeat` : 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
         {side(snap.A, false)}
         <div style={{ flex: moves ? 1.5 : 0.5, minWidth: moves ? 150 : 28, alignSelf: 'center', display: 'flex', justifyContent: 'center' }}>
           <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} onBack={cancelTarget} tgtAllies={tgtAllies} tgtAll={tgtAll} hintSkill={hintSkill} />
@@ -2135,7 +2325,7 @@ function SquadState({ squad, runMods }) {
         const dead = mem.hp <= 0;
         const hpColor = dead ? '#3a1a1a' : pct < 0.3 ? LOSS : pct < 0.6 ? ACCENT : '#3ec9a0';
         return (
-          <div key={mem.id} style={{ flex: 1, minWidth: 120, background: PANEL, border: `1.5px solid ${dead ? '#2a1414' : ti.accent + '55'}`, borderRadius: 10, padding: '8px 10px', opacity: dead ? 0.45 : 1 }}>
+          <div key={mem.id} style={{ flex: 1, minWidth: 120, background: 'rgba(17,18,27,0.55)', border: `1px solid ${dead ? '#2a1414' : ti.accent + '4d'}`, boxShadow: dead ? 'none' : `0 0 10px ${ti.accent}1f`, backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', borderRadius: 10, padding: '8px 10px', opacity: dead ? 0.45 : 1 }}>
             <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 5 }}>
               <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -2384,6 +2574,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [showVault, setShowVault] = useState(false);       // the relic VAULT overlay — the full collection to chase
   const [shards, setShards] = useState(loadShards);        // relic-shards — salvage relics → forge Keystones
   const [salvageMode, setSalvageMode] = useState(false);   // Relics tab: tapping a relic melts it for shards
+  const [relicCut, setRelicCut] = useState(loadCutMap);    // {relicId: activeCutIdx} — which cut is live (0 = default)
+  const [relicCutOwn, setRelicCutOwn] = useState(loadCutOwn); // {relicId: [unlockedIdx,…]} — slag-unlocked cuts
+  const [recutMode, setRecutMode] = useState(false);       // Relics tab: tapping a relic opens its cut chooser
+  const [recutFor, setRecutFor] = useState(null);          // relic id whose cut chooser is open
   const [craftResult, setCraftResult] = useState(null);    // last Keystone craft outcome (reveal on the Forge tab)
   const [showCodex, setShowCodex] = useState(false);       // THE CHRONICLE — a lore codex that fills as you climb
   const [homeTab, setHomeTab] = useState('raid');          // home shell page: raid | forge | relics | holdfast
@@ -2429,8 +2623,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     if (autoPick && farmedRef.current) {
       if (runPhase === 'upgrade' && offer.length && !upgradeChoice) {
         sig = 'u' + waveIdx;
-        // `offer` holds upgrade IDS — resolve to objects, prefer a squad-scope one (no target detour).
-        const pick = offer.map((id) => UPGRADE_BY_ID[id]).find((u) => u && u.scope === 'squad') || UPGRADE_BY_ID[offer[0]];
+        // `offer` holds upgrade IDS. Farming auto-pick now DRAFTS BY THE SAME Build-Advisor score
+        // that drives the manual ★ (was: "first squad-scope" — which left 15–27pp on the table per
+        // the tier-2 sim). So auto-runs draft like a competent player instead of grabbing the first
+        // whole-squad card. A higher-scored UNIT upgrade routes cleanly through the pick-target
+        // branch below (the target detour is already automated), so unit picks are safe here.
+        const apCtx = { types: new Set(squad.filter((u) => u.hp > 0).map((u) => COMBAT_CREATURES[u.id].type)), mods: runMods, boss: !!(runWaves[waveIdx] && runWaves[waveIdx].boss) };
+        const bestId = offer.reduce((b, id) => upgradeScore(UPGRADE_BY_ID[id], apCtx) > upgradeScore(UPGRADE_BY_ID[b], apCtx) ? id : b, offer[0]);
+        const pick = UPGRADE_BY_ID[bestId];
         if (pick) act = () => applyUpgrade(pick);
       } else if (runPhase === 'pick-target' && pendingUpgrade) {
         sig = 'pt' + waveIdx;
@@ -2462,7 +2662,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
 
   // Perk-driven dials, recomputed from what you own.
   const offerCount = owned.includes('p_foresight') ? 4 : 3;
-  const patchup = PATCHUP + (owned.includes('p_medic') ? 0.15 : 0);
+  // healMult ALSO scales the between-wave patch-up (Subject-2 fix B): gives every "+healing" reward
+  // a universal floor — even a no-healer squad that took a wayside "+heal" now patches a little more,
+  // so heal-scaling is never fully dead. Modest by design (base is only 18%); healers still scale heals
+  // in combat far more. (Pairs with fix A: the dead heal *upgrades* are already gated out of the draft.)
+  const patchup = (PATCHUP + (owned.includes('p_medic') ? 0.15 : 0)) * (runMods.healMult ?? 1);
 
   function buyPerk(p) {
     if (owned.includes(p.id) || slag < p.cost || !onSlag) return;
@@ -2481,6 +2685,21 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       else next = [...cur, id];
       saveRelicKit(next); sfx.upgradePick(); return next;
     });
+  }
+
+  // ── RECUT (§31): set a relic's active cut. Cut 0 (default) is always free; an alternate
+  // cut UNLOCKS once with slag, then swapping among unlocked cuts is free. ──
+  function chooseCut(r, idx) {
+    if (idx > 0 && !(relicCutOwn[r.id] || []).includes(idx)) {
+      const cost = recutCost(r.rarity);
+      if ((slag || 0) < cost) return; // can't afford the unlock
+      onSlag?.(-cost); sfx.forgeBuy?.();
+      const no = { ...relicCutOwn, [r.id]: [...(relicCutOwn[r.id] || []), idx] };
+      setRelicCutOwn(no); saveCutOwn(no);
+    } else {
+      sfx.upgradePick?.();
+    }
+    const nm = { ...relicCut, [r.id]: idx }; setRelicCut(nm); saveCutMap(nm);
   }
 
   // Take one of the boss-drop relic choices into the permanent collection (won screen).
@@ -2569,8 +2788,15 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function rollOffer(aliveTypes, currentSquad) {
     const types = aliveTypes ?? new Set(picked.map((id) => COMBAT_CREATURES[id].type));
     const sq = currentSquad ?? squad;
+    // A squad-wide reward that can't function for this squad is a DEAD draft — gate it out,
+    // exactly like needsType does for move-bends. heal = a Mender (or active lifesteal); shield
+    // = a Bulwark. (Fixes "Wellspring offered to a healer-less squad" — never a useful pick.)
+    const hasCap = (cap) =>
+      cap === 'heal'   ? (types.has('Mender') || (runMods.lifesteal > 0)) :
+      cap === 'shield' ? types.has('Bulwark') : true;
     const pool = UPGRADES.filter((u) => {
       if (u.needsType && !types.has(u.needsType)) return false;
+      if (u.needsCap && !hasCap(u.needsCap)) return false;
       if (u.chain) return sq.some((m) => m.hp > 0 && COMBAT_CREATURES[m.id].type === u.needsType && (m.bends ?? []).some((b) => b.id === u.chain));
       return true;
     });
@@ -2765,7 +2991,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     farmedRef.current = g.depth <= reclaimed; // a re-clear of an already-beaten ring → auto-pick eligible
     featsAtRunStartRef.current = doneFeatIds(); // remember what's already earned, to celebrate new ones
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
-    const base = perkBaseMods(owned, reclaimed, relicKit); // perks + Holdfast boons + equipped relics set the run's opening mods
+    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut); // perks + Holdfast boons + equipped relics set the run's opening mods
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
     eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); setEventStep(null); // fresh wayside-event pool per run
@@ -2775,7 +3001,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startChallenge(apexId) {
     sfx.resume();
     featsAtRunStartRef.current = doneFeatIds();
-    const base = perkBaseMods(owned, reclaimed, relicKit);
+    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut);
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     const aDefs = sq.map((m) => playerDef(m, base, treeModsFor(m.id, treeEquip, treeRanks)));
     const apex = COMBAT_CREATURES[apexId];
@@ -2847,7 +3073,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   function startEndless() {
     if (picked.length < 2) return;
     sfx.resume();
-    const base = perkBaseMods(owned, reclaimed, relicKit); // same opening mods a climb would use
+    const base = perkBaseMods(owned, reclaimed, relicKit, relicCut); // same opening mods a climb would use
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setEndless(true); setEndlessResult(null);
     featsAtRunStartRef.current = doneFeatIds();
@@ -3011,6 +3237,22 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>cores to spend</div>
           </div>
         </div>
+        {/* Build identity — derived live from the equipped loadout (honest; can't lie) */}
+        {(() => {
+          const arch = deriveArchetype(c.type, equipped);
+          return (
+            <div style={{ textAlign: 'center', background: arch ? `${arch.color || ti.accent}14` : '#10141c', border: `1px solid ${arch ? (arch.color || ti.accent) : LINE}`, borderRadius: 10, padding: '7px 12px', marginBottom: 10 }}>
+              {arch ? (
+                <>
+                  <div style={{ fontSize: T.sub, fontWeight: 900, color: arch.color || ti.accent, letterSpacing: 0.5 }}>{arch.icon} {arch.name} {c.name.toUpperCase()}</div>
+                  <div style={{ fontSize: T.micro, color: '#aeb6c4', fontStyle: 'italic', marginTop: 1 }}>{arch.tag}</div>
+                </>
+              ) : (
+                <div style={{ fontSize: T.small, color: DIM, fontWeight: 700 }}>No build yet — equip path nodes to forge an identity.</div>
+              )}
+            </div>
+          );
+        })()}
         {/* Loadout meter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0c1620', border: `1px solid ${slotsFull ? '#3a6a4a' : '#2a4a5a'}`, borderRadius: 10, padding: '8px 12px', marginBottom: 10 }}>
           <span style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>⚡ LOADOUT</span>
@@ -3362,7 +3604,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <button onClick={() => toggle(c.id)} disabled={full}
                       style={{ flex: 1, textAlign: 'left', cursor: full ? 'not-allowed' : 'pointer', borderRadius: 12, padding: '11px 12px',
-                        background: on ? '#16202e' : PANEL, border: `2px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 0 1px ${SEL}44` : 'none' }}>
+                        background: on ? `linear-gradient(180deg, ${SEL}1c, #11141c)` : PANEL, border: `1px solid ${on ? SEL : LINE}`, opacity: full ? 0.4 : 1, boxShadow: on ? `0 0 18px ${SEL}55, inset 0 0 18px ${SEL}14` : 'none', transition: 'box-shadow .15s, border-color .15s' }}>
                       <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
                         <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={68} />
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -3376,6 +3618,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                         </div>
                       </div>
                       <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
+                      <div style={{ fontSize: 9.5, fontWeight: 800, color: ti.accent, lineHeight: 1.3, marginTop: 4, letterSpacing: 0.3 }}>⮑ plays the {BUILD_LINE[c.type] || ti.nick} build</div>
                     </button>
                     <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
@@ -3570,11 +3813,22 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   <div style={{ display: 'grid', gridTemplateColumns: summonResults.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8 }}>
                     {summonResults.map((r, i) => {
                       const c = COMBAT_CREATURES[r.id]; const ti = TYPE_INFO[c.type]; const ri = RARITY_INFO[r.rarity];
+                      const glowPx = Math.round(12 + (ri.mult - 1) * 42); // Common 12 → Unique ~41: rarer = brighter
+                      const big = ri.mult >= 1.45; // Legendary+ : the call really answered — extra celebration
+                      const fresh = !r.isDupe; // a NEW creature = a new build path opened (the collection moment)
                       return (
-                        <div key={i} style={{ textAlign: 'center', borderRadius: 10, padding: '9px 6px', background: '#100b1a', border: `2px solid ${ri.color}`, boxShadow: `0 0 12px ${ri.color}44` }}>
-                          <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={summonResults.length === 1 ? 76 : 52} />
-                          <div style={{ fontSize: T.small, fontWeight: 900, color: ri.color, marginTop: 4 }}>{ri.pips} {c.name}</div>
-                          <div style={{ fontSize: T.micro, fontWeight: 800, color: r.isDupe ? '#9a7fc0' : WIN }}>{r.isDupe ? `dupe → +${r.gainedCores} ⬡` : (r.gainedCores > 0 ? `NEW! +${r.gainedCores} ⬡` : 'NEW!')}</div>
+                        <div key={i} style={{ position: 'relative', textAlign: 'center', borderRadius: 10, padding: '9px 6px',
+                          background: big ? `linear-gradient(180deg, ${ri.color}22, #100b1a)` : '#100b1a',
+                          border: `1px solid ${ri.color}`,
+                          boxShadow: `0 0 ${glowPx}px ${ri.color}${big ? '99' : '55'}, inset 0 0 14px ${ri.color}22`,
+                          animation: `card-bounce .42s ease-out ${i * 0.08}s both` }}>
+                          {big && fresh && <div style={{ position: 'absolute', top: 4, right: 5, fontSize: 11, animation: 'aura-pulse 1.4s ease-in-out infinite' }}>✨</div>}
+                          <div style={{ animation: big ? 'aura-pulse 1.5s ease-in-out infinite' : 'none' }}>
+                            <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={summonResults.length === 1 ? 76 : 52} />
+                          </div>
+                          <div style={{ fontSize: T.small, fontWeight: 900, color: ri.color, marginTop: 4, textShadow: big ? `0 0 10px ${ri.color}66` : 'none' }}>{ri.pips} {c.name}</div>
+                          <div style={{ fontSize: 9, fontWeight: 800, color: fresh ? ti.accent : '#6f6f80', lineHeight: 1.25, marginTop: 1 }}>{fresh ? '⮑ opens ' : ''}{ti.glyph} {BUILD_LINE[c.type] || ti.nick}{fresh ? ' build' : ''}</div>
+                          <div style={{ fontSize: T.micro, fontWeight: 800, color: r.isDupe ? '#9a7fc0' : WIN, marginTop: 1 }}>{r.isDupe ? `dupe → +${r.gainedCores} ⬡` : (r.gainedCores > 0 ? `NEW! +${r.gainedCores} ⬡` : 'NEW!')}</div>
                         </div>
                       );
                     })}
@@ -3669,51 +3923,144 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ fontSize: T.sub, color: '#cba6ff', fontWeight: 900, letterSpacing: 0.5 }}>✦ RELICS</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: T.micro, fontWeight: 800, color: shards > 0 ? '#5ff0d0' : DIM }}>⛏ {shards} shards</span>
-                <button onClick={() => setSalvageMode((v) => !v)} title="Melt relics you don't want into shards (for forging Keystones)"
+                <span style={{ fontSize: T.micro, fontWeight: 800, color: '#c9c98a' }}>⚒ {slag}</span>
+                <span style={{ fontSize: T.micro, fontWeight: 800, color: shards > 0 ? '#5ff0d0' : DIM }}>⛏ {shards}</span>
+                <button onClick={() => { setRecutMode((v) => !v); setSalvageMode(false); setRecutFor(null); }} title="Re-forge a relic into an alternate cut — same power, a different build"
+                  style={{ fontSize: T.micro, fontWeight: 800, color: recutMode ? '#ffd166' : '#9a7fc0', background: recutMode ? '#231d0e' : 'transparent', border: `1px solid ${recutMode ? '#6a5a2a' : LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>{recutMode ? '⚒ recutting' : '⚒ recut'}</button>
+                <button onClick={() => { setSalvageMode((v) => !v); setRecutMode(false); setRecutFor(null); }} title="Melt relics you don't want into shards (for forging Keystones)"
                   style={{ fontSize: T.micro, fontWeight: 800, color: salvageMode ? '#5ff0d0' : '#9a7fc0', background: salvageMode ? '#0e2420' : 'transparent', border: `1px solid ${salvageMode ? '#2a6a5a' : LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>{salvageMode ? '⛏ salvaging' : '⛏ salvage'}</button>
-                <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 vault {relics.length}/{RELICS.length}</button>
+                <button onClick={() => setShowVault(true)} style={{ fontSize: T.micro, fontWeight: 800, color: '#9a7fc0', background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>📖 {relics.length}/{RELICS.length}</button>
                 <div style={{ fontSize: T.small, fontWeight: 800, color: relicKit.length ? '#cba6ff' : DIM }}>kit {relicKit.length}/{RELIC_SLOTS}</div>
               </div>
             </div>
-            <div style={{ fontSize: T.micro, color: salvageMode ? '#5ff0d0' : DIM, marginBottom: 10, lineHeight: 1.4 }}>{salvageMode
-              ? <>⛏ <b>Salvage mode</b> — tap any relic to melt it into shards (Common 1 · Rare 3 · Legendary 7). Spend shards at the Forge to gamble for a <b style={{ color: '#5ff0d0' }}>Keystone</b>.</>
-              : <>Found gear — <b style={{ color: '#cba6ff' }}>every ring boss drops one</b>. Equip up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b> for a run. Most carry a trade — your kit is your <b style={{ color: '#cba6ff' }}>build</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</>}</div>
-            {(() => { const sets = activeRelicSets(relicKit); return sets.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                {sets.map((s) => (
-                  <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: T.micro, fontWeight: 800, color: '#ffe08a', background: '#231d0e', border: '1px solid #6a5a2a', borderRadius: 999, padding: '3px 9px' }}>
-                    ⚜ {s.icon} {s.name} set — {s.desc}
-                  </span>
-                ))}
-              </div>
-            ); })()}
+            {/* ── RECUT chooser (§31): re-forge a relic into an alternate cut. ── */}
+            {recutFor && (() => {
+              const r = RELIC_BY_ID[recutFor]; if (!r) return null;
+              const options = [{ name: 'Original', desc: r.desc }, ...cutsFor(r.id)];
+              const activeIdx = relicCut[r.id] || 0;
+              const owned = relicCutOwn[r.id] || [];
+              const cost = recutCost(r.rarity);
+              return (
+                <div style={{ background: '#0e0a18', border: '1px solid #6a5a2a', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <RelicIcon r={r} size={T.body} />
+                    <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
+                    <span style={{ fontSize: 9, color: DIM, fontWeight: 800 }}>· recut</span>
+                    <button onClick={() => setRecutFor(null)} style={{ marginLeft: 'auto', fontSize: T.micro, color: DIM, background: 'transparent', border: `1px solid ${LINE}`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}>✕</button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {options.map((o, idx) => {
+                      const isActive = idx === activeIdx;
+                      const isOwned = idx === 0 || owned.includes(idx);
+                      const canGet = isOwned || (slag || 0) >= cost;
+                      return (
+                        <button key={idx} onClick={() => { if (canGet) chooseCut(r, idx); }} disabled={!canGet}
+                          style={{ textAlign: 'left', borderRadius: 8, padding: '8px 10px', cursor: canGet ? 'pointer' : 'default',
+                            background: isActive ? `linear-gradient(180deg, ${r.color}26, #100b1a)` : '#13101c',
+                            border: `1px solid ${isActive ? r.color : LINE}`, opacity: canGet ? 1 : 0.45 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: T.micro, fontWeight: 900, color: isActive ? r.color : '#cdd2dd' }}>{idx === 0 ? '◆ Original' : `⚒ ${o.name}`}</span>
+                            <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, color: isActive ? r.color : isOwned ? WIN : ((slag || 0) >= cost ? '#c9c98a' : '#a85a5a') }}>
+                              {isActive ? '● active' : isOwned ? 'set →' : `unlock ⚒${cost}`}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 9.5, color: '#9a9aaa', lineHeight: 1.35, marginTop: 2 }}>{o.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 8.5, color: DIM, fontStyle: 'italic', marginTop: 7, lineHeight: 1.3 }}>Cuts are sidegrades — same power, a different build. Unlock once with slag; swap freely after.</div>
+                </div>
+              );
+            })()}
+            {/* ── THE BENCH (vF-CA): your 3-slot loadout is the hero — equipping IS building ── */}
+            {!salvageMode && !recutFor && (
+              <>
+                <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1, margin: '2px 0 7px' }}>YOUR KIT — the build you carry into the next raid</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+                  {Array.from({ length: RELIC_SLOTS }).map((_, i) => {
+                    const r = relicKit[i] ? RELIC_BY_ID[relicKit[i]] : null;
+                    return (
+                      <div key={i} onClick={r ? () => (recutMode ? setRecutFor(r.id) : toggleRelic(r.id)) : undefined} title={r ? (recutMode ? 'Tap to recut' : 'Tap to unequip') : 'Pick a relic below'}
+                        style={{ textAlign: 'center', borderRadius: 10, padding: '10px 6px', minHeight: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: r ? 'pointer' : 'default',
+                          background: r ? `linear-gradient(180deg, ${r.color}22, #0e0a18)` : 'transparent',
+                          border: r ? `1px solid ${r.color}` : `1px dashed ${LINE}`,
+                          boxShadow: r ? `0 0 14px ${r.color}44, inset 0 0 14px ${r.color}1a` : 'none' }}>
+                        {r ? (<>
+                          <RelicIcon r={r} size={T.head} />
+                          <span style={{ fontSize: T.micro, fontWeight: 900, color: r.color, lineHeight: 1.15 }}>{r.name}</span>
+                          {(relicCut[r.id] || 0) > 0
+                            ? <span style={{ fontSize: 8.5, fontWeight: 800, color: '#ffd166' }}>⚒ {cutEffect(r, relicCut[r.id]).name}</span>
+                            : <span style={{ fontSize: 8.5, fontWeight: 700, color: DIM }}>{recutMode ? 'tap to recut' : 'tap to unequip'}</span>}
+                        </>) : (<>
+                          <span style={{ fontSize: T.head, color: '#3a3a4a', lineHeight: 1 }}>＋</span>
+                          <span style={{ fontSize: 9, color: '#54506a', fontWeight: 700 }}>empty slot</span>
+                        </>)}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* what the kit DOES, in plain words — the build read at a glance */}
+                {relicKit.length > 0 ? (
+                  <div style={{ background: '#0e0a18', border: '1px solid #2a2440', borderRadius: 10, padding: '9px 11px', marginBottom: 10 }}>
+                    <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: 1, color: '#9a7fc0', marginBottom: 5 }}>WHAT YOUR KIT DOES</div>
+                    {relicKit.map((id) => { const r = RELIC_BY_ID[id]; if (!r) return null; const ce = cutEffect(r, relicCut[id] || 0); return <div key={id} style={{ fontSize: T.micro, color: '#d8c8f0', lineHeight: 1.5 }}>• {ce.desc}{(relicCut[id] || 0) > 0 && <span style={{ color: '#ffd166', fontWeight: 800 }}> ⚒{ce.name}</span>}</div>; })}
+                    {activeRelicSets(relicKit).map((s) => (
+                      <div key={s.id} style={{ fontSize: T.micro, fontWeight: 800, color: '#ffe08a', lineHeight: 1.5, marginTop: 2 }}>⚜ {s.icon} {s.name} set — {s.desc}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: T.micro, color: DIM, fontStyle: 'italic', marginBottom: 10, lineHeight: 1.4 }}>Empty kit — tap relics below to slot up to <b style={{ color: '#cba6ff' }}>{RELIC_SLOTS}</b>. Match a <b style={{ color: '#ffd166' }}>set</b> (2+) for a bonus.</div>
+                )}
+                {/* set progress — what each set needs, lit when it's live in your kit */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {RELIC_SETS.map((s) => {
+                    const have = Math.min(s.members.filter((id) => relicKit.includes(id)).length, s.need);
+                    const live = have >= s.need;
+                    return (
+                      <span key={s.id} title={`${s.name} set — ${s.desc}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 800, color: live ? '#ffe08a' : '#7a7a8c', background: live ? '#231d0e' : '#13131c', border: `1px solid ${live ? '#6a5a2a' : LINE}`, borderRadius: 999, padding: '3px 8px' }}>
+                        {s.icon} {s.name} {have}/{s.need}{live ? ' ✓' : ''}
+                      </span>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+            {/* mode helpers (build guidance lives in the bench above) */}
+            {salvageMode && <div style={{ fontSize: T.micro, color: '#5ff0d0', marginBottom: 10, lineHeight: 1.4 }}>⛏ <b>Salvage mode</b> — tap any relic to melt it into shards (Common 1 · Rare 3 · Legendary 7). Spend shards at the Forge to gamble for a <b style={{ color: '#5ff0d0' }}>Keystone</b>.</div>}
+            {recutMode && !recutFor && <div style={{ fontSize: T.micro, color: '#ffd166', marginBottom: 10, lineHeight: 1.4 }}>⚒ <b>Recut mode</b> — tap a relic marked <b>⚒</b> to re-forge it into a different build. Same power, a new role; unlock a cut once with slag, then swap free.</div>}
             {relics.length === 0 ? (
               <div style={{ fontSize: T.small, color: DIM, fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>No relics yet. Beat a ring's boss to find your first.</div>
-            ) : (
+            ) : (<>
+              <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1, marginBottom: 7 }}>{salvageMode ? 'TAP A RELIC TO MELT IT' : recutMode ? 'TAP A ⚒ RELIC TO RECUT' : `YOUR COLLECTION — tap to equip · ${relics.length}/${RELICS.length} found`}</div>
               <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr 1fr' : '1fr 1fr 1fr', gap: 8 }}>
                 {RELICS.filter((r) => relics.includes(r.id)).map((r) => {
                   const eq = relicKit.includes(r.id);
                   const full = !eq && relicKit.length >= RELIC_SLOTS;
                   const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
-                  const disabled = !salvageMode && full;
+                  const hasCut = cutsFor(r.id).length > 0;
+                  const aIdx = relicCut[r.id] || 0;
+                  const disabled = recutMode ? !hasCut : (!salvageMode && full);
+                  const onTap = () => (recutMode ? (hasCut && setRecutFor(r.id)) : (salvageMode ? salvageRelic(r.id) : toggleRelic(r.id)));
                   return (
-                    <button key={r.id} onClick={() => (salvageMode ? salvageRelic(r.id) : toggleRelic(r.id))} disabled={disabled}
-                      title={salvageMode ? `Melt for +${shardYield(r.rarity)} shards` : r.lore}
+                    <button key={r.id} onClick={onTap} disabled={disabled}
+                      title={salvageMode ? `Melt for +${shardYield(r.rarity)} shards` : recutMode ? (hasCut ? 'Recut this relic' : 'No cuts for this relic') : r.lore}
                       style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: disabled ? 'default' : 'pointer',
-                        background: salvageMode ? '#16100e' : eq ? '#1a1230' : PANEL, border: `1.5px solid ${salvageMode ? '#6a4a3a' : eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: disabled ? 0.5 : 1 }}>
+                        background: salvageMode ? '#16100e' : recutMode && hasCut ? '#1a160a' : eq ? '#1a1230' : PANEL,
+                        border: `1px solid ${salvageMode ? '#6a4a3a' : recutMode && hasCut ? '#6a5a2a' : eq ? '#b06bff' : full ? LINE : `${r.color}66`}`,
+                        boxShadow: eq && !salvageMode && !recutMode ? '0 0 12px #b06bff44' : 'none', opacity: disabled ? 0.4 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
                         <RelicIcon r={r} size={T.body} />
                         <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: salvageMode ? '#ffae5a' : eq ? '#cba6ff' : full ? DIM : rc }}>{salvageMode ? `⛏ +${shardYield(r.rarity)}` : eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: salvageMode ? '#ffae5a' : recutMode ? (hasCut ? '#ffd166' : DIM) : eq ? '#cba6ff' : full ? DIM : rc }}>{salvageMode ? `⛏ +${shardYield(r.rarity)}` : recutMode ? (hasCut ? '⚒ recut' : '—') : eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
                       </div>
-                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.keystone ? 'KEYSTONE' : r.rarity.toUpperCase()}</div>
-                      <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.keystone ? 'KEYSTONE' : r.rarity.toUpperCase()}{aIdx > 0 && <span style={{ color: '#ffd166' }}> · ⚒ {cutEffect(r, aIdx).name}</span>}{hasCut && aIdx === 0 && !recutMode && <span style={{ color: '#7a6a3a' }}> · ⚒{cutsFor(r.id).length}</span>}</div>
+                      <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{cutEffect(r, aIdx).desc}</div>
                     </button>
                   );
                 })}
               </div>
-            )}
+            </>)}
           </div>
         )}
 
@@ -4170,8 +4517,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // ── Upgrade choice: pick 1 of 3 before each wave. ──
   if (runPhase === 'upgrade') {
     const nextWave = runWaves[waveIdx];
+    // The ring's own art sits faintly behind the draft (heavily scrimmed for card contrast)
+    // so the choice happens INSIDE the world, not in a stack of grey boxes.
+    const draftArt = enteredRing?.img || caughtFrom?.img;
     return (
-      <div>
+      <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 16, padding: narrow ? '15px 12px' : '20px 18px',
+        background: draftArt ? `linear-gradient(180deg, rgba(10,11,18,0.9) 0%, rgba(9,10,16,0.95) 58%, rgba(8,9,14,0.97) 100%), url(${draftArt}) center/cover no-repeat` : 'transparent',
+        boxShadow: draftArt ? 'inset 0 0 90px rgba(0,0,0,0.62)' : 'none' }}>
         {/* THE THRESHOLD (vF-Z): stepping into a ring is a story beat, not a menu. */}
         {waveIdx === 0 && enteredRing && RING_INTRO[enteredRing.id] && (() => {
           const di = diffOf(enteredRing.depth + crossing);
@@ -4204,20 +4556,30 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {/* Tap an upgrade to SELECT it (highlights), then CONFIRM — so a whole-squad / AOE
             pick can't be committed by a stray tap that starts the next wave. */}
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
-          {offer.map((id) => {
-            const up = UPGRADE_BY_ID[id];
-            const chosen = upgradeChoice === id;
-            const aoe = up.scope !== 'unit'; // squad-wide / AOE upgrade
-            return (
-              <button key={id} onClick={() => setUpgradeChoice(id)} style={{ textAlign: 'center', cursor: 'pointer', borderRadius: 14, padding: '20px 14px', background: chosen ? '#16202e' : PANEL, border: `${chosen ? 3 : 2}px solid ${up.color}`, boxShadow: chosen ? `0 0 20px ${up.color}77` : `0 0 14px ${up.color}33` }}>
-                <div style={{ fontSize: 36, lineHeight: 1 }}>{up.icon}</div>
-                <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}{chosen && ' ✓'}</div>
-                <div style={{ fontSize: 9, fontWeight: 900, color: aoe ? '#9be7ff' : DIM, letterSpacing: 0.5, marginTop: 3 }}>{aoe ? '💥 WHOLE SQUAD' : '🎯 ONE CREATURE'}</div>
-                <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 6 }}>{up.desc}</div>
-              </button>
-            );
-          })}
+          {(() => {
+            // Score the offered upgrades for THIS squad/build → flag a ★ pick + a "why" per card.
+            const recoCtx = { types: new Set(squad.filter((u) => u.hp > 0).map((u) => COMBAT_CREATURES[u.id].type)), mods: runMods, boss: !!nextWave.boss };
+            const recoId = offer.reduce((b, id) => upgradeScore(UPGRADE_BY_ID[id], recoCtx) > upgradeScore(UPGRADE_BY_ID[b], recoCtx) ? id : b, offer[0]);
+            return offer.map((id) => {
+              const up = UPGRADE_BY_ID[id];
+              const chosen = upgradeChoice === id;
+              const aoe = up.scope !== 'unit'; // squad-wide / AOE upgrade
+              const why = upgradeWhy(up, recoCtx);
+              const reco = id === recoId;
+              return (
+                <button key={id} onClick={() => setUpgradeChoice(id)} style={{ position: 'relative', textAlign: 'center', cursor: 'pointer', borderRadius: 14, padding: '15px 13px', background: chosen ? `linear-gradient(180deg, ${up.color}26, rgba(18,18,28,0.66))` : 'rgba(17,18,27,0.6)', border: `1px solid ${chosen ? up.color : reco ? ACCENT + 'aa' : up.color + '4d'}`, boxShadow: chosen ? `0 0 28px ${up.color}66, inset 0 0 22px ${up.color}1f` : (reco ? `0 0 20px ${ACCENT}44` : `0 0 12px ${up.color}22`), backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', transition: 'box-shadow .15s, border-color .15s' }}>
+                  {reco && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', background: ACCENT, color: '#1a1408', fontSize: 8.5, fontWeight: 900, letterSpacing: 0.8, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>★ RECOMMENDED</div>}
+                  <div style={{ fontSize: 36, lineHeight: 1 }}>{up.icon}</div>
+                  <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}{chosen && ' ✓'}</div>
+                  <div style={{ fontSize: 9, fontWeight: 900, color: aoe ? '#9be7ff' : DIM, letterSpacing: 0.5, marginTop: 3 }}>{aoe ? '💥 WHOLE SQUAD' : '🎯 ONE CREATURE'}</div>
+                  <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 6 }}>{up.desc}</div>
+                  {why && <div style={{ fontSize: 9.5, fontWeight: 800, color: reco ? ACCENT : '#7fd6a0', marginTop: 6, letterSpacing: 0.3 }}>{reco ? '✓ ' : ''}{why}</div>}
+                </button>
+              );
+            });
+          })()}
         </div>
+        <div style={{ fontSize: 9.5, color: DIM, textAlign: 'center', marginTop: 9, fontStyle: 'italic', lineHeight: 1.4 }}>★ Build Advisor flags the best <b style={{ color: '#9fb0c4' }}>synergy</b> with your squad — not the whole run. The draft is yours.</div>
         <button onClick={() => { if (upgradeChoice) applyUpgrade(UPGRADE_BY_ID[upgradeChoice]); }} disabled={!upgradeChoice}
           style={{ width: '100%', marginTop: 14, padding: '14px 0', borderRadius: 12, border: 'none', background: upgradeChoice ? ACCENT : '#222', color: upgradeChoice ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 0.5, cursor: upgradeChoice ? 'pointer' : 'default' }}>
           {upgradeChoice ? ((UPGRADE_BY_ID[upgradeChoice].scope !== 'unit') ? `CONFIRM ${UPGRADE_BY_ID[upgradeChoice].name} → ${nextWave.name}` : `CONFIRM — choose who gets ${UPGRADE_BY_ID[upgradeChoice].name} →`) : 'TAP AN UPGRADE ABOVE'}
@@ -4357,10 +4719,17 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const wave = runWaves[waveIdx];
   const banner = (() => {
     if (runPhase === 'won') {
+      const ringArt = enteredRing?.img || caughtFrom?.img; // the cleared ring's own art → atmospheric backdrop
       return (
-        <div style={{ background: '#0d1a0d', border: `2px solid ${WIN}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
-          <div style={{ fontSize: T.huge, fontWeight: 900, color: WIN }}>RING TAKEN</div>
-          <div style={{ fontSize: T.body, color: '#cfe8c0', margin: '4px 0 12px' }}>You cleared <b>{caughtFrom ? caughtFrom.name : 'the ring'}</b> to its heart.</div>
+        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 16, padding: narrow ? '22px 15px' : '30px 24px', marginBottom: 12, textAlign: 'center',
+          // Atmospheric: the ring you just cleared becomes the SCENE (darkened scrim over its art), not a flat box on black.
+          background: ringArt
+            ? `linear-gradient(180deg, rgba(8,16,8,0.72) 0%, rgba(8,13,10,0.9) 55%, rgba(7,10,9,0.96) 100%), url(${ringArt}) center/cover no-repeat`
+            : 'radial-gradient(ellipse at top, #132413 0%, #0a0e0a 72%)',
+          boxShadow: `inset 0 0 110px rgba(0,0,0,0.55), 0 0 28px ${WIN}22` }}>
+          {/* Floating hero — no frame; a glow + drop-shadow so the title sits ON the cleared ring instead of in a box. */}
+          <div style={{ fontSize: narrow ? 34 : 46, fontWeight: 900, color: '#eaffea', letterSpacing: 2, textShadow: `0 0 26px ${WIN}, 0 0 64px ${WIN}55, 0 2px 6px #000` }}>RING TAKEN</div>
+          <div style={{ fontSize: T.body, color: '#dcf2cf', margin: '6px 0 16px', textShadow: '0 1px 5px #000' }}>You cleared <b>{caughtFrom ? caughtFrom.name : 'the ring'}</b> to its heart.</div>
           {featCelebration}
           {enteredRing && RING_CLEAR[enteredRing.id] && (
             <div style={{ background: '#0a0f14', border: '1px solid #2a3f2a', borderRadius: 12, padding: '13px 14px', margin: '0 0 14px', textAlign: 'left' }}>
@@ -4504,17 +4873,22 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         </div>
       );
     }
-    if (runPhase === 'lost') return (
-      <div style={{ background: '#1a0d0d', border: `2px solid ${LOSS}`, borderRadius: 12, padding: 18, marginBottom: 12, textAlign: 'center' }}>
-        <div style={{ fontSize: T.huge, fontWeight: 900, color: LOSS }}>SQUAD DOWN</div>
-        <div style={{ fontSize: T.body, color: DIM, margin: '4px 0 12px' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVE_COUNT}.</div>
+    if (runPhase === 'lost') { const lostArt = enteredRing?.img || caughtFrom?.img; return (
+      <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 16, padding: narrow ? '22px 15px' : '30px 24px', marginBottom: 12, textAlign: 'center',
+        // Somber: the ring that swallowed you, heavily darkened + desaturated — the place wins, you fall.
+        background: lostArt
+          ? `linear-gradient(180deg, rgba(14,6,6,0.82) 0%, rgba(10,6,7,0.93) 60%, rgba(8,5,6,0.97) 100%), url(${lostArt}) center/cover no-repeat`
+          : 'radial-gradient(ellipse at top, #241313 0%, #0c0808 72%)',
+        boxShadow: `inset 0 0 120px rgba(0,0,0,0.7), 0 0 26px ${LOSS}22`, filter: 'saturate(0.78)' }}>
+        <div style={{ fontSize: narrow ? 34 : 46, fontWeight: 900, color: '#ffd7d7', letterSpacing: 2, textShadow: `0 0 24px ${LOSS}, 0 0 60px ${LOSS}44, 0 2px 6px #000` }}>SQUAD DOWN</div>
+        <div style={{ fontSize: T.body, color: '#d8b8b8', margin: '6px 0 16px', textShadow: '0 1px 5px #000' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVE_COUNT}.</div>
         {featCelebration}
         <SlagBanked earned={earned} balance={slag} />
         <CoresBanked coresRun={coresRun} />
         <RunRecap taken={taken} stats={stats} squad={squad} />
         <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
       </div>
-    );
+    ); }
     return null;
   })();
 
@@ -4538,7 +4912,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ fontSize: T.small, color: DIM, flex: 1 }}>
-          <b style={{ color: wave.boss ? '#ffb38a' : endless ? '#cba6ff' : '#ddd' }}>
+          <b style={{ fontSize: T.body, letterSpacing: 0.3, color: wave.boss ? '#ffb38a' : endless ? '#cba6ff' : '#eee', textShadow: `0 1px 5px #000, 0 0 16px ${wave.boss ? LOSS : endless ? '#cba6ff' : ACCENT}44` }}>
             {endless ? <>♾️ Round {endlessRound}{wave.boss ? ' · WARDEN' : ''}</> : <>{wave.boss ? '💀 ' : ''}Wave {waveIdx + 1}/{WAVE_COUNT} · {wave.name}</>}
           </b> — {wave.blurb}
         </div>

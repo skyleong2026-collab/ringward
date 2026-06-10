@@ -40,7 +40,7 @@ if (process.argv.includes('--print')) {
 // 45% threshold, then A1's Execute lands the ×2.5 lethal spike for 200 — the kill.
 // The same finish closes B1 in R6. (Ambush, the wounded-target wildcard, competes for
 // charge and is shown instead in the SeamLab "Assassin hunt" matchup, Balanced temper.)
-const EXPECTED = { winner: 'A', rounds: 6, events: 26, checksum: 2748152200 };
+const EXPECTED = { winner: 'B', rounds: 6, events: 28, checksum: 2721017692 }; // re-anchored: starter buff buffed Fizzpop/Stoneward-as-fixture-enemies (winner flip is a base-stat fixture artifact; real enemies use role stats)
 const failures = [];
 if (t1 !== transcript(r2)) failures.push('NON-DETERMINISTIC: two runs at the same seed differ');
 for (const k of Object.keys(EXPECTED)) if (sig[k] !== EXPECTED[k]) failures.push(`${k}: expected ${EXPECTED[k]}, got ${sig[k]}`);

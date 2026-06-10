@@ -1,6 +1,6 @@
 import { BULWARK } from '../dials.js';
 import { alliesOf } from '../state.js';
-import { dealDamage, addBlock, applyRegen, seedReflect } from './combatMath.js';
+import { dealDamage, addBlock, applyRegen, seedReflect, applyVuln } from './combatMath.js';
 
 // The most-wounded living ally (by HP fraction) — the natural cover target.
 const mostWounded = (allies) => allies.reduce((w, a) => (a.hp / a.maxHp < w.hp / w.maxHp ? a : w), allies[0]);
@@ -37,6 +37,10 @@ export const BULWARK_SKILLS = {
       // "Heavy Hold" (RETRIBUTION): the chip bites harder the more block you're holding.
       const heavy = actor.mods?.heavyHold ? (1 + Math.min(1, (actor.statuses.block || 0) / 200)) : 1;
       const hits = target ? [dealDamage(target, actor.atk * BULWARK.brace.chipMult * heavy, actor)] : [];
+      // "Anvil Mark" (prototype, vF-?): Brace also MARKS the target with vulnerability so the
+      // carries hit it harder — the tank contributes TEMPO, not just defense. Opt-in via
+      // mods.braceMark (stack count); 0/undefined = byte-identical, every golden untouched.
+      if (actor.mods?.braceMark && target) applyVuln(target, actor.mods.braceMark);
       return { hits, chargeGained: gain, shields, regens };
     },
   },

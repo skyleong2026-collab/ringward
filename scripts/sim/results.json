@@ -1,0 +1,731 @@
+{
+  "meta": {
+    "engine": "src/engine/combat/ (new manual-combat engine)",
+    "ground": "The Crackling Outer Ring (depth 1, crossing 0)",
+    "tier": "Tier 1 (no upgrades, no wayside events)",
+    "runsPerComp": 500,
+    "comps": 10,
+    "totalBattles": 20000,
+    "patchup": 0.18,
+    "mode": "AUTO (AI-vs-AI)",
+    "traceFile": "/Users/sky/8gents/scripts/sim/verbose-trace.txt"
+  },
+  "results": {
+    "Live Anchor (Cinderpaw+Fizzpop+Stoneward)": {
+      "ids": [
+        "cinderpaw",
+        "fizzpop",
+        "stoneward"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        1,
+        0
+      ],
+      "waveCleared": [
+        500,
+        1,
+        0,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        0.002,
+        0,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        499,
+        1,
+        0
+      ],
+      "waveDeathPct": [
+        0,
+        0.998,
+        0.002,
+        0
+      ],
+      "medianRoundsPerWave": [
+        3,
+        5,
+        4,
+        0
+      ],
+      "medianHpPctEntering": [
+        1,
+        0.9559036144578312,
+        0.4872289156626506,
+        0
+      ],
+      "skillUsageTotal": {
+        "chargeUp": 3730,
+        "brace": 2229,
+        "overload": 807,
+        "backdraft": 1316,
+        "bodyguard": 1454,
+        "aegis": 1
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "chargeUp": 3730,
+        "brace": 2229,
+        "overload": 807,
+        "backdraft": 1316,
+        "bodyguard": 1454,
+        "aegis": 1
+      }
+    },
+    "Balanced (Cinderpaw+Stoneward+Mossback)": {
+      "ids": [
+        "cinderpaw",
+        "stoneward",
+        "mossback"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        0,
+        0
+      ],
+      "waveCleared": [
+        500,
+        0,
+        0,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        500,
+        0,
+        0
+      ],
+      "waveDeathPct": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "medianRoundsPerWave": [
+        5,
+        5,
+        0,
+        0
+      ],
+      "medianHpPctEntering": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "skillUsageTotal": {
+        "chargeUp": 3000,
+        "brace": 2973,
+        "mend": 2733,
+        "overload": 567,
+        "aegis": 500,
+        "ward": 1500,
+        "backdraft": 500,
+        "bodyguard": 792
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "chargeUp": 3000,
+        "brace": 2973,
+        "mend": 2733,
+        "overload": 567,
+        "aegis": 500,
+        "ward": 1500,
+        "backdraft": 500,
+        "bodyguard": 792
+      }
+    },
+    "Glass Cannon (Cinderpaw+Shadefang+Dartwing)": {
+      "ids": [
+        "cinderpaw",
+        "shadefang",
+        "dartwing"
+      ],
+      "totalRuns": 500,
+      "wins": 54,
+      "winRate": 0.108,
+      "waveReached": [
+        500,
+        500,
+        500,
+        426
+      ],
+      "waveCleared": [
+        500,
+        500,
+        426,
+        54
+      ],
+      "waveConditionalClearRate": [
+        1,
+        1,
+        0.852,
+        0.1267605633802817
+      ],
+      "waveDeaths": [
+        0,
+        0,
+        74,
+        372
+      ],
+      "waveDeathPct": [
+        0,
+        0,
+        0.148,
+        0.744
+      ],
+      "medianRoundsPerWave": [
+        2,
+        3,
+        4,
+        6
+      ],
+      "medianHpPctEntering": [
+        1,
+        1,
+        0.7424999999999999,
+        0.6213265306122449
+      ],
+      "skillUsageTotal": {
+        "chargeUp": 2874,
+        "mark": 4074,
+        "jab": 5246,
+        "backdraft": 500,
+        "ambush": 1365,
+        "flurry": 1613,
+        "execute": 717,
+        "blitz": 636,
+        "overload": 188
+      },
+      "skillUsageWins": {
+        "chargeUp": 432,
+        "mark": 479,
+        "jab": 540,
+        "ambush": 216,
+        "backdraft": 54,
+        "flurry": 216,
+        "overload": 54,
+        "execute": 54
+      },
+      "skillUsageLosses": {
+        "chargeUp": 2442,
+        "mark": 3595,
+        "jab": 4706,
+        "backdraft": 446,
+        "ambush": 1149,
+        "flurry": 1397,
+        "execute": 663,
+        "blitz": 636,
+        "overload": 134
+      }
+    },
+    "Mono Reactor (Cinderpaw+Fizzpop+Glowtail)": {
+      "ids": [
+        "cinderpaw",
+        "fizzpop",
+        "glowtail"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        500,
+        0
+      ],
+      "waveCleared": [
+        500,
+        500,
+        0,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        0,
+        500,
+        0
+      ],
+      "waveDeathPct": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "medianRoundsPerWave": [
+        3,
+        4,
+        4,
+        0
+      ],
+      "medianHpPctEntering": [
+        1,
+        0.9143358395989976,
+        0.4368922305764411,
+        0
+      ],
+      "skillUsageTotal": {
+        "chargeUp": 9038,
+        "overload": 1328,
+        "backdraft": 1500
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "chargeUp": 9038,
+        "overload": 1328,
+        "backdraft": 1500
+      }
+    },
+    "Tank Heavy (Stoneward+Ironwall+Cinderpaw)": {
+      "ids": [
+        "stoneward",
+        "ironwall",
+        "cinderpaw"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        0,
+        0
+      ],
+      "waveCleared": [
+        500,
+        0,
+        0,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        500,
+        0,
+        0
+      ],
+      "waveDeathPct": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "medianRoundsPerWave": [
+        5,
+        5,
+        0,
+        0
+      ],
+      "medianHpPctEntering": [
+        1,
+        0.8913402061855671,
+        0,
+        0
+      ],
+      "skillUsageTotal": {
+        "brace": 5329,
+        "chargeUp": 2468,
+        "aegis": 1000,
+        "overload": 500,
+        "bodyguard": 2936,
+        "backdraft": 301
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "brace": 5329,
+        "chargeUp": 2468,
+        "aegis": 1000,
+        "overload": 500,
+        "bodyguard": 2936,
+        "backdraft": 301
+      }
+    },
+    "Best Guess (Cinderpaw+Mossback+Buzzline)": {
+      "ids": [
+        "cinderpaw",
+        "mossback",
+        "buzzline"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        0,
+        0
+      ],
+      "waveCleared": [
+        500,
+        0,
+        0,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        500,
+        0,
+        0
+      ],
+      "waveDeathPct": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "medianRoundsPerWave": [
+        5,
+        5,
+        0,
+        0
+      ],
+      "medianHpPctEntering": [
+        1,
+        0.8642105263157895,
+        0,
+        0
+      ],
+      "skillUsageTotal": {
+        "chargeUp": 2840,
+        "mend": 3000,
+        "prime": 3141,
+        "overload": 500,
+        "ward": 652,
+        "overdrive": 989,
+        "backdraft": 1000,
+        "bloom": 511,
+        "resonate": 33
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "chargeUp": 2840,
+        "mend": 3000,
+        "prime": 3141,
+        "overload": 500,
+        "ward": 652,
+        "overdrive": 989,
+        "backdraft": 1000,
+        "bloom": 511,
+        "resonate": 33
+      }
+    },
+    "Striker Rush (Swiftpaw+Dartwing+Cinderpaw)": {
+      "ids": [
+        "swiftpaw",
+        "dartwing",
+        "cinderpaw"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        500,
+        370
+      ],
+      "waveCleared": [
+        500,
+        500,
+        370,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        1,
+        0.74,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        0,
+        130,
+        370
+      ],
+      "waveDeathPct": [
+        0,
+        0,
+        0.26,
+        0.74
+      ],
+      "medianRoundsPerWave": [
+        2,
+        4,
+        4,
+        4
+      ],
+      "medianHpPctEntering": [
+        1,
+        1,
+        0.5706249999999999,
+        0.44682692307692307
+      ],
+      "skillUsageTotal": {
+        "jab": 7772,
+        "chargeUp": 2819,
+        "blitz": 3159,
+        "backdraft": 367,
+        "flurry": 1529,
+        "overload": 133
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "jab": 7772,
+        "chargeUp": 2819,
+        "blitz": 3159,
+        "backdraft": 367,
+        "flurry": 1529,
+        "overload": 133
+      }
+    },
+    "Control (Frostwarden+Rimecaller+Cinderpaw)": {
+      "ids": [
+        "frostwarden",
+        "rimecaller",
+        "cinderpaw"
+      ],
+      "totalRuns": 500,
+      "wins": 14,
+      "winRate": 0.028,
+      "waveReached": [
+        500,
+        500,
+        500,
+        500
+      ],
+      "waveCleared": [
+        500,
+        500,
+        500,
+        14
+      ],
+      "waveConditionalClearRate": [
+        1,
+        1,
+        1,
+        0.028
+      ],
+      "waveDeaths": [
+        0,
+        0,
+        0,
+        486
+      ],
+      "waveDeathPct": [
+        0,
+        0,
+        0,
+        0.972
+      ],
+      "medianRoundsPerWave": [
+        3,
+        6,
+        9,
+        12
+      ],
+      "medianHpPctEntering": [
+        1,
+        0.9705138339920949,
+        0.9912648221343874,
+        0.5663636363636364
+      ],
+      "skillUsageTotal": {
+        "frostnip": 18944,
+        "chargeUp": 3500,
+        "glaciate": 8453,
+        "overload": 341,
+        "coldsnap": 1843,
+        "backdraft": 830
+      },
+      "skillUsageWins": {
+        "frostnip": 476,
+        "chargeUp": 98,
+        "glaciate": 208,
+        "coldsnap": 53,
+        "backdraft": 24,
+        "overload": 18
+      },
+      "skillUsageLosses": {
+        "frostnip": 18468,
+        "chargeUp": 3402,
+        "glaciate": 8245,
+        "overload": 323,
+        "coldsnap": 1790,
+        "backdraft": 806
+      }
+    },
+    "Hex Synergy (Blightcap+Hexmoth+Cinderpaw)": {
+      "ids": [
+        "blightcap",
+        "hexmoth",
+        "cinderpaw"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        181,
+        0
+      ],
+      "waveCleared": [
+        500,
+        181,
+        0,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        0.362,
+        0,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        319,
+        181,
+        0
+      ],
+      "waveDeathPct": [
+        0,
+        0.638,
+        0.362,
+        0
+      ],
+      "medianRoundsPerWave": [
+        3,
+        6,
+        3,
+        0
+      ],
+      "medianHpPctEntering": [
+        1,
+        0.958705636743215,
+        0.3115240083507307,
+        0
+      ],
+      "skillUsageTotal": {
+        "jinx": 5325,
+        "chargeUp": 2000,
+        "doom": 1669,
+        "overload": 163,
+        "blight": 1640,
+        "backdraft": 500
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "jinx": 5325,
+        "chargeUp": 2000,
+        "doom": 1669,
+        "overload": 163,
+        "blight": 1640,
+        "backdraft": 500
+      }
+    },
+    "Assassin Pair (Shadefang+Veilclaw+Mossback)": {
+      "ids": [
+        "shadefang",
+        "veilclaw",
+        "mossback"
+      ],
+      "totalRuns": 500,
+      "wins": 0,
+      "winRate": 0,
+      "waveReached": [
+        500,
+        500,
+        500,
+        0
+      ],
+      "waveCleared": [
+        500,
+        500,
+        0,
+        0
+      ],
+      "waveConditionalClearRate": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "waveDeaths": [
+        0,
+        0,
+        500,
+        0
+      ],
+      "waveDeathPct": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "medianRoundsPerWave": [
+        3,
+        5,
+        7,
+        0
+      ],
+      "medianHpPctEntering": [
+        1,
+        1,
+        0.6193491124260355,
+        0
+      ],
+      "skillUsageTotal": {
+        "mark": 8000,
+        "mend": 4120,
+        "ambush": 1000,
+        "execute": 2000,
+        "bloom": 760,
+        "ward": 1000
+      },
+      "skillUsageWins": {},
+      "skillUsageLosses": {
+        "mark": 8000,
+        "mend": 4120,
+        "ambush": 1000,
+        "execute": 2000,
+        "bloom": 760,
+        "ward": 1000
+      }
+    }
+  }
+}

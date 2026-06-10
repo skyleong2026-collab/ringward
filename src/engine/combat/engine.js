@@ -1,6 +1,6 @@
-import { ROUND_CAP, BURN, REGEN, AMP, VULN, POISON, DOOM } from './dials.js';
+import { ROUND_CAP, BURN, REGEN, AMP, FREEZE, VULN, POISON, DOOM, BULWARK, MENDER, BOOSTER, HEXER } from './dials.js';
 import { getSkill } from './skills/index.js';
-import { phoenixSave } from './skills/combatMath.js';
+import { phoenixSave, dealDamage } from './skills/combatMath.js';
 import {
   livingOnSide,
   otherSide,
@@ -148,6 +148,47 @@ function tickDoom(state, emit) {
   }
 }
 
+// ─── End of round: PLAYER support tempo passives (always-on, AI-agnostic). A side-A Bulwark
+// or Mender chips the lowest-HP living enemy every round it survives — the "support must
+// contribute to kill-speed" fix, with no targeting or buff-sequencing the AUTO AI can't do.
+// Gated on side 'A' + Type, so enemy supports (the boss Tender) are untouched and no boss gets
+// harder. A squad with no player Bulwark/Mender chips nothing → that golden stays byte-identical.
+function tickSupportChip(state, emit, type, mult, evtType) {
+  const supports = livingOnSide(state, 'A').filter((u) => u.type === type);
+  if (!supports.length) return;
+  // Only the STRONGEST support of this Type contributes its chip — stacking two tanks (or two
+  // healers) adds HP/shields/reflect, not multiplied tempo, so a multi-support comp can't snowball
+  // the passive into dominance (the rest of the kit still differentiates a 2-support squad).
+  const u = supports.reduce((b, s) => (s.atk > b.atk ? s : b), supports[0]);
+  const foes = livingOnSide(state, 'B');
+  if (!foes.length) return;
+  const tgt = foes.reduce((w, e) => (e.hp < w.hp ? e : w), foes[0]); // lowest-HP enemy, by rule
+  const hit = dealDamage(tgt, u.atk * mult, u);
+  emit({ type: evtType, round: state.round, actor: { uid: u.uid, name: u.name, side: 'A' }, target: { uid: tgt.uid, name: tgt.name, side: 'B' }, dmg: hit.dmg, killed: hit.killed, hpAfter: tgt.hp });
+}
+const tickThorns = (state, emit) => tickSupportChip(state, emit, 'Bulwark', BULWARK.brace.thornChip, 'thorns');
+const tickBlight = (state, emit) => tickSupportChip(state, emit, 'Mender', MENDER.mend.bloomChip, 'blight');
+
+// ─── End of round: PLAYER Hexer curse-bleed (always-on, AI-agnostic). A vuln'd enemy bleeds
+// HEXER.bleedPerStack per stack each round — turning the Hexer's damage-taken MULTIPLIER (wasted
+// under AUTO, which won't focus-fire the cursed target) into reliable DoT. Gated on a living side-A
+// Hexer, so enemy curses never bleed the player. No-op for every golden (none field a side-A Hexer
+// or carry vuln). Flat, like Burn — ignores block. Ticks before decayVuln, so it reads the round's curse.
+function tickHexBleed(state, emit) {
+  if (!livingOnSide(state, 'A').some((u) => u.type === 'Hexer')) return;
+  for (const e of livingOnSide(state, 'B')) {
+    const v = e.statuses.vuln || 0;
+    if (v <= 0) continue;
+    const dmg = v * HEXER.bleedPerStack;
+    const before = e.hp;
+    e.hp = Math.max(0, e.hp - dmg);
+    let killed = before > 0 && e.hp === 0;
+    if (killed && phoenixSave(e)) killed = false;
+    if (killed) e.alive = false;
+    emit({ type: 'hexbleed', round: state.round, target: { uid: e.uid, name: e.name, side: 'B' }, dmg, killed, hpAfter: e.hp });
+  }
+}
+
 // ─── Start of round: seed the deep-tree effects that read the whole board (guardian HP
 // floor, recurring control, the conductor's gift). Every branch is gated on a mod no
 // golden unit carries, so this whole pass is a no-op for existing transcripts. ──
@@ -161,12 +202,20 @@ function seedRoundStart(state) {
     // "Time Lock" (Warden BLIZZARD keystone): each round the weakest foe is held in stasis.
     if (foes.length && living.some((u) => u.mods?.timeLock)) {
       const weak = foes.reduce((w, u) => (u.hp / u.maxHp < w.hp / w.maxHp ? u : w), foes[0]);
-      weak.statuses.freeze = Math.min(3, (weak.statuses.freeze || 0) + 1);
+      // Respects the post-thaw guard: a just-thawed foe gets its guaranteed action before Time Lock re-holds it.
+      if (!(FREEZE.thawGuard && weak.freezeImmune)) weak.statuses.freeze = Math.min(FREEZE.maxStacks, (weak.statuses.freeze || 0) + 1);
     }
     // "Maestro" (Booster CONDUCTOR keystone): each round, gift the carry a stack of amp.
     if (living.some((u) => u.mods?.maestro)) {
       const carry = living.reduce((b, u) => (u.atk > b.atk ? u : b), living[0]);
       carry.statuses.amp = Math.min(AMP.maxStacks, (carry.statuses.amp || 0) + 1);
+    }
+    // Base-kit Booster aura (PLAYER side only): a live Booster steadies the WHOLE squad's amp
+    // every round — the always-on version of Prime that pays out under AUTO with no sequencing.
+    // Decays 1/round, so it ramps to a standing floor (capped at AMP.maxStacks). Side-A gated, so
+    // an enemy Booster (Storm-Wire local) never auras its team. Stacks on top of Maestro.
+    if (side === 'A' && living.some((u) => u.type === 'Booster')) {
+      for (const u of living) u.statuses.amp = Math.min(AMP.maxStacks, (u.statuses.amp || 0) + BOOSTER.prime.auraStacks);
     }
   }
 }
@@ -222,6 +271,8 @@ async function runRound(state, drivers, emit) {
       // creature carries freeze, so this branch never runs for any current golden.
       if ((actor.statuses.freeze || 0) > 0) {
         actor.statuses.freeze -= 1;
+        // Just thawed → owed one guaranteed action; re-freeze no-ops until it acts (kills the perma-lock).
+        if (FREEZE.thawGuard && actor.statuses.freeze === 0) actor.freezeImmune = true;
         emit({ type: 'frozen', round: state.round, actor: { uid: actor.uid, name: actor.name, side: actor.side }, stacksLeft: actor.statuses.freeze });
         acted.add(actor.uid);
         pool = livingOnSide(state, side).filter((u) => !acted.has(u.uid));
@@ -229,6 +280,7 @@ async function runRound(state, drivers, emit) {
       }
       const decision = await driver.decide(actor, state);
       const result = applyDecision(state, actor, decision, emit);
+      if (actor.freezeImmune) actor.freezeImmune = false; // consumed its guaranteed post-thaw action — re-freezable now
       acted.add(actor.uid);
       state.firstActionDone = true;
       // "Quickstep" (Striker TEMPO): land a kill, act once more this round. Opt-in — no
@@ -250,6 +302,9 @@ async function runRound(state, drivers, emit) {
   if (!battleOver(state)) tickPoison(state, emit); // VENOM / rot DoT (no-op without poison)
   if (!battleOver(state)) tickRegen(state, emit);
   if (!battleOver(state)) tickDoom(state, emit); // DOOM detonations (no-op without a brand)
+  if (!battleOver(state)) tickThorns(state, emit); // PLAYER Bulwark passive chip (no-op without one)
+  if (!battleOver(state)) tickBlight(state, emit); // PLAYER Mender passive chip (no-op without one)
+  if (!battleOver(state)) tickHexBleed(state, emit); // PLAYER Hexer curse-bleed (no-op without one)
   decayAmp(state); // always: a buff fades whether or not the round was decisive
   decayVuln(state); // a curse fades too (no-op unless a Hexer is in play)
   state.round += 1;

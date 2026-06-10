@@ -19,8 +19,11 @@ export const COMBAT_CREATURES = {
     name: 'Fizzpop',
     type: 'Reactor',
     spriteId: 'fizzpop',
-    hp: 220,
-    atk: 30,
+    // Starter buff (vF-?, sim-validated): the beginner squad (Fizzpop+Stoneward+Cinderpaw) was ~8%
+    // win-rate on the Outer Ring. Rarity-safe rework: ATK capped BELOW Legendary Cinderpaw (eff. 49)
+    // so the Legendary keeps its damage crown; the buff leans into HP — a sturdy-bruiser Common.
+    hp: 340, // was 220
+    atk: 44, // was 30 (stays < Cinderpaw's effective 49)
     speed: 5,
     skillIds: REACTOR_KIT,
   },
@@ -51,8 +54,10 @@ export const COMBAT_CREATURES = {
     name: 'Stoneward',
     type: 'Bulwark',
     spriteId: 'stoneward',
-    hp: 320,
-    atk: 18,
+    // Starter buff (vF-?, sim-validated) — see Fizzpop. As a TANK, ATK isn't rarity-compared, so it
+    // buffs freely: big HP + real Brace-chip ATK (still far below any DPS). Tank identity intact.
+    hp: 560, // was 320
+    atk: 38, // was 18 — meaningful chip, still tank-low (< Fizzpop's 44)
     speed: 3,
     skillIds: BULWARK_KIT,
   },
@@ -61,8 +66,8 @@ export const COMBAT_CREATURES = {
     name: 'Ironwall',
     type: 'Bulwark',
     spriteId: 'ironwall',
-    hp: 300,
-    atk: 20,
+    hp: 380, // was 300 — roster audit: a Rare Bulwark shouldn't lag the (starter-buffed) Common Stoneward
+    atk: 32, // was 20
     speed: 4,
     skillIds: BULWARK_KIT,
   },
@@ -96,7 +101,7 @@ export const COMBAT_CREATURES = {
     type: 'Booster',
     spriteId: 'buzzline',
     hp: 230,
-    atk: 14,
+    atk: 20, // was 14→24; roster audit trimmed it (a Common Booster shouldn't match Rare Tanglewing's 26)
     speed: 6,
     skillIds: BOOSTER_KIT,
   },
@@ -106,7 +111,7 @@ export const COMBAT_CREATURES = {
     type: 'Booster',
     spriteId: 'tanglewing',
     hp: 210,
-    atk: 16,
+    atk: 26, // was 16 — support rebalance (see buzzline)
     speed: 7,
     skillIds: BOOSTER_KIT,
   },

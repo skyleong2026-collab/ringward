@@ -1,4 +1,4 @@
-import { BURN, BLOCK, REGEN, AMP, FREEZE, VULN, POISON, DOOM } from '../dials.js';
+import { BURN, BLOCK, REGEN, AMP, FREEZE, VULN, POISON, DOOM, BULWARK } from '../dials.js';
 
 // ─── Shared combat math (§26.2: ONE place damage/status logic lives) ────────────
 // Every skill across every Type routes through these so a new Type can't quietly
@@ -33,8 +33,13 @@ export function phoenixSave(unit) {
 
 export function dealDamage(target, amount, actor) {
   // "Shatter" (Warden keystone path): your hits on a frozen target hit 50% harder.
-  // Opt-in — default 1, so every existing golden is byte-identical.
-  const shatter = (actor?.mods?.shatter && (target.statuses.freeze || 0) > 0) ? 1.5 : 1;
+  // PLAYER base-kit brittle: even without the keystone, side-A hits on a FROZEN enemy land
+  // for FREEZE.brittle× — this is the AI-agnostic "control creates damage efficiency" lever
+  // (ChatGPT-endorsed): the immunity window removed the perma-lock, so the Wardens' value moves
+  // from "deny every turn" to "make the carry's hits into frozen targets land harder." Keystone
+  // 1.5 stays the stronger override. Opt-in by frozen-state — no golden carries freeze, so ×1 there.
+  const frozenT = (target.statuses.freeze || 0) > 0;
+  const shatter = (actor?.mods?.shatter && frozenT) ? 1.5 : ((actor?.side === 'A' && frozenT) ? FREEZE.brittle : 1);
   // "Opener" (Striker DUELIST): you hit harder against a target still at full HP.
   const opener = (actor?.mods?.opener && target.hp >= target.maxHp) ? 1.25 : 1;
   // "Apex" (Assassin BLOODHOUND keystone): every kill this run permanently sharpens
@@ -117,6 +122,10 @@ function reflectBack(target, blocked, actor) {
 export function seedReflect(recipient, actor) {
   if (actor?.mods?.ironMaiden) recipient.statuses.reflect = Math.max(recipient.statuses.reflect || 0, 1.0);
   else if (actor?.mods?.spikes || actor?.mods?.riposte) recipient.statuses.reflect = Math.max(recipient.statuses.reflect || 0, actor.mods?.riposte ? 0.3 : 0.15);
+  // Base-kit (PLAYER support only, side A): a shielded ally reflects a slice of blocked damage —
+  // no targeting, no sequencing, always-on. Enemies (side B, incl. the boss Tender) never get it,
+  // so no boss gets harder. The keystone mods above remain the stronger override.
+  else if (actor?.side === 'A') recipient.statuses.reflect = Math.max(recipient.statuses.reflect || 0, BULWARK.brace.reflectBase);
 }
 
 // Poison (Assassin VENOM / Hexer rot): a ramping DoT that, unlike Burn, does not decay
@@ -169,6 +178,11 @@ export function applyRegen(target, stacks) {
 // a unit whose freeze > 0 and decrements it (the thaw). Opt-in: no existing creature
 // applies freeze, so every current golden is byte-identical.
 export function applyFreeze(target, stacks) {
+  // Post-thaw immunity: a unit that just thawed is owed one guaranteed action — re-freeze is a no-op
+  // (kills the perma-lock without weakening a fresh freeze). `immune` is surfaced so the UI can show it.
+  if (FREEZE.thawGuard && target.freezeImmune) {
+    return { uid: target.uid, name: target.name, freeze: target.statuses.freeze || 0, immune: true };
+  }
   target.statuses.freeze = Math.min(FREEZE.maxStacks, (target.statuses.freeze || 0) + stacks);
   return { uid: target.uid, name: target.name, freeze: target.statuses.freeze };
 }
