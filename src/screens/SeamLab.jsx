@@ -2593,6 +2593,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
+  const [wonStep, setWonStep] = useState(0);    // staged result reveal: 0 = payoff, 1..n = one spoil at a time, last = onward
+  const [resultDetails, setResultDetails] = useState(false); // "▸ run details" expander on the result screens
   const [summonResults, setSummonResults] = useState(null); // [{id,rarity,isDupe,gainedCores}] — last Summon's pulls
   const [bannerId, setBannerId] = useState('wild');         // chosen Summon banner (wild | deep)
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
@@ -2859,7 +2861,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       const next = sq.map((m) => ({ ...m }));
       fielded.forEach((mi, i) => { next[mi].hp = finalState.units.A[i].hp; });
       const won = next.some((m) => m.hp > 0) && finalState.units.A.some((u) => u.hp > 0) && res.winner !== 'B';
-      if (!won) { const got = lossSlag(waveIdx); onSlag?.(got); setEarned(got); setSquad(next); sfx.squadDown(); setRunPhase('lost'); return; }
+      if (!won) { const got = lossSlag(waveIdx); onSlag?.(got); setEarned(got); setSquad(next); sfx.squadDown(); setResultDetails(false); setRunPhase('lost'); return; }
       setSquad(next);
       const rd = rollRelicChoices(relics, 1)[0]; // guaranteed relic for felling the hunter
       if (rd) { const nr = [...relics, rd.id]; setRelics(nr); saveRelics(nr); setRelicDrop(rd); } else { onSlag?.(40); }
@@ -2884,7 +2886,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       setStats((s) => ({ dmg: s.dmg + fightDmg, biggest: Math.max(s.biggest, fightBig), waves: s.waves + (won ? 1 : 0) }));
       if (!won) {
         const got = lossSlag(idx); onSlag?.(got); setEarned(got); // even a wipe banks a little
-        setSquad(next); sfx.squadDown(); setRunPhase('lost'); return;
+        setSquad(next); sfx.squadDown(); setResultDetails(false); setRunPhase('lost'); return;
       }
       // Progressive Cores: each surviving fielded creature banks ⬡ for clearing this wave.
       const clearedIds = fielded.filter((mi) => next[mi].hp > 0).map((mi) => next[mi].id);
@@ -2966,7 +2968,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         if (choices.length) { setRelicChoices(choices); setRelicDrop(null); }
         else { onSlag?.(35); setRelicChoices([]); setRelicDrop(null); }
         sfx.ringTaken();
-        setRunPhase('won'); return;
+        setWonStep(0); setResultDetails(false); setRunPhase('won'); return;
       }
       const aliveTypes = new Set(patched.filter((m) => m.hp > 0).map((m) => COMBAT_CREATURES[m.id].type));
       sfx.waveClear();
@@ -4546,18 +4548,19 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         })()}
         <BuildStrip taken={taken} />
         <SquadState squad={squad} runMods={runMods} />
+        {/* Calm header: ONE decision, one line. (vF-CB declutter — the blurb lives on the fight screen.) */}
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: T.head, fontWeight: 900, color: ACCENT }}>{waveIdx === 0 ? '⛰ Gear up for the approach' : `✓ Wave ${waveIdx} cleared — patched up (+${Math.round(patchup * 100)}% HP)`}</div>
-          {nextWave.boss && <div style={{ fontSize: T.sub, fontWeight: 900, color: LOSS, marginTop: 6 }}>💀 FINAL STAND — choose your last upgrade well.</div>}
-          <div style={{ fontSize: T.body, color: '#cfcfda', marginTop: 5 }}>Pick <b style={{ color: ACCENT }}>one upgrade</b> for your squad — then face <b style={{ color: nextWave.boss ? '#ffb38a' : '#ddd' }}>{nextWave.name}</b>.</div>
-          <div style={{ fontSize: T.small, color: DIM, marginTop: 2 }}>{nextWave.blurb}</div>
+          <div style={{ fontSize: T.head, fontWeight: 900, color: '#eee', textShadow: `0 0 14px ${ACCENT}44` }}>Pick one → {nextWave.boss ? '💀 ' : ''}{nextWave.name}</div>
+          {nextWave.boss && <div style={{ fontSize: T.small, fontWeight: 800, color: '#ffb38a', marginTop: 4 }}>Final stand — choose well.</div>}
+          {waveIdx > 0 && <div style={{ fontSize: T.micro, color: DIM, marginTop: 3 }}>✓ wave {waveIdx} cleared · patched +{Math.round(patchup * 100)}%</div>}
         </div>
         <AutoToggle auto={auto} setAuto={setAuto} />
         {/* Tap an upgrade to SELECT it (highlights), then CONFIRM — so a whole-squad / AOE
-            pick can't be committed by a stray tap that starts the next wave. */}
+            pick can't be committed by a stray tap that starts the next wave. Color shows up
+            ONLY on the live decision: neutral cards, ★ pick in accent, chosen in its color. */}
         <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
           {(() => {
-            // Score the offered upgrades for THIS squad/build → flag a ★ pick + a "why" per card.
+            // Score the offered upgrades for THIS squad/build → flag a ★ pick + a "why" on it.
             const recoCtx = { types: new Set(squad.filter((u) => u.hp > 0).map((u) => COMBAT_CREATURES[u.id].type)), mods: runMods, boss: !!nextWave.boss };
             const recoId = offer.reduce((b, id) => upgradeScore(UPGRADE_BY_ID[id], recoCtx) > upgradeScore(UPGRADE_BY_ID[b], recoCtx) ? id : b, offer[0]);
             return offer.map((id) => {
@@ -4567,19 +4570,22 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               const why = upgradeWhy(up, recoCtx);
               const reco = id === recoId;
               return (
-                <button key={id} onClick={() => setUpgradeChoice(id)} style={{ position: 'relative', textAlign: 'center', cursor: 'pointer', borderRadius: 14, padding: '15px 13px', background: chosen ? `linear-gradient(180deg, ${up.color}26, rgba(18,18,28,0.66))` : 'rgba(17,18,27,0.6)', border: `1px solid ${chosen ? up.color : reco ? ACCENT + 'aa' : up.color + '4d'}`, boxShadow: chosen ? `0 0 28px ${up.color}66, inset 0 0 22px ${up.color}1f` : (reco ? `0 0 20px ${ACCENT}44` : `0 0 12px ${up.color}22`), backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', transition: 'box-shadow .15s, border-color .15s' }}>
-                  {reco && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', background: ACCENT, color: '#1a1408', fontSize: 8.5, fontWeight: 900, letterSpacing: 0.8, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>★ RECOMMENDED</div>}
+                <button key={id} onClick={() => setUpgradeChoice(id)} style={{ position: 'relative', textAlign: 'center', cursor: 'pointer', borderRadius: 14, padding: '15px 13px',
+                  background: chosen ? `linear-gradient(180deg, ${up.color}26, rgba(18,18,28,0.66))` : 'rgba(17,18,27,0.6)',
+                  border: `1px solid ${chosen ? up.color : reco ? ACCENT + '88' : LINE}`,
+                  boxShadow: chosen ? `0 0 28px ${up.color}66, inset 0 0 22px ${up.color}1f` : (reco ? `0 0 18px ${ACCENT}33` : 'none'),
+                  backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', transition: 'box-shadow .15s, border-color .15s' }}>
+                  {reco && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', background: ACCENT, color: '#1a1408', fontSize: 8.5, fontWeight: 900, letterSpacing: 0.8, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>★ PICK</div>}
+                  <span title={aoe ? 'Whole squad' : 'One creature'} style={{ position: 'absolute', top: 7, right: 9, fontSize: 11, opacity: 0.85 }}>{aoe ? '💥' : '🎯'}</span>
                   <div style={{ fontSize: 36, lineHeight: 1 }}>{up.icon}</div>
-                  <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}{chosen && ' ✓'}</div>
-                  <div style={{ fontSize: 9, fontWeight: 900, color: aoe ? '#9be7ff' : DIM, letterSpacing: 0.5, marginTop: 3 }}>{aoe ? '💥 WHOLE SQUAD' : '🎯 ONE CREATURE'}</div>
-                  <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 6 }}>{up.desc}</div>
-                  {why && <div style={{ fontSize: 9.5, fontWeight: 800, color: reco ? ACCENT : '#7fd6a0', marginTop: 6, letterSpacing: 0.3 }}>{reco ? '✓ ' : ''}{why}</div>}
+                  <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}</div>
+                  <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 5 }}>{up.desc}</div>
+                  {why && reco && <div style={{ fontSize: 9.5, fontWeight: 800, color: ACCENT, marginTop: 6, letterSpacing: 0.3 }}>{why}</div>}
                 </button>
               );
             });
           })()}
         </div>
-        <div style={{ fontSize: 9.5, color: DIM, textAlign: 'center', marginTop: 9, fontStyle: 'italic', lineHeight: 1.4 }}>★ Build Advisor flags the best <b style={{ color: '#9fb0c4' }}>synergy</b> with your squad — not the whole run. The draft is yours.</div>
         <button onClick={() => { if (upgradeChoice) applyUpgrade(UPGRADE_BY_ID[upgradeChoice]); }} disabled={!upgradeChoice}
           style={{ width: '100%', marginTop: 14, padding: '14px 0', borderRadius: 12, border: 'none', background: upgradeChoice ? ACCENT : '#222', color: upgradeChoice ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 0.5, cursor: upgradeChoice ? 'pointer' : 'default' }}>
           {upgradeChoice ? ((UPGRADE_BY_ID[upgradeChoice].scope !== 'unit') ? `CONFIRM ${UPGRADE_BY_ID[upgradeChoice].name} → ${nextWave.name}` : `CONFIRM — choose who gets ${UPGRADE_BY_ID[upgradeChoice].name} →`) : 'TAP AN UPGRADE ABOVE'}
@@ -4720,19 +4726,45 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const banner = (() => {
     if (runPhase === 'won') {
       const ringArt = enteredRing?.img || caughtFrom?.img; // the cleared ring's own art → atmospheric backdrop
+      // ── STAGED REVEAL (vF-CB): the win pays out in small portions — the payoff first, then
+      // each spoil as its own moment, the recap folded away at the end. One read at a time.
+      // Panel chrome is CALM: neutral border, accent lives only in the label — not a rainbow.
+      const calm = { background: 'rgba(10,13,17,0.85)', border: `1px solid ${LINE}`, borderRadius: 12, padding: '14px 16px', margin: '12px 0', textAlign: 'left' };
+      const spoils = [];
+      if (enteredRing && RING_CLEAR[enteredRing.id]) spoils.push('beat');
+      if (pullNow) spoils.push('pull');
+      if (sigilGain) spoils.push('sigil');
+      if (unlockedNow) spoils.push('unlock');
+      if (wardBlock) spoils.push('ward');
+      if (wardSolvedNow) spoils.push('wardSolved');
+      if (holdfastNow) spoils.push('holdfast');
+      if (relicChoices.length > 0 || relicDrop) spoils.push('relic');
+      const steps = spoils.length ? ['payoff', ...spoils, 'onward'] : ['solo'];
+      const step = steps[Math.min(wonStep, steps.length - 1)];
+      const last = step === 'onward' || step === 'solo';
+      const mustPickRelic = step === 'relic' && relicChoices.length > 0; // the pick IS the continue
       return (
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 16, padding: narrow ? '22px 15px' : '30px 24px', marginBottom: 12, textAlign: 'center',
-          // Atmospheric: the ring you just cleared becomes the SCENE (darkened scrim over its art), not a flat box on black.
           background: ringArt
             ? `linear-gradient(180deg, rgba(8,16,8,0.72) 0%, rgba(8,13,10,0.9) 55%, rgba(7,10,9,0.96) 100%), url(${ringArt}) center/cover no-repeat`
             : 'radial-gradient(ellipse at top, #132413 0%, #0a0e0a 72%)',
-          boxShadow: `inset 0 0 110px rgba(0,0,0,0.55), 0 0 28px ${WIN}22` }}>
-          {/* Floating hero — no frame; a glow + drop-shadow so the title sits ON the cleared ring instead of in a box. */}
+          boxShadow: `inset 0 0 110px rgba(0,0,0,0.55), 0 0 28px ${WIN}22`, minHeight: 320 }}>
           <div style={{ fontSize: narrow ? 34 : 46, fontWeight: 900, color: '#eaffea', letterSpacing: 2, textShadow: `0 0 26px ${WIN}, 0 0 64px ${WIN}55, 0 2px 6px #000` }}>RING TAKEN</div>
-          <div style={{ fontSize: T.body, color: '#dcf2cf', margin: '6px 0 16px', textShadow: '0 1px 5px #000' }}>You cleared <b>{caughtFrom ? caughtFrom.name : 'the ring'}</b> to its heart.</div>
-          {featCelebration}
-          {enteredRing && RING_CLEAR[enteredRing.id] && (
-            <div style={{ background: '#0a0f14', border: '1px solid #2a3f2a', borderRadius: 12, padding: '13px 14px', margin: '0 0 14px', textAlign: 'left' }}>
+          <div style={{ fontSize: T.body, color: '#dcf2cf', margin: '6px 0 14px', textShadow: '0 1px 5px #000' }}>{caughtFrom ? caughtFrom.name : 'The ring'}, cleared to its heart.</div>
+
+          {(step === 'payoff' || step === 'solo') && <>
+            <SlagBanked earned={earned} balance={slag} />
+            <CoresBanked coresRun={coresRun} />
+            {runRepeat < 1 && (
+              <div style={{ fontSize: T.micro, color: '#b58a3a', margin: '8px 0', fontWeight: 700 }}>↻ Repeat clear — Cores ×{runRepeat.toFixed(2)}. Fresh rings pay full ⬡.</div>
+            )}
+            {step === 'solo' && !pullNow && !sigilGain && (
+              <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>Nothing new stirred from this ring.</div>
+            )}
+          </>}
+
+          {step === 'beat' && enteredRing && RING_CLEAR[enteredRing.id] && (
+            <div style={calm}>
               <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
                 <RingVignette depth={enteredRing.depth} size={narrow ? 64 : 82} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -4742,134 +4774,131 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               </div>
             </div>
           )}
-          {pullNow && (() => {
+
+          {step === 'pull' && pullNow && (() => {
             const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
             return (
-              <div style={{ margin: '14px 0', background: '#091a12', border: `2px solid ${ri.color}`, borderRadius: 12, padding: '14px 16px', boxShadow: `0 0 16px ${ri.color}33` }}>
-                <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, marginBottom: 6, color: ri.color }}>{ri.pips} {pullNow.rarity.toUpperCase()} {pullNow.isDupe ? 'DUPE' : 'PULL'}</div>
+              <div style={{ ...calm, textAlign: 'center' }}>
+                <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, marginBottom: 8, color: ri.color }}>{ri.pips} {pullNow.rarity.toUpperCase()} {pullNow.isDupe ? 'DUPE' : 'PULL'}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
                   <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={64} />
                   <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: T.sub, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name} <span style={{ fontSize: T.small, color: ri.color }}>{ri.pips}</span></div>
-                    <div style={{ fontSize: T.small, color: '#cdd', fontWeight: 700 }}>{ati.nick}</div>
+                    <div style={{ fontSize: T.sub, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name}</div>
                     {pullNow.isDupe
-                      ? <div style={{ fontSize: T.small, color: WIN, fontWeight: 800, marginTop: 3 }}>Already yours → melted to <b>+{pullNow.gainedCores} ⬡</b> for {ac.name}</div>
-                      : <div style={{ fontSize: T.micro, color: '#9be7ff', marginTop: 3 }}>NEW! Joins your stable{pullNow.gainedCores > 0 ? ` with +${pullNow.gainedCores} ⬡` : ''} — {stable.length}/{COMBAT_ROSTER.length} caught.</div>}
-                    {caughtFrom && <div style={{ fontSize: T.micro, color: '#888', marginTop: 2 }}>from {caughtFrom.name}</div>}
+                      ? <div style={{ fontSize: T.small, color: WIN, fontWeight: 800, marginTop: 3 }}>Already yours → <b>+{pullNow.gainedCores} ⬡</b></div>
+                      : <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800, marginTop: 3 }}>NEW — ⮑ opens the {BUILD_LINE[ac.type] || ati.nick} build{pullNow.gainedCores > 0 ? ` · +${pullNow.gainedCores} ⬡` : ''}</div>}
                   </div>
                 </div>
               </div>
             );
           })()}
-          {sigilGain && (() => {
+
+          {step === 'sigil' && sigilGain && (() => {
             const ac = COMBAT_CREATURES[sigilGain.id]; const ati = TYPE_INFO[ac.type];
             return (
-              <div style={{ margin: '14px 0', background: '#0b1426', border: `2px solid ${ati.accent}`, borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 6 }}>✦ SIGIL FOUND</div>
+              <div style={{ ...calm, textAlign: 'center' }}>
+                <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 8 }}>✦ SIGIL FOUND</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
                   <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={56} />
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontSize: T.body, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name}'s sigil</div>
                     <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800, marginTop: 2 }}>{'✦'.repeat(sigilGain.count)}{'·'.repeat(APEX_SIGILS - sigilGain.count)} {sigilGain.count}/{APEX_SIGILS}</div>
-                    <div style={{ fontSize: T.micro, color: sigilGain.ready ? WIN : DIM, marginTop: 3, fontWeight: sigilGain.ready ? 800 : 400 }}>
-                      {sigilGain.ready ? '★ Ready to challenge — pick a squad and call it out.' : `Keep hunting ${caughtFrom ? caughtFrom.name : 'the ring'} for more.`}
-                    </div>
+                    {sigilGain.ready && <div style={{ fontSize: T.micro, color: WIN, marginTop: 3, fontWeight: 800 }}>★ Ready to challenge.</div>}
                   </div>
                 </div>
               </div>
             );
           })()}
-          {!pullNow && !sigilGain && (
-            <div style={{ fontSize: T.small, color: DIM, margin: '10px 0', fontStyle: 'italic' }}>Nothing new stirred from this ring.</div>
-          )}
-          {unlockedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === unlockedNow); return (
-            <div style={{ margin: '12px 0', padding: '12px 14px', borderRadius: 12, background: '#1a1407', border: `2px solid ${ACCENT}` }}>
+
+          {step === 'unlock' && unlockedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === unlockedNow); return (
+            <div style={{ ...calm, textAlign: 'center' }}>
               <div style={{ fontSize: T.small, fontWeight: 900, color: ACCENT, letterSpacing: 0.5 }}>🔓 THE WAY INWARD OPENS</div>
-              <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}>You cleared the ring — <b>{g?.name}</b> now lies open, with rarer creatures to pull within.</div>
+              <div style={{ fontSize: T.small, color: '#f0e2c8', marginTop: 4 }}><b>{g?.name}</b> lies open.</div>
             </div>
           ); })()}
-          {wardBlock && (
-            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: 'linear-gradient(180deg,#0c1620,#0a0e16)', border: `2px solid ${wardBlock.tint}`, boxShadow: `0 0 16px ${wardBlock.tint}33`, textAlign: 'left' }}>
-              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: wardBlock.tint }}>{wardBlock.glyph} THE WAY IS SEALED</div>
-              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eaf2ff', margin: '3px 0 6px' }}>{wardBlock.name}</div>
-              <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.55, fontStyle: 'italic', marginBottom: 10 }}>{wardBlock.story}</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 11px', borderRadius: 9, background: '#0a0e16', border: `1px solid ${wardBlock.tint}55` }}>
-                <span style={{ fontSize: T.body }}>🜲</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: T.small, fontWeight: 800, color: wardBlock.tint }}>The riddle</div>
-                  <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.5 }}>{wardBlock.clue}</div>
-                  <div style={{ fontSize: T.micro, fontWeight: 800, color: '#9be7ff', marginTop: 6 }}>→ {wardBlock.deed.told} · {(wards[wardBlock.id]?.progress) || 0}/{wardBlock.deed.count}</div>
-                </div>
-              </div>
+
+          {step === 'ward' && wardBlock && (
+            <div style={calm}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: wardBlock.tint }}>{wardBlock.glyph} THE WAY IS SEALED — {wardBlock.name}</div>
+              <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.55, fontStyle: 'italic', margin: '6px 0 8px' }}>{wardBlock.clue}</div>
+              <div style={{ fontSize: T.micro, fontWeight: 800, color: '#9be7ff' }}>→ {wardBlock.deed.told} · {(wards[wardBlock.id]?.progress) || 0}/{wardBlock.deed.count}</div>
             </div>
           )}
-          {wardSolvedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === wardSolvedNow.atDepth + 1); return (
-            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: 'linear-gradient(180deg,#10231a,#0c1812)', border: `2px solid ${WIN}`, boxShadow: `0 0 16px ${WIN}44`, textAlign: 'left' }}>
-              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: WIN }}>{wardSolvedNow.glyph} THE LOCK KNOWS ITS OWN</div>
-              <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eafff2', margin: '3px 0 6px' }}>{wardSolvedNow.name} opens</div>
-              <div style={{ fontSize: T.small, color: '#bfe8cf', lineHeight: 1.5 }}>You did as the old gate asked. It grinds open — the way inward to <b>{g?.name || 'the deep'}</b> lies clear, and a key relic is yours for the solving.</div>
+
+          {step === 'wardSolved' && wardSolvedNow && (() => { const g = HUNTING_GROUNDS.find((x) => x.depth === wardSolvedNow.atDepth + 1); return (
+            <div style={calm}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: WIN }}>{wardSolvedNow.glyph} {wardSolvedNow.name.toUpperCase()} OPENS</div>
+              <div style={{ fontSize: T.small, color: '#bfe8cf', lineHeight: 1.5, marginTop: 5 }}>The way inward to <b>{g?.name || 'the deep'}</b> lies clear — and a key relic is yours.</div>
             </div>
           ); })()}
-          {holdfastNow && (
-            <div style={{ margin: '12px 0', padding: '14px 16px', borderRadius: 12, background: '#160f1d', border: '2px solid #b06bff', boxShadow: '0 0 16px #b06bff33', textAlign: 'left' }}>
+
+          {step === 'holdfast' && holdfastNow && (
+            <div style={calm}>
               <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
                 <HoldfastVignette size={narrow ? 66 : 84} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>🏚 THE HOLDFAST RECLAIMS</div>
-                  <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '3px 0 6px' }}>{holdfastNow.part} <span style={{ fontSize: T.micro, fontWeight: 700, color: '#9a7fc0' }}>· stage {holdfastNow.depth}/{HOLDFAST_MAX}</span></div>
-                  <div style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.5, fontStyle: 'italic' }}>{holdfastNow.beat}</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 10px', borderRadius: 9, background: '#0e0a14', border: '1px solid #4a3a66' }}>
-                <span style={{ fontSize: T.body }}>{holdfastNow.boon.icon}</span>
-                <div>
-                  <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff' }}>Standing boon — {holdfastNow.boon.name}</div>
-                  <div style={{ fontSize: T.micro, color: '#bfa8da' }}>{holdfastNow.boon.desc}</div>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>🏚 THE HOLDFAST RECLAIMS — {holdfastNow.part} · {holdfastNow.depth}/{HOLDFAST_MAX}</div>
+                  <div style={{ fontSize: T.small, color: '#cdbbe6', lineHeight: 1.5, fontStyle: 'italic', marginTop: 5 }}>{holdfastNow.beat}</div>
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: '#cba6ff', marginTop: 8 }}>{holdfastNow.boon.icon} {holdfastNow.boon.name} <span style={{ fontWeight: 400, color: '#bfa8da' }}>— {holdfastNow.boon.desc}</span></div>
                 </div>
               </div>
             </div>
           )}
-          {relicChoices.length > 0 && (
-            <div style={{ background: '#120a1e', border: '1.5px solid #b06bff', borderRadius: 11, padding: '12px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
-              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff', marginBottom: 8 }}>✦ CHOOSE A RELIC <span style={{ color: DIM, fontWeight: 700, letterSpacing: 0 }}>— the boss leaves spoils. Take one.</span></div>
+
+          {step === 'relic' && relicChoices.length > 0 && (
+            <div style={calm}>
+              <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff', marginBottom: 8 }}>✦ THE BOSS LEAVES SPOILS — take one</div>
               <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
-                {relicChoices.map((r) => {
-                  const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
-                  return (
-                    <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
-                      style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1.5px solid ${r.color}88` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <RelicIcon r={r} size={T.body} />
-                        <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
-                      </div>
-                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
-                      <div style={{ fontSize: T.micro, color: '#bfb0d6', lineHeight: 1.35 }}>{r.desc}</div>
-                    </button>
-                  );
-                })}
+                {relicChoices.map((r) => (
+                  <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
+                    style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1px solid ${LINE}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                      <RelicIcon r={r} size={T.body} />
+                      <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, color: (RARITY_INFO[r.rarity] || {}).color || r.color }}>{(RARITY_INFO[r.rarity] || {}).pips || ''}</span>
+                    </div>
+                    <div style={{ fontSize: T.micro, color: '#bfb0d6', lineHeight: 1.35 }}>{r.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
-          {relicDrop && (
-            <div style={{ background: '#150d22', border: '1.5px solid #b06bff', borderRadius: 11, padding: '11px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
+          {step === 'relic' && relicChoices.length === 0 && relicDrop && (
+            <div style={calm}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                 <RelicIcon r={relicDrop} size={30} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC TAKEN</div>
-                  <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '2px 0' }}>{relicDrop.name} <span style={{ fontSize: T.micro, fontWeight: 800, color: (RARITY_INFO[relicDrop.rarity] || {}).color }}>· {relicDrop.rarity}</span></div>
+                  <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '2px 0' }}>{relicDrop.name}</div>
                   <div style={{ fontSize: T.small, color: '#cba6ff', fontWeight: 700 }}>{relicDrop.desc}</div>
-                  <div style={{ fontSize: T.micro, color: '#9a7fc0', lineHeight: 1.45, fontStyle: 'italic', marginTop: 3 }}>{relicDrop.lore} <span style={{ color: DIM, fontStyle: 'normal' }}>— equip it in ✦ RELICS before your next run.</span></div>
                 </div>
               </div>
             </div>
           )}
-          {runRepeat < 1 && (
-            <div style={{ fontSize: T.micro, color: '#b58a3a', margin: '8px 0', fontWeight: 700 }}>↻ Repeat clear — Cores paid at ×{runRepeat.toFixed(2)}. Push a fresh ring inward for full ⬡.</div>
+
+          {last && <>
+            {featCelebration}
+            <button onClick={() => setResultDetails((v) => !v)}
+              style={{ background: 'transparent', border: 'none', color: DIM, fontSize: T.small, fontWeight: 800, cursor: 'pointer', padding: '6px 0', letterSpacing: 0.5 }}>
+              {resultDetails ? '▾ run details' : '▸ run details'}
+            </button>
+            {resultDetails && <RunRecap taken={taken} stats={stats} squad={squad} />}
+          </>}
+
+          {/* step dots — where you are in the reveal, no words needed */}
+          {steps.length > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, margin: '12px 0 2px' }}>
+              {steps.map((s, i) => (
+                <span key={s} style={{ width: 6, height: 6, borderRadius: 3, background: i <= wonStep ? '#dcf2cf' : '#3a4a3a', boxShadow: i === Math.min(wonStep, steps.length - 1) ? `0 0 8px ${WIN}` : 'none' }} />
+              ))}
+            </div>
           )}
-          <SlagBanked earned={earned} balance={slag} />
-          <CoresBanked coresRun={coresRun} />
-          <RunRecap taken={taken} stats={stats} squad={squad} />
-          <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
+          {!last && !mustPickRelic && (
+            <button onClick={() => setWonStep((s) => s + 1)} style={{ width: '100%', marginTop: 10, padding: '13px 0', border: 'none', borderRadius: 10, background: '#1c2a1c', color: '#cfe8c0', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer', boxShadow: `0 0 0 1px ${WIN}44` }}>CONTINUE →</button>
+          )}
+          {last && (
+            <button onClick={newRun} style={{ width: '100%', marginTop: 10, padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
+          )}
         </div>
       );
     }
@@ -4885,8 +4914,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {featCelebration}
         <SlagBanked earned={earned} balance={slag} />
         <CoresBanked coresRun={coresRun} />
-        <RunRecap taken={taken} stats={stats} squad={squad} />
-        <button onClick={newRun} style={{ width: '100%', padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
+        <button onClick={() => setResultDetails((v) => !v)}
+          style={{ background: 'transparent', border: 'none', color: DIM, fontSize: T.small, fontWeight: 800, cursor: 'pointer', padding: '6px 0', letterSpacing: 0.5 }}>
+          {resultDetails ? '▾ run details' : '▸ run details'}
+        </button>
+        {resultDetails && <RunRecap taken={taken} stats={stats} squad={squad} />}
+        <button onClick={newRun} style={{ width: '100%', marginTop: 8, padding: '13px 0', border: 'none', borderRadius: 10, background: ACCENT, color: '#1a1408', fontSize: T.body, fontWeight: 900, letterSpacing: 1, cursor: 'pointer' }}>NEW RUN →</button>
       </div>
     ); }
     return null;
