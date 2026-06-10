@@ -4044,22 +4044,36 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   <div style={{ display: 'grid', gridTemplateColumns: summonResults.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8 }}>
                     {summonResults.map((r, i) => {
                       const c = COMBAT_CREATURES[r.id]; const ti = TYPE_INFO[c.type]; const ri = RARITY_INFO[r.rarity];
-                      const glowPx = Math.round(12 + (ri.mult - 1) * 42); // Common 12 → Unique ~41: rarer = brighter
-                      const big = ri.mult >= 1.45; // Legendary+ : the call really answered — extra celebration
-                      const fresh = !r.isDupe; // a NEW creature = a new build path opened (the collection moment)
+                      const glowPx = Math.round(12 + (ri.mult - 1) * 42);
+                      const big = ri.mult >= 1.45;
+                      const fresh = !r.isDupe;
+                      const solo = summonResults.length === 1;
+                      const inn = innateFor(r.id);
                       return (
-                        <div key={i} style={{ position: 'relative', textAlign: 'center', borderRadius: 10, padding: '9px 6px',
+                        <div key={i} style={{ position: 'relative', textAlign: 'center', borderRadius: 10, padding: solo ? '12px 10px' : '9px 6px',
                           background: big ? `linear-gradient(180deg, ${ri.color}22, #100b1a)` : '#100b1a',
                           border: `1px solid ${ri.color}`,
                           boxShadow: `0 0 ${glowPx}px ${ri.color}${big ? '99' : '55'}, inset 0 0 14px ${ri.color}22`,
                           animation: `card-bounce .42s ease-out ${i * 0.08}s both` }}>
                           {big && fresh && <div style={{ position: 'absolute', top: 4, right: 5, fontSize: 11, animation: 'aura-pulse 1.4s ease-in-out infinite' }}>✨</div>}
+                          {/* 1. Type glyph + rarity color */}
                           <div style={{ animation: big ? 'aura-pulse 1.5s ease-in-out infinite' : 'none' }}>
-                            <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={summonResults.length === 1 ? 76 : 52} />
+                            <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={solo ? 76 : 52} />
                           </div>
                           <div style={{ fontSize: T.small, fontWeight: 900, color: ri.color, marginTop: 4, textShadow: big ? `0 0 10px ${ri.color}66` : 'none' }}>{ri.pips} {c.name}</div>
+                          {/* 2. Innate — the new thing (solo: card; multi: compact tag on fresh) */}
+                          {solo && inn && fresh && (
+                            <div style={{ background: '#0a1c16', border: '1px solid #2a5040', borderRadius: 8, padding: '6px 10px', margin: '6px 0 4px' }}>
+                              <div style={{ fontSize: 9.5, fontWeight: 900, color: '#7ee0c0' }}>✦ {inn.name}</div>
+                              <div style={{ fontSize: T.micro, color: '#8fa0a0', lineHeight: 1.35, marginTop: 1 }}>{inn.line}</div>
+                            </div>
+                          )}
+                          {!solo && inn && fresh && (
+                            <div style={{ fontSize: 9, fontWeight: 800, color: '#7ee0c0', marginTop: 2, lineHeight: 1.2 }}>✦ {inn.name}</div>
+                          )}
+                          {/* 3. Opens line / dupe progress */}
                           <div style={{ fontSize: 9, fontWeight: 800, color: fresh ? ti.accent : '#6f6f80', lineHeight: 1.25, marginTop: 1 }}>{fresh ? '⮑ opens ' : ''}{ti.glyph} {BUILD_LINE[c.type] || ti.nick}{fresh ? ' build' : ''}</div>
-                          <div style={{ fontSize: T.micro, fontWeight: 800, color: r.isDupe ? '#9a7fc0' : WIN, marginTop: 1 }}>{r.isDupe ? `dupe → +${r.gainedCores} ⬡` : (r.gainedCores > 0 ? `NEW! +${r.gainedCores} ⬡` : 'NEW!')}</div>
+                          <div style={{ fontSize: T.micro, fontWeight: 800, color: r.isDupe ? '#9a7fc0' : WIN, marginTop: 1 }}>{r.isDupe ? `+${r.gainedCores} ⬡ toward ${c.name}'s build` : (r.gainedCores > 0 ? `NEW! +${r.gainedCores} ⬡` : 'NEW!')}</div>
                         </div>
                       );
                     })}
@@ -5034,18 +5048,52 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           )}
           {step === 'pull' && pullNow && (() => {
             const ac = COMBAT_CREATURES[pullNow.id]; const ati = TYPE_INFO[ac.type]; const ri = RARITY_INFO[pullNow.rarity];
-            return (
-              <div style={{ ...calm, textAlign: 'center' }}>
-                <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, marginBottom: 8, color: ri.color }}>{ri.pips} {pullNow.rarity.toUpperCase()} {pullNow.isDupe ? 'DUPE' : 'PULL'}</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-                  <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={64} />
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: T.sub, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name}</div>
-                    {pullNow.isDupe
-                      ? <div style={{ fontSize: T.small, color: WIN, fontWeight: 800, marginTop: 3 }}>Already yours → <b>+{pullNow.gainedCores} ⬡</b></div>
-                      : <div style={{ fontSize: T.small, color: '#9be7ff', fontWeight: 800, marginTop: 3 }}>NEW — ⮑ opens the {BUILD_LINE[ac.type] || ati.nick} build{pullNow.gainedCores > 0 ? ` · +${pullNow.gainedCores} ⬡` : ''}</div>}
+            const inn = innateFor(pullNow.id);
+            if (pullNow.isDupe) {
+              // Dupe beat: progress toward this creature's tree, not a blank
+              const banked = cores[pullNow.id] || 0;
+              const meterPct = Math.min(100, Math.round((banked / 180) * 100));
+              return (
+                <div style={{ ...calm, textAlign: 'center' }}>
+                  <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, marginBottom: 8, color: ri.color }}>{ri.pips} {pullNow.rarity.toUpperCase()} · DUPE</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                    <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={48} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontSize: T.sub, fontWeight: 900, color: ati.accent }}>{ati.glyph} {ac.name}</div>
+                      <div style={{ fontSize: T.small, fontWeight: 900, color: WIN, marginTop: 4 }}>+{pullNow.gainedCores} ⬡ toward {ac.name}'s build</div>
+                      <div style={{ marginTop: 5, height: 5, borderRadius: 3, background: '#1a1a2a', width: 120, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', borderRadius: 3, background: ati.accent, width: `${meterPct}%` }} />
+                      </div>
+                      <div style={{ fontSize: T.micro, color: DIM, marginTop: 2 }}>{banked} ⬡ banked</div>
+                    </div>
                   </div>
                 </div>
+              );
+            }
+            // Fresh pull beat: 1) type+rarity  2) innate  3) opens line  4) stats last
+            const sameType = stable.filter((id) => COMBAT_CREATURES[id]?.type === ac.type && id !== pullNow.id);
+            const opensLine = sameType.length >= 2
+              ? `With ${COMBAT_CREATURES[sameType[sameType.length - 1]].name} — full ${ac.type} squad reachable`
+              : `Opens the ${BUILD_LINE[ac.type] || ati.nick} build`;
+            return (
+              <div style={{ ...calm, textAlign: 'center' }}>
+                {/* 1. Type + rarity identity */}
+                <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, marginBottom: 10, color: ri.color }}>{ri.pips} {pullNow.rarity.toUpperCase()} · {ati.glyph} {ac.type.toUpperCase()}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+                  <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={72} />
+                </div>
+                <div style={{ fontSize: T.sub, fontWeight: 900, color: ati.accent, marginBottom: 8 }}>{ati.glyph} {ac.name}</div>
+                {/* 2. Innate — the new thing, before stats */}
+                {inn && (
+                  <div style={{ background: '#0a1c16', border: '1px solid #2a5040', borderRadius: 9, padding: '8px 12px', margin: '0 auto 10px', maxWidth: 300 }}>
+                    <div style={{ fontSize: T.small, fontWeight: 900, color: '#7ee0c0' }}>✦ {inn.name}</div>
+                    <div style={{ fontSize: T.micro, color: '#8fa0a0', lineHeight: 1.4, marginTop: 2 }}>{inn.line}</div>
+                  </div>
+                )}
+                {/* 3. What this opens — computed from stable state */}
+                <div style={{ fontSize: T.small, fontWeight: 800, color: '#9be7ff', marginBottom: 6 }}>⮑ {opensLine}{pullNow.gainedCores > 0 ? ` · +${pullNow.gainedCores} ⬡` : ''}</div>
+                {/* 4. Stats last — dimmest, smallest */}
+                <div style={{ fontSize: T.micro, color: DIM }}>HP {ac.hp} · ATK {ac.atk} · SPD {ac.speed}</div>
               </div>
             );
           })()}

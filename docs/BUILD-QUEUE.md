@@ -12,9 +12,10 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   All 17 implemented as `INNATES` apply(m) wired into `treeModsFor`; shown on pick cards + tree
   header. Goldens byte-identical; live Playwright clean. Sim can't see innates (like trees) → live-
   feel-validated, player-side-only so no unfair-wall risk. Pull-reveal surfacing is S3.
-- [ ] **S3 · MODEL=sonnet · Pull-beat reorder** — summon reveal order: type+rarity color → INNATE
-  card → one computed "what this opens" line → stats last. Dupes: short beat, "+N ⬡ toward
-  [creature]" with the core meter filling. UI only; reuse existing reveal FX.
+- [x] **S3 · MODEL=sonnet · Pull-beat reorder** — DONE. Staged win reveal (step=pull): type+rarity
+  → innate card (teal box) → computed opens line (same-type squad check) → stats last; dupe beat
+  shows core progress meter. Summon tab: innate box on solo fresh pull, compact innate tag on
+  multi-pull fresh; dupe line "+N ⬡ toward [creature]'s build". Lint/build/tests green.
 - [ ] **S4 · MODEL=opus · Ring-biased summons + Type-mastery feat** — summoning biases pulls
   toward the camped ring's `biasIds` (state the bias % on the summon screen — folk honesty, no
   hidden odds); feat: clear any ring with each Type as carry (8 checks, existing feats system).
