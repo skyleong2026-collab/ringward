@@ -102,6 +102,9 @@ function greedyValue(u, ctx) {
   return u.chain ? 5 : 4;
 }
 
+// NOTE (review 2026-06-10): 'autopick' and 'greedy' currently share greedyValue — the live
+// game's auto-pick uses SeamLab's upgradeScore, which differs in boss-context and synergy
+// details. Treat the autopick column as ≈greedy, not as a measurement of the shipped picker.
 function choosePick(offer, policy, ctx) {
   if (!offer.length) return null;
   // Both `autopick` and `greedy` now draft by SYNERGY SCORE. The game's auto-pick was upgraded from
@@ -241,7 +244,8 @@ const RECUT_FIXTURES = [
   { relic: 'Bloodpact (Legendary)', squad: ['cinderpaw', 'swiftpaw', 'glowtail'], cuts: [
     { label: 'Original  +30dmg +40heal -10HP', apply: (m) => { m.dmgMult *= 1.3; m.healMult *= 1.4; m.hpMult *= 0.9; } },
     { label: "Berserker +48dmg -10HP",         apply: (m) => { m.dmgMult *= 1.48; m.hpMult *= 0.9; } },
-    { label: 'Bloodwell +16dmg +8% steal -10HP', apply: (m) => { m.dmgMult *= 1.16; m.lifesteal = (m.lifesteal || 0) + 0.08; m.hpMult *= 0.9; } },
+    // ⚠ MIRROR: keep these cut numbers in sync with RELIC_CUTS in SeamLab.jsx (shipped 17/9).
+    { label: 'Bloodwell +17dmg +9% steal -10HP', apply: (m) => { m.dmgMult *= 1.17; m.lifesteal = (m.lifesteal || 0) + 0.09; m.hpMult *= 0.9; } },
   ] },
   { relic: 'Drop-Shard (Legendary)', squad: ['cinderpaw', 'swiftpaw', 'mossback'], cuts: [
     { label: 'Original  +18dmg +18HP +1c', apply: (m) => { m.dmgMult *= 1.18; m.hpMult *= 1.18; m.chargeStart += 1; } },

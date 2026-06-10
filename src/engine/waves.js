@@ -103,7 +103,7 @@ export const RING_LAWS = {
   },
   'witherfen': {
     icon: '🕯', name: 'The Blight Pools',
-    line: 'Healing is halved here — wounds keep.',
+    line: 'Healing withers here — every mend only part-takes.',
     ask: 'Sustain crutches fail. Stack HP, or end fights fast.',
     mods: (m) => { m.healMult *= 0.65; },
   },

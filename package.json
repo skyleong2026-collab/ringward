@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:smoke": "node scripts/phaseg-smoke.mjs",
+    "test:events": "node scripts/event-contract.mjs",
     "test:golden": "node scripts/phaseg-golden.mjs",
     "test:balance": "node scripts/phase17-balance.mjs",
     "test:manual-golden": "node scripts/manual-golden.mjs",
@@ -23,7 +24,7 @@
     "test:feedback": "node scripts/feedback.mjs",
     "test:endless": "node scripts/endless.mjs",
     "test:feats": "node scripts/feats.mjs",
-    "test": "npm run test:smoke && npm run test:golden && npm run test:manual-golden && npm run test:manual-golden-bulwark && npm run test:manual-golden-mender && npm run test:manual-golden-booster && npm run test:manual-golden-striker && npm run test:manual-golden-assassin && npm run test:themes && npm run test:wards && npm run test:keystones && npm run test:feedback && npm run test:endless && npm run test:feats"
+    "test": "npm run test:smoke && npm run test:events && npm run test:golden && npm run test:manual-golden && npm run test:manual-golden-bulwark && npm run test:manual-golden-mender && npm run test:manual-golden-booster && npm run test:manual-golden-striker && npm run test:manual-golden-assassin && npm run test:themes && npm run test:wards && npm run test:keystones && npm run test:feedback && npm run test:endless && npm run test:feats"
   },
   "dependencies": {
     "react": "^19.2.6",

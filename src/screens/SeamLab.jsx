@@ -1508,6 +1508,11 @@ function feedLine(e) {
   if (e.type === 'doom') return { kind: 'burn', text: `💀 ${e.target.name}'s doom erupts for ${e.dmg}${e.killed ? ' — KO' : ''}` };
   if (e.type === 'regen') return { kind: 'regen', text: `${e.target.name} regenerates +${e.healed} (${e.stacksLeft} stack${e.stacksLeft === 1 ? '' : 's'} left)` };
   if (e.type === 'frozen') return { kind: 'freeze', text: `❄ ${e.actor.name} is frozen — skips its turn${e.stacksLeft > 0 ? ` (${e.stacksLeft} more)` : ''}` };
+  // Support/curse chip ticks (vF-CA engine events) — no `skill` (thorns/blight) and no `actor`
+  // (hexbleed), so they MUST resolve before the turn-shaped fall-through below or it throws.
+  if (e.type === 'thorns') return { kind: 'turn', side: 'A', text: `🌵 ${e.actor.name}'s thorns chip ${e.target.name} for ${e.dmg}${e.killed ? ' — KO' : ''}` };
+  if (e.type === 'blight') return { kind: 'turn', side: 'A', text: `🌿 ${e.actor.name}'s bloom sears ${e.target.name} for ${e.dmg}${e.killed ? ' — KO' : ''}` };
+  if (e.type === 'hexbleed') return { kind: 'burn', text: `🩸 ${e.target.name} bleeds ${e.dmg} from the curse${e.killed ? ' — KO' : ''}` };
   const hits = (e.hits || []).filter((h) => h.dmg > 0 || h.killed).map((h) => `${h.dmg} → ${h.name}${h.killed ? ' (KO)' : ''}`).join(', ');
   const chg = e.chargeBefore !== e.chargeAfter ? ` · charge ${e.chargeBefore}→${e.chargeAfter}` : '';
   const amp = e.amplifiedByBurn ? ' · 🔥×2' : '';
@@ -1857,6 +1862,8 @@ function popupsForEvent(event) {
   else if (event.type === 'poison') out.push({ uid: event.target.uid, text: `−${event.dmg}🧪`, color: '#9acd32' });
   else if (event.type === 'doom') out.push({ uid: event.target.uid, text: `−${event.dmg}💀`, color: '#c77dff' });
   else if (event.type === 'hexbleed') out.push({ uid: event.target.uid, text: `−${event.dmg}🩸`, color: AMP });
+  else if (event.type === 'thorns') out.push({ uid: event.target.uid, text: `−${event.dmg}🌵`, color: '#7fae5a' });
+  else if (event.type === 'blight') out.push({ uid: event.target.uid, text: `−${event.dmg}🌿`, color: WIN });
   return out;
 }
 
@@ -1965,7 +1972,7 @@ function useFight(opts = {}) {
       setFx({ actor: null, cast: null, bursts: { [event.target.uid]: 'heal' }, n: ++FX_NONCE });
       startHold(TICK_HOLD_MS);
       sfx.regenTick();
-    } else if (event.type === 'poison' || event.type === 'doom' || event.type === 'hexbleed') {
+    } else if (event.type === 'poison' || event.type === 'doom' || event.type === 'hexbleed' || event.type === 'thorns' || event.type === 'blight') {
       // Damage-over-time ticks read like any other hit now — an impact + a floating number,
       // and the KO shatter when they finish a unit off (was silent before).
       const koMap = event.killed ? { [event.target.uid]: true } : {};
@@ -2603,7 +2610,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         if (pick) act = () => applyUpgrade(pick);
       } else if (runPhase === 'pick-target' && pendingUpgrade) {
         sig = 'pt' + waveIdx;
-        const tgt = squad.find((m) => m.hp > 0) || squad[0];
+        // A unit-scope bend must land on a creature whose KIT reads it — match needsType
+        // first (strongest eligible, like the sim), else any living member.
+        const eligible = squad.filter((m) => m.hp > 0 && (!pendingUpgrade.needsType || COMBAT_CREATURES[m.id]?.type === pendingUpgrade.needsType));
+        const tgt = (eligible.length ? eligible : squad.filter((m) => m.hp > 0)).reduce((b, m) => (b && COMBAT_CREATURES[b.id]?.atk >= (COMBAT_CREATURES[m.id]?.atk || 0) ? b : m), eligible[0] || squad.find((m) => m.hp > 0)) || squad[0];
         if (tgt) act = () => pickTarget(tgt.id);
       } else if (runPhase === 'event' && pendingElite && !eventOutcome) {
         sig = 'el' + waveIdx;
@@ -2635,7 +2645,10 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   // a universal floor — even a no-healer squad that took a wayside "+heal" now patches a little more,
   // so heal-scaling is never fully dead. Modest by design (base is only 18%); healers still scale heals
   // in combat far more. (Pairs with fix A: the dead heal *upgrades* are already gated out of the draft.)
-  const patchup = (PATCHUP + (owned.includes('p_medic') ? 0.15 : 0)) * (runMods.healMult ?? 1);
+  // patchupFor reads the CALLER's mods (not the render closure) — startWave's onComplete fires
+  // after a draft may have changed healMult, so deriving from `mods` keeps patch-up exact.
+  const patchupFor = (m) => (PATCHUP + (owned.includes('p_medic') ? 0.15 : 0)) * (m.healMult ?? 1);
+  const patchup = patchupFor(runMods); // for the prep-header label
 
   function buyPerk(p) {
     if (owned.includes(p.id) || slag < p.cost || !onSlag) return;
@@ -2835,7 +2848,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       sfx.ringTaken();
       setEventOutcome('💀 The Marked Hunter falls. It will not pace anyone again. You take its prize.');
       setPendingElite(elite); setRunPhase('event'); // back to the node screen to show the spoils
-    });
+    }, (st) => applyRingLaw(st, runGroundRef.current, { repeatIds: repeatIdsRef.current })); // elites obey the ring's law too ("every fight")
     setRunPhase('fighting');
   }
 
@@ -2859,7 +2872,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       const clearedIds = fielded.filter((mi) => next[mi].hp > 0).map((mi) => next[mi].id);
       awardCores(clearedIds, Math.max(1, Math.round(coresForWave(idx, !!runWaves[idx].boss) * depthCoreMult(runDepth) * runRepeat * (1 + 0.25 * crossing))));
       // Patch survivors up a little for the next push.
-      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
+      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchupFor(mods))) } : m);
       setSquad(patched);
       if (idx === WAVE_COUNT - 1) {
         const winSlag = Math.round(WIN_SLAG * (1 + 0.25 * crossing)); // deeper crossings pay more
@@ -3042,7 +3055,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         return;
       }
       const got = endlessRoundSlag(round); onSlag?.(got); setEarned((e) => e + got); // bank a little each round
-      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchup)) } : m);
+      const patched = next.map((m) => m.hp > 0 ? { ...m, hp: Math.min(maxHpOf(m, mods), m.hp + Math.round(maxHpOf(m, mods) * patchupFor(mods))) } : m);
       setSquad(patched); sfx.waveClear();
       startEndlessRound(round + 1, patched, mods); // press on — round/sq/mods passed so no stale closure
     });
@@ -4565,7 +4578,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   boxShadow: chosen ? `0 0 28px ${up.color}66, inset 0 0 22px ${up.color}1f` : (reco ? `0 0 18px ${ACCENT}33` : 'none'),
                   backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', transition: 'box-shadow .15s, border-color .15s' }}>
                   {reco && <div style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', background: ACCENT, color: '#1a1408', fontSize: 8.5, fontWeight: 900, letterSpacing: 0.8, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>★ PICK</div>}
-                  <span title={aoe ? 'Whole squad' : 'One creature'} style={{ position: 'absolute', top: 7, right: 9, fontSize: 11, opacity: 0.85 }}>{aoe ? '💥' : '🎯'}</span>
+                  <span title={aoe ? 'Whole squad' : 'One creature'} aria-label={aoe ? 'affects the whole squad' : 'goes on one creature'} style={{ position: 'absolute', top: 7, right: 9, fontSize: 11, opacity: 0.85 }}>{aoe ? '💥' : '🎯'}</span>
                   <div style={{ fontSize: 36, lineHeight: 1 }}>{up.icon}</div>
                   <div style={{ fontSize: T.label, fontWeight: 900, color: up.color, marginTop: 8 }}>{up.name}</div>
                   <div style={{ fontSize: T.small, color: '#cdd2dd', lineHeight: 1.45, marginTop: 5 }}>{up.desc}</div>
@@ -4809,8 +4822,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           {step === 'ward' && wardBlock && (
             <div style={calm}>
               <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: wardBlock.tint }}>{wardBlock.glyph} THE WAY IS SEALED — {wardBlock.name}</div>
-              <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.55, fontStyle: 'italic', margin: '6px 0 8px' }}>{wardBlock.clue}</div>
-              <div style={{ fontSize: T.micro, fontWeight: 800, color: '#9be7ff' }}>→ {wardBlock.deed.told} · {(wards[wardBlock.id]?.progress) || 0}/{wardBlock.deed.count}</div>
+              <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.55, fontStyle: 'italic', margin: '6px 0 8px' }}>{wardBlock.story}</div>
+              <div style={{ fontSize: T.small, color: '#cdd8e4', lineHeight: 1.5 }}>🜲 {wardBlock.clue}</div>
+              <div style={{ fontSize: T.micro, fontWeight: 800, color: '#9be7ff', marginTop: 6 }}>→ {wardBlock.deed.told} · {(wards[wardBlock.id]?.progress) || 0}/{wardBlock.deed.count}</div>
             </div>
           )}
 
@@ -4860,6 +4874,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff' }}>✦ RELIC TAKEN</div>
                   <div style={{ fontSize: T.sub, fontWeight: 900, color: '#eadcff', margin: '2px 0' }}>{relicDrop.name}</div>
                   <div style={{ fontSize: T.small, color: '#cba6ff', fontWeight: 700 }}>{relicDrop.desc}</div>
+                  <div style={{ fontSize: T.micro, color: DIM, marginTop: 3 }}>Equip it in ✦ RELICS before your next run — found gear does nothing until worn.</div>
                 </div>
               </div>
             </div>
