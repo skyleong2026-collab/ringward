@@ -1,0 +1,35 @@
+# Ringward build queue (unattended-run compatible)
+One item per token window. The overnight runner picks the FIRST unchecked item, launches the
+model in its MODEL tag, and the worker does ONLY that item: implement per spec → verify (eslint
+changed files, `npm run build`, `npm test`, Playwright for UI) → commit (only your files; never
+App.jsx / art-instance files — see CLAUDE.md) → check the item off here with a one-line result →
+STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
+
+- [ ] **S1 · MODEL=sonnet · Role lines on cards** — one job-sentence per Type (8 lines, copy in
+  TYPE_INFO or alongside), shown on squad-pick cards, draft cards, and the stable. "BULWARK — the
+  wall. Soaks, shields, punishes hitters." Purpose first, lore later. Pure render; goldens untouched.
+- [x] **S2 · MODEL=opus · Innates** — DONE (vF-CG, Opus, committed, deploy HELD for Sky's R3 look).
+  All 17 implemented as `INNATES` apply(m) wired into `treeModsFor`; shown on pick cards + tree
+  header. Goldens byte-identical; live Playwright clean. Sim can't see innates (like trees) → live-
+  feel-validated, player-side-only so no unfair-wall risk. Pull-reveal surfacing is S3.
+- [ ] **S3 · MODEL=sonnet · Pull-beat reorder** — summon reveal order: type+rarity color → INNATE
+  card → one computed "what this opens" line → stats last. Dupes: short beat, "+N ⬡ toward
+  [creature]" with the core meter filling. UI only; reuse existing reveal FX.
+- [ ] **S4 · MODEL=opus · Ring-biased summons + Type-mastery feat** — summoning biases pulls
+  toward the camped ring's `biasIds` (state the bias % on the summon screen — folk honesty, no
+  hidden odds); feat: clear any ring with each Type as carry (8 checks, existing feats system).
+  Keep PITY_AT intact; sim/spot-check the odds math.
+- [ ] **S5 · MODEL=sonnet · Forge Tempering + Holdfast boon choice** — Tempering: +1% squad max
+  HP per tier, cost 40⬡×1.5^tier slag, cap T10 per crossing, "the forge rests" done-state.
+  Holdfast: pick 1-of-2 boons per reclaimed stage (author 8 alternates), 30-slag swap at the
+  Holdfast. Both fully spec'd in the design doc.
+- [ ] **S6 · MODEL=sonnet · Debt: law-chip component + localStorage helper** — the law-chip JSX
+  appears ×3 in SeamLab → one component; add a `usePersistent(key, default)` (or plain helper)
+  and collapse the load/save boilerplate pairs. Pure refactor: zero behavior change, goldens +
+  Playwright smoke prove it.
+- [ ] **S7 · MODEL=opus · Sim mirror extraction** — RELIC_CUTS/UPGRADES are hand-mirrored in the
+  sim (the drift-bug class waves.js extraction killed). Extract to a shared module the same way.
+  Verify: sim outputs identical before/after on a fixed seed set.
+
+NOT in this queue (needs Sky or attended judgment): PixelLab 8-stone batch (spends generations;
+art-direction calls), carrier/R3 re-tuning (gated on Sky's playtest), audio, anything Fable-tier.

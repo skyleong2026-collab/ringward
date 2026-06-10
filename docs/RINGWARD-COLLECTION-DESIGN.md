@@ -13,6 +13,20 @@ new build — it's a stat bump wearing a new face.
 vF-CF accidentally built half the fix: **one keystone per creature** means a creature is now a
 committed build identity. This doc designs the other half.
 
+## STATUS — innates BUILT (vF-CG, 2026-06-10, committed, deploy held)
+All 17 innates implemented as `INNATES` apply(m) functions in SeamLab.jsx, wired into `treeModsFor`
+(so they ride the same run-layer mod object trees use). Displayed on squad-pick cards (the
+per-creature differentiator) and the tree-overlay header ("born-in, always on"). Verified: all 15
+test suites green, **every golden byte-identical** (goldens never touch treeModsFor), live Playwright
+confirmed distinct innate lines render + a run completes clean. **Deploy intentionally HELD** so Sky's
+vF-CF R3 playtest stays a clean read (innates make the player stronger → would muddy that look).
+Channel-honesty note: the depth sim uses makeUnitDef + a gear proxy and CANNOT see innates (same as
+tree mods) — so innate balance is live-feel-validated, not sim-validated. They're player-side only and
+always-on, so worst case is "rings feel a touch easier," never an unfair wall. Final channel map (all
+verified read by their skills): see the table below; `hpMult` was dropped (flows only via squadMods
+into maxHpOf, not per-creature mods). Remaining for Sonnet: pull-beat reorder (S3) surfaces the innate
+at the moment of acquisition — without it innates are visible only on the pick screen.
+
 ## The centerpiece: INNATES (one born-in quirk per creature)
 Every creature gets exactly ONE innate — a small, always-on, build-bending trait it's born with.
 Not tree-bought, not swappable, printed on the card. The innate is what makes fizzpop ≠ glowtail
@@ -28,6 +42,12 @@ Not tree-bought, not swappable, printed on the card. The innate is what makes fi
 > creature = INNATE (born) × KEYSTONE (sworn, one) × LOADOUT (chosen)
 A pull is a moment because it unlocks combinations you literally could not run. The reveal screen
 should say so (see "the pull beat" below).
+
+**The fake-variety test (apply to every innate, at design AND at build time):** would this innate
+change my relic picks, keystone choice, or squad composition? "+20% vs +25% vs +30% damage while
+healthy" is three stat modifiers wearing trenchcoats — technically different, practically identical.
+An innate earns its slot only if the answer is yes. (Test via ChatGPT review, 2026-06-10; it's the
+right bar.)
 
 **First-pass innate sketches (tune freely — the SHAPE is the decision):**
 | Creature | Rarity | Innate (working name) | Effect sketch |

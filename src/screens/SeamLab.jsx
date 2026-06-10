@@ -1403,6 +1403,47 @@ Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => {
 const NODE_BY_ID = {};
 Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => p.nodes.forEach((n) => { NODE_BY_ID[n.id] = { ...n, pathId: p.id }; })));
 const treeForCreature = (id) => TYPE_TREES[COMBAT_CREATURES[id]?.type] ?? null;
+
+// ── INNATES (vF-CG) — one born-in quirk per CREATURE, so a creature is distinct BEFORE any
+//    cores are spent. The collection unit shifts from Type → Creature: a second Reactor is no
+//    longer a stat reskin of the first. The build-identity equation is now:
+//        creature = INNATE (born) × KEYSTONE (sworn, one) × LOADOUT (chosen)
+//    Each innate is an apply(m) that mutates the SAME run-layer mods object the skill tree uses
+//    (see treeModsFor) — so every channel here is one the engine already reads, every innate is
+//    always-on + AI-agnostic, and goldens are byte-identical (goldens never touch treeModsFor).
+//    Design bar (the fake-variety test, docs/RINGWARD-COLLECTION-DESIGN.md): an innate earns its
+//    slot only if it would change a relic/keystone/squad choice — not "+20% vs +25%" reskins.
+//    Channels verified read by their skills (2026-06-10): burnBonus, chargeStart, overloadMult,
+//    blockMult(addBlock), thorns, healMult(heal), mendRegen(mender lifebloom), ampBonus(applyAmp),
+//    opener, executioner, lifesteal, apex, shatter, freezeBonus(warden), jinxSpread(hexer).
+const INNATES = {
+  // Reactor — fire & charge
+  fizzpop:     { name: 'Sputter',      line: 'Every burn it lands carries an extra stack.',        apply: (m) => { m.burnBonus += 1; } },
+  glowtail:    { name: 'Slow Fuse',    line: 'It steps into every fight already part-charged.',    apply: (m) => { m.chargeStart += 1; } },
+  cinderpaw:   { name: 'Eager Ember',  line: 'Its Overload always blooms 15% hotter.',             apply: (m) => { m.overloadMult *= 1.15; } },
+  // Bulwark — shields & spite
+  stoneward:   { name: 'Old Stone',    line: 'Any shield it raises holds 18% harder.',             apply: (m) => { m.blockMult *= 1.18; } },
+  ironwall:    { name: 'Spite Plating', line: 'Whatever strikes it bleeds for 15% of the blow.',   apply: (m) => { m.thorns = Math.max(m.thorns || 0, 0.15); } },
+  // Mender — sustain
+  mossback:    { name: 'Deep Roots',   line: 'Its mends close 15% more of the wound.',             apply: (m) => { m.healMult *= 1.15; } },
+  dewleaf:     { name: 'Lifebloom',    line: 'Every mend it gives leaves a lingering regen.',      apply: (m) => { m.mendRegen += 1; } },
+  // Booster — tempo
+  buzzline:    { name: 'Hum',          line: 'Every amp it gifts lands a stack stronger.',         apply: (m) => { m.ampBonus += 1; } },
+  tanglewing:  { name: 'Tailwind',     line: 'It comes off the line already part-charged.',        apply: (m) => { m.chargeStart += 1; } },
+  // Striker — opener vs finisher (complementary pair)
+  swiftpaw:    { name: 'Ambush',       line: 'Its first blow on an unwounded foe cuts 25% deeper.', apply: (m) => { m.opener = true; } },
+  dartwing:    { name: 'Finisher',     line: 'Hits 25% harder against anything below half HP.',    apply: (m) => { m.executioner = Math.max(m.executioner || 0, 0.25); } },
+  // Assassin — blood
+  shadefang:   { name: 'Bloodthirst',  line: 'Drains a tenth of every wound back into itself.',    apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.12; } },
+  veilclaw:    { name: 'Bloodhound',   line: 'Every kill this run permanently sharpens its blade.', apply: (m) => { m.apex = true; } },
+  // Warden — cold
+  frostwarden: { name: 'Killing Frost', line: 'Its blows land 50% harder on the frozen.',          apply: (m) => { m.shatter = true; } },
+  rimecaller:  { name: 'Deep Cold',    line: 'The ice it calls clings a round longer.',            apply: (m) => { m.freezeBonus += 1; } },
+  // Hexer — curse
+  blightcap:   { name: 'Sporehide',    line: 'Strike it and the spores strike back for 12%.',      apply: (m) => { m.thorns = Math.max(m.thorns || 0, 0.12); } },
+  hexmoth:     { name: 'Mothlight',    line: 'Its hex leaps to a second victim.',                  apply: (m) => { m.jinxSpread = true; } },
+};
+const innateFor = (id) => INNATES[id] || null;
 // ── Build identity (visibility): name a creature's build from its EQUIPPED loadout's dominant
 //    path — using the path's OWN name + tag, never invented. Honest by construction (the label
 //    can't lie: it's whatever you actually equipped). null = no build yet; 'VERSATILE' = spread
@@ -1432,6 +1473,11 @@ function treeModsFor(id, equipMap, ranksMap) {
     else if (n.ranks) { if (n.apply) n.apply(m, ranks[nid] || 1); } // ranked node: effect scales by rank
     else if (n.apply) n.apply(m);
   });
+  // INNATE (vF-CG): born-in, always-on, regardless of loadout — applied AFTER nodes so it
+  // composes with whatever's equipped. Only player units reach treeModsFor, so goldens (which
+  // build via makeUnitDef) never see this and stay byte-identical.
+  const innate = innateFor(id);
+  if (innate?.apply) innate.apply(m);
   return m;
 }
 
@@ -3367,6 +3413,14 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700 }}>cores to spend</div>
           </div>
         </div>
+        {/* INNATE — the born-in trait this creature carries into every build (not bought, can't
+            be swapped). Shown above the tree because it's the foundation the loadout builds on. */}
+        {innateFor(treeFor) && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, background: '#0c1a16', border: '1px solid #2a5a4a', borderRadius: 10, padding: '7px 12px', marginBottom: 8 }}>
+            <span style={{ fontSize: T.small, fontWeight: 900, color: '#7ee0c0', flexShrink: 0 }}>✦ {innateFor(treeFor).name}</span>
+            <span style={{ fontSize: T.micro, color: '#a8c4bc', fontWeight: 600, lineHeight: 1.35 }}>{innateFor(treeFor).line} <i style={{ color: DIM }}>· born-in, always on</i></span>
+          </div>
+        )}
         {/* Build identity — derived live from the equipped loadout (honest; can't lie) */}
         {(() => {
           const arch = deriveArchetype(c.type, equipped);
@@ -3782,6 +3836,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                       </div>
                       <div style={{ fontSize: T.small, color: on ? '#cdd8e4' : '#9a9aaa', lineHeight: 1.4, marginTop: 7 }}>{ti.role}</div>
                       <div style={{ fontSize: 9.5, fontWeight: 800, color: ti.accent, lineHeight: 1.3, marginTop: 4, letterSpacing: 0.3 }}>⮑ plays the {BUILD_LINE[c.type] || ti.nick} build</div>
+                      {/* INNATE — the per-creature differentiator (born-in, not bought). This is the
+                          line that makes THIS creature ≠ the others of its Type at a glance. */}
+                      {innateFor(c.id) && (
+                        <div style={{ fontSize: 9.5, fontWeight: 800, color: '#7ee0c0', lineHeight: 1.3, marginTop: 3, letterSpacing: 0.2 }}>
+                          ✦ {innateFor(c.id).name} <span style={{ color: '#8fa0a0', fontWeight: 600 }}>— {innateFor(c.id).line}</span>
+                        </div>
+                      )}
                     </button>
                     <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
