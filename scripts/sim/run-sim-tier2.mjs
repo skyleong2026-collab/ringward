@@ -15,44 +15,17 @@ import {
 } from '../../src/engine/combat/index.js';
 import { runBattle } from '../../src/engine/combat/engine.js';
 import { createRng } from '../../src/engine/rng.js';
+// ONE shared source with the live game (vF-CC) — no more hand-mirrored wave copies.
+import { HUNTING_GROUNDS, wavesForGround, applyRingLaw, ringLawMods } from '../../src/engine/waves.js';
 
-// ─── Wave generation (ported verbatim from SeamLab.jsx, same as Tier-1 harness) ─
-const D_HP  = (d) => 1 + 0.34 * (d - 1) - 0.017 * (d - 1) ** 2;
-const D_ATK = (d) => 1 + 0.30 * (d - 1) - 0.018 * (d - 1) ** 2;
-function foe(id, temperament, roleHp, roleAtk, depth, extra = {}, cm = 1) {
-  const hp = Math.round(roleHp * D_HP(depth) * cm);
-  return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth) * cm), ...extra };
-}
-const OUTER_RING = { id: 'outer-ring', name: 'The Crackling Outer Ring', depth: 1, boss: 'The Cinder Maw', biasIds: ['fizzpop', 'glowtail', 'cinderpaw'] };
-// All 8 rings, mirrored from SeamLab.jsx:102-109 (id/depth/boss/biasIds must stay in sync).
-const RINGS = [
-  OUTER_RING,
-  { id: 'fallen-gate', depth: 2, boss: 'The Gatebreaker',   biasIds: ['stoneward', 'ironwall'] },
-  { id: 'green-seam',  depth: 3, boss: 'The Old Grove',     biasIds: ['mossback', 'dewleaf'] },
-  { id: 'storm-wire',  depth: 4, boss: 'The Live Wire',     biasIds: ['buzzline', 'tanglewing'] },
-  { id: 'fast-trails', depth: 5, boss: 'The Blur',          biasIds: ['swiftpaw', 'dartwing'] },
-  { id: 'lightless',   depth: 6, boss: 'The Throat-Cutter', biasIds: ['shadefang', 'veilclaw'] },
-  { id: 'witherfen',   depth: 7, boss: 'The Blight-Heart',  biasIds: ['blightcap', 'hexmoth'] },
-  { id: 'frostbound',  depth: 8, boss: 'The Stillness',     biasIds: ['frostwarden', 'rimecaller'] },
-];
-// Kit-threat normalization (vF-CA): an enemy's KIT converts stats into wildly different real
-// threat (a Striker triple-hits first; a Mender mostly heals) — sim-proven to dominate the
-// depth curve. Per-Type ATK coefficients level the rings so DEPTH drives difficulty and the
-// kit drives texture. Locals only (the Tender set-piece stays fixed); Reactor=1.0 anchors
-// Ring 1 byte-identical.
-const KIT_THREAT = { Reactor: 1.0, Bulwark: 2.8, Mender: 2.4, Booster: 1.35, Striker: 0.33, Assassin: 0.34, Hexer: 1.0, Warden: 0.5 };
-function wavesForGround(g, cm = 1) {
-  const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
-  const kt = (id) => KIT_THREAT[COMBAT_CREATURES[id].type] || 1;
-  const F = (id, temp, hp, atk, extra) => foe(id, temp, hp, Math.round(atk * kt(id)), d, extra, cm);
-  return [
-    { name: 'Scouts', seed: 101, enemies: () => [F(at(0), 'Cautious', 110, 26), F(at(1), 'Cautious', 105, 26)] },
-    { name: 'The Pack', seed: 202, enemies: () => [F(at(0), 'Balanced', 175, 40), F(at(1), 'Balanced', 175, 38), F(at(2), 'Balanced', 165, 40)] },
-    { name: 'The Pack-Lord', seed: 303, enemies: () => [F(at(0), 'Greedy', 300, 50), F(at(1), 'Greedy', 220, 62)] },
-    { name: g.boss, boss: true, seed: 404, enemies: () => [F(at(0), 'Greedy', 540, 68, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 240, 24, d, { name: 'Tender' }, cm)] },
-  ];
-}
+const OUTER_RING = HUNTING_GROUNDS[0];
+const RINGS = HUNTING_GROUNDS;
 const PATCHUP = 0.18;
+// Ring laws in the sim: LAWS=0 disables (pre-law baseline); REPEAT=1 models a player who
+// reuses the same squad every run (worst case for R8 "The Cold Remembers"; default on —
+// that IS the autopilot player the laws exist to challenge).
+const LAWS_ON = process.env.LAWS !== '0';
+const REPEAT_SQUAD = process.env.REPEAT !== '0';
 
 // ─── Rarity scaling (ported from SeamLab.jsx:161-176) ───────────────────────────
 const RARITY_OF = {
@@ -162,6 +135,8 @@ async function runOne(squadIds, seed, policy, fixture = null, cm = 1, ground = O
   const types = squadIds.map((id) => COMBAT_CREATURES[id].type);
   const runMods = freshMods();
   if (fixture) fixture.apply(runMods); // §31 recut parity: a relic cut's mods, applied run-wide like a relic
+  if (LAWS_ON) ringLawMods(ground, runMods); // ring law run-mods (e.g. Witherfen: healing halved)
+  const lawCtx = { repeatIds: REPEAT_SQUAD ? new Set(squadIds) : new Set() }; // R8 "Cold Remembers" worst case
   const unitMods = squadIds.map(() => ({}));
   const unitBends = squadIds.map(() => new Set());
   const baseMaxHp = squadIds.map((id) => Math.round(makeUnitDef(id, 'Balanced').hp * rarityMult(id)));
@@ -206,6 +181,7 @@ async function runOne(squadIds, seed, policy, fixture = null, cm = 1, ground = O
     const enemies = waves[wi].enemies();
     const waveSeed = seed * 1000 + waves[wi].seed + wi * 13;
     const state = createBattleState(battleUnits, enemies, waveSeed);
+    if (LAWS_ON) applyRingLaw(state, ground, lawCtx); // the ring's LAW seeds the fresh battle (vF-CC)
     const br = await runBattle(state, { A: createAIDriver(), B: createAIDriver() });
 
     state.units.A.forEach((u, k) => { const idx = idxMap[k]; if (!u.alive || u.hp <= 0) { hp[idx] = 0; alive[idx] = false; } else { hp[idx] = u.hp; } });

@@ -32,6 +32,10 @@ import {
   COMBAT_CREATURES,
   COMBAT_ROSTER,
 } from '../engine/combat/index.js';
+import {
+  HUNTING_GROUNDS, D_HP, D_ATK, crossMult, foe, wavesForGround,
+  ringLawFor, applyRingLaw, ringLawMods,
+} from '../engine/waves.js';
 
 const ACCENT = '#e8a040';
 const CHG = '#f5a623';
@@ -104,16 +108,8 @@ const CREATURE_LORE = {
 // `depth` (1 = outer/gentle → 8 = the deep) scales the run the ring sends you on:
 // enemies are the ring's own locals, stat-scaled by depth (see wavesForGround). Outer
 // rings are an auto-able warm-up for little slag/Cores; the deep is a real wall worth more.
-const HUNTING_GROUNDS = [
-  { id: 'outer-ring',  img: '/art/rings/outer-ring.jpg',  name: 'The Crackling Outer Ring', tag: 'outer ring',     depth: 1, boss: 'The Cinder Maw',  biasIds: ['fizzpop', 'glowtail', 'cinderpaw'] },
-  { id: 'fallen-gate', img: '/art/rings/fallen-gate.jpg', name: 'The Fallen Gate',          tag: 'the ruined gate', depth: 2, boss: 'The Gatebreaker', biasIds: ['stoneward', 'ironwall'] },
-  { id: 'green-seam',  img: '/art/rings/green-seam.jpg',  name: 'The Green Seam',           tag: 'between the rings', depth: 3, boss: 'The Old Grove',  biasIds: ['mossback', 'dewleaf'] },
-  { id: 'storm-wire',  img: '/art/rings/storm-wire.jpg',  name: 'Storm-Wire Thickets',      tag: 'the storm-wire',  depth: 4, boss: 'The Live Wire',   biasIds: ['buzzline', 'tanglewing'] },
-  { id: 'fast-trails', img: '/art/rings/fast-trails.jpg', name: 'The Fast Trails',          tag: 'the narrow trails', depth: 5, boss: 'The Blur',       biasIds: ['swiftpaw', 'dartwing'] },
-  { id: 'lightless',   img: '/art/rings/lightless.jpg',   name: 'The Lightless Deep',       tag: 'past the Warden', depth: 6, boss: 'The Throat-Cutter', biasIds: ['shadefang', 'veilclaw'] },
-  { id: 'witherfen',   img: '/art/rings/witherfen.jpg',   name: 'The Witherfen',            tag: 'where the blight pools', depth: 7, boss: 'The Blight-Heart', biasIds: ['blightcap', 'hexmoth'] },
-  { id: 'frostbound',  img: '/art/rings/frostbound.jpg',  name: 'The Frostbound Deep',      tag: 'far inward, near the Drop', depth: 8, boss: 'The Stillness', biasIds: ['frostwarden', 'rimecaller'] },
-];
+// HUNTING_GROUNDS now lives in ../engine/waves.js (vF-CC) — ONE source of truth shared
+// with the balance sims, so the live game and the harness can never drift apart again.
 
 // WARD GATES — data + pure logic now live in ../data/wards.js (imported above) so the
 // gating is headlessly testable (scripts/ward-gates.mjs). The component just orchestrates.
@@ -360,44 +356,9 @@ function useViewport() {
 // CONCAVE (diminishing): the biggest per-ring jump lands EARLY, so rings 2-4 bite while
 // the depth-1 bootstrap (×1.0) and the depth-8 wall (≈×2.5 HP / ×2.2 ATK) stay put. ATK is
 // the lever that actually threatens the squad, so it's front-loaded hardest. Feel-check freely.
-const D_HP = (d) => 1 + 0.34 * (d - 1) - 0.017 * (d - 1) ** 2;  // d1 ×1.0, d3 ×1.61, d4 ×1.87, d8 ×2.55
-const D_ATK = (d) => 1 + 0.30 * (d - 1) - 0.018 * (d - 1) ** 2; // d1 ×1.0, d3 ×1.53, d4 ×1.74, d8 ×2.22
-// NG+ "crossing" (vF-BA): once you've gone THROUGH the Drop, the rings reform harder. Each
-// crossing multiplies enemy HP+ATK by +30% on top of the depth curve — an ascension dial. 0 =
-// the first climb (×1). Enemy-side only (SeamLab foes, not goldens). Feel-check freely.
-const crossMult = (crossing) => 1 + 0.30 * (crossing || 0);
-function foe(id, temperament, roleHp, roleAtk, depth, extra = {}, cm = 1) {
-  const hp = Math.round(roleHp * D_HP(depth) * cm);
-  return { ...makeUnitDef(id, temperament), hp, maxHp: hp, atk: Math.round(roleAtk * D_ATK(depth) * cm), ...extra };
-}
-// Kit-threat normalization (vF-CA, sim-calibrated): an enemy's KIT converts the same stats
-// into wildly different real threat — a Striker triple-hits and acts first, a Mender mostly
-// heals. Unnormalized, the kit DOMINATED the depth curve (sim: rings 2-3 were 100% free for
-// every comp while rings 5-8 were 0% walls even geared). These per-Type ATK coefficients
-// level the locals so DEPTH drives difficulty and the kit drives the ring's TEXTURE (rush,
-// attrition, curse, freeze-lock). Reactor=1.0 anchors Ring 1 byte-identical; the boss-wave
-// Tender is a fixed set-piece (no coefficient). Calibrated ladder (geared, greedy):
-// 98→88→89→77→50→43→34→9 — and rings now favor DIFFERENT comps (R5 rush rewards tanks 88%
-// vs 10% for greed comps; R8 freeze demands freeze-tech: Control 67% vs ~5% others).
-const KIT_THREAT = { Reactor: 1.0, Bulwark: 2.8, Mender: 2.4, Booster: 1.35, Striker: 0.33, Assassin: 0.34, Hexer: 1.0, Warden: 0.5 };
-// Generate a run's four waves from the chosen ring. Enemy IDENTITY (kit/behavior) comes
-// from the ring's locals; HP/ATK come from the wave role scaled by depth × the crossing mult.
-function wavesForGround(g, cm = 1) {
-  const d = g.depth, pool = g.biasIds, at = (i) => pool[i % pool.length];
-  const kt = (id) => KIT_THREAT[COMBAT_CREATURES[id].type] || 1;
-  const F = (id, temp, hp, atk, extra) => foe(id, temp, hp, Math.round(atk * kt(id)), d, extra, cm);
-  return [
-    { name: 'Scouts', seed: 101, blurb: `The edge of ${g.name} — a jumpy pair. Warm up, hit fast.`,
-      enemies: () => [ F(at(0), 'Cautious', 110, 26), F(at(1), 'Cautious', 105, 26) ] },
-    { name: 'The Pack', seed: 202, blurb: 'Deeper in — three of the locals, and they hit back hard.',
-      enemies: () => [ F(at(0), 'Balanced', 175, 40), F(at(1), 'Balanced', 175, 38), F(at(2), 'Balanced', 165, 40) ] },
-    { name: 'The Pack-Lord', seed: 303, blurb: 'The two meanest things in here, paired up. Break through.',
-      enemies: () => [ F(at(0), 'Greedy', 300, 50), F(at(1), 'Greedy', 220, 62) ] },
-    { name: g.boss, boss: true, seed: 404,
-      blurb: `The heart of ${g.name} — and something keeps it standing. Race it down, or cut the tender first.`,
-      enemies: () => [ F(at(0), 'Greedy', 540, 68, { name: g.boss, speed: 7 }), foe('mossback', 'Balanced', 240, 24, d, { name: 'Tender' }, cm) ] },
-  ];
-}
+// D_HP / D_ATK / crossMult / KIT_THREAT / foe / wavesForGround now live in
+// ../engine/waves.js (vF-CC) — ONE shared source with the balance sims, so the live
+// game and the harness can never drift apart. Calibration notes: RINGWARD-DEPTH-LADDER.md.
 const WAVE_COUNT = 4; // every generated run is four waves (used for progress display)
 // ── THE CROSSINGS (vF-BA NG+) — the story past the Drop. Reaching the Drop at crossing N
 // shows beat[N]; STEP THROUGH advances to crossing N+1 (rings reform harder). The mentor's
@@ -1134,6 +1095,7 @@ function loadClears() { try { return JSON.parse(localStorage.getItem(CLEARS_KEY)
 function saveClears(m) { try { localStorage.setItem(CLEARS_KEY, JSON.stringify(m)); } catch { /* best-effort */ } }
 // Your last squad — remembered so it's pre-selected every run (no re-picking each time).
 const SQUAD_KEY = '8gents_seam_squad';
+const LAST_SQUAD_KEY = '8gents_seam_lastsquad'; // the PREVIOUS run's squad — read by the R8 ring law "The Cold Remembers"
 function loadSquad() { try { const s = JSON.parse(localStorage.getItem(SQUAD_KEY) || '[]'); return Array.isArray(s) ? s.slice(0, 3) : []; } catch { return []; } }
 function saveSquad(ids) { try { localStorage.setItem(SQUAD_KEY, JSON.stringify(ids)); } catch { /* best-effort */ } }
 // The saved squad, kept to creatures you still own (a reset/uncatch can't leave a ghost).
@@ -2082,11 +2044,14 @@ function useFight(opts = {}) {
     };
   }
 
-  function begin(aDefs, bDefs, seed, mode, onComplete) {
+  function begin(aDefs, bDefs, seed, mode, onComplete, onState) {
     feedRef.current = []; setFeed([]); setPool([]); setPreviewUid(null); previewRef.current = null; setPendingSkill(null); setPopups([]); setFx({ actor: null, cast: null, bursts: {}, n: 0 });
     holdRef.current = Promise.resolve();
     onDoneRef.current = onComplete || null;
     const state = createBattleState(aDefs, bDefs, seed);
+    // Optional caller hook (vF-CC ring laws): mutate the fresh state BEFORE battle —
+    // seed statuses/charge. Goldens/WATCH/challenges never pass it → byte-identical.
+    if (onState) onState(state);
     stateRef.current = state;
     setSnap(snapshot(state));
     setPhase('idle');
@@ -2595,6 +2560,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
   const [wonStep, setWonStep] = useState(0);    // staged result reveal: 0 = payoff, 1..n = one spoil at a time, last = onward
   const [resultDetails, setResultDetails] = useState(false); // "▸ run details" expander on the result screens
+  const runGroundRef = useRef(null);            // the active run's ring — ring laws read it at each battle start
+  const repeatIdsRef = useRef(new Set());       // creatures repeated from LAST run ("The Cold Remembers")
   const [summonResults, setSummonResults] = useState(null); // [{id,rarity,isDupe,gainedCores}] — last Summon's pulls
   const [bannerId, setBannerId] = useState('wild');         // chosen Summon banner (wild | deep)
   const [caughtFrom, setCaughtFrom] = useState(null); // the ground it was drawn from (for reveal)
@@ -2980,7 +2947,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       if (ev && ev.kind === 'elite') { setPendingElite(ev); setEventOutcome(null); sfx.eliteGrowl(); setRunPhase('event'); }
       else if (ev) { setPendingEvent(ev); setEventOutcome(null); setEventStep(null); (ev.kind === 'merchant' ? sfx.merchantBell() : ev.kind === 'treasure' ? sfx.treasureChime() : sfx.upgradePick()); setRunPhase('event'); }
       else setRunPhase('upgrade');
-    });
+    }, (st) => applyRingLaw(st, runGroundRef.current, { repeatIds: repeatIdsRef.current })); // the ring's LAW seeds the fresh battle (vF-CC)
     setWaveIdx(idx);
     setRunPhase('fighting');
   }
@@ -2990,10 +2957,19 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const g = accessibleGround(ground, accessDepth); // run the chosen ring, clamped to what's unlocked
     setRunWaves(wavesForGround(g, crossMult(crossing))); setRunDepth(g.depth);
     setEnteredRing(g); sfx.ringThreshold(g.depth); // crossing the threshold — a beat + a deepening swell
+    runGroundRef.current = g; // the run's ring, for ring-law application at each battle start
+    // RING LAW bookkeeping (vF-CC): "The Cold Remembers" needs to know who you brought LAST
+    // run — read the previous squad, then record this one for next time.
+    try {
+      const lastSq = JSON.parse(localStorage.getItem(LAST_SQUAD_KEY) || '[]') || [];
+      repeatIdsRef.current = new Set(picked.filter((id) => lastSq.includes(id)));
+      localStorage.setItem(LAST_SQUAD_KEY, JSON.stringify(picked));
+    } catch { repeatIdsRef.current = new Set(); }
     farmedRef.current = g.depth <= reclaimed; // a re-clear of an already-beaten ring → auto-pick eligible
     featsAtRunStartRef.current = doneFeatIds(); // remember what's already earned, to celebrate new ones
     setRunRepeat(repeatMult(clears[g.id] || 0)); // diminishing cores for re-farming a cleared ring
     const base = perkBaseMods(owned, reclaimed, relicKit, relicCut); // perks + Holdfast boons + equipped relics set the run's opening mods
+    ringLawMods(g, base); // the ring's LAW bends the run (e.g. Witherfen: healing halved)
     const sq = picked.map((id) => ({ id, hp: maxHpOf({ id }, base), unitMods: { ...EMPTY_UNIT_MODS }, bends: [] }));
     setSquad(sq); setRunMods(base); setTaken([]); setWaveIdx(0); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setCoresRun({});
     eventsSeenRef.current = []; setPendingEvent(null); setEventOutcome(null); setEventStep(null); // fresh wayside-event pool per run
@@ -3694,6 +3670,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                         <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
                           Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
                         </div>
+                        {/* RING LAW (vF-CC) — the ring's one rule, read BEFORE you pick a squad. */}
+                        {(() => { const law = ringLawFor(sel); return law && (
+                          <div style={{ marginTop: 6, padding: '6px 9px', borderRadius: 8, background: '#16130a', border: '1px solid #4a3f1c' }}>
+                            <div style={{ fontSize: T.micro, fontWeight: 900, color: '#ffd166' }}>{law.icon} RING LAW — {law.name}</div>
+                            <div style={{ fontSize: T.micro, color: '#d8cba0', lineHeight: 1.4, marginTop: 2 }}>{law.line} <span style={{ color: '#9a8c5a', fontStyle: 'italic' }}>{law.ask}</span></div>
+                          </div>
+                        ); })()}
                       </div>
                     );
                   })()}
@@ -4541,6 +4524,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: di.color }}>ring {enteredRing.depth}/8 · {di.label}</span>
                   </div>
                   <div style={{ fontSize: T.small, color: '#bcc6d8', lineHeight: 1.55, fontStyle: 'italic', marginTop: 5 }}>{RING_INTRO[enteredRing.id]}</div>
+                  {(() => { const law = ringLawFor(enteredRing); return law && (
+                    <div style={{ fontSize: T.micro, fontWeight: 800, color: '#ffd166', marginTop: 7 }}>{law.icon} {law.name} — <span style={{ color: '#d8cba0', fontWeight: 600 }}>{law.line}</span></div>
+                  ); })()}
                 </div>
               </div>
             </div>
@@ -4553,6 +4539,9 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <div style={{ fontSize: T.head, fontWeight: 900, color: '#eee', textShadow: `0 0 14px ${ACCENT}44` }}>Pick one → {nextWave.boss ? '💀 ' : ''}{nextWave.name}</div>
           {nextWave.boss && <div style={{ fontSize: T.small, fontWeight: 800, color: '#ffb38a', marginTop: 4 }}>Final stand — choose well.</div>}
           {waveIdx > 0 && <div style={{ fontSize: T.micro, color: DIM, marginTop: 3 }}>✓ wave {waveIdx} cleared · patched +{Math.round(patchup * 100)}%</div>}
+          {(() => { const law = ringLawFor(enteredRing); return law && waveIdx > 0 && (
+            <div title={law.line} style={{ display: 'inline-block', fontSize: T.micro, fontWeight: 800, color: '#ffd166', background: '#16130a', border: '1px solid #4a3f1c', borderRadius: 999, padding: '2px 9px', marginTop: 5 }}>{law.icon} {law.name}</div>
+          ); })()}
         </div>
         <AutoToggle auto={auto} setAuto={setAuto} />
         {/* Tap an upgrade to SELECT it (highlights), then CONFIRM — so a whole-squad / AOE
