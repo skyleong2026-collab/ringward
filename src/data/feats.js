@@ -42,7 +42,7 @@ export const FEATS = [
   // ── The Gauntlet ──
   { id: 'gauntlet_1', group: 'Gauntlet', tier: 'Bronze', icon: '♾️', name: 'Into the Gauntlet',
     desc: 'Clear a Gauntlet round.', stat: 'gauntletBest', need: 1 },
-  { id: 'gauntlet_5', group: 'Gauntlet', tier: 'Silver', icon: '♾️', name: 'Warden-Breaker',
+  { id: 'gauntlet_5', group: 'Gauntlet', tier: 'Silver', icon: '♾️', name: 'Gauntlet-Holder',
     desc: 'Clear 5 Gauntlet rounds.', stat: 'gauntletBest', need: 5 },
   { id: 'gauntlet_10', group: 'Gauntlet', tier: 'Gold', icon: '♾️', name: 'Tide-Holder',
     desc: 'Clear 10 Gauntlet rounds.', stat: 'gauntletBest', need: 10 },

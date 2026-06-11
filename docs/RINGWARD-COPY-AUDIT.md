@@ -23,9 +23,10 @@ screen in the game." The failures are systemic, not scattered:
 6. **First-session routing** — the tutorial is opt-in and unsignposted; the Gauntlet reads as the
    start button; the hub (map/story/Chronicle/feats) hides behind "Holdfast."
 
-## Two standing rules (adopt permanently)
+## Three standing rules (adopt permanently)
 - **No player-required copy in `title=` only.** If a thumb can't reach it, it doesn't exist.
 - **Flavor never fibs about mechanics.** A flavor line may withhold; it may not contradict.
+- **Unknown is fine. Misleading is not.** A player can wonder what a sigil is. A player should never misunderstand what a sigil does. Apply this filter to every lore mystery: the canon table, ward-entity naming, the up/down paradox. Fix contradictions immediately; preserve deliberate mystery.
 
 ## Top undefined-at-first-contact jargon
 chip · Vent · Amp · slag ⚒ · Cores ⬡ (per-creature, copy implies shared) · carry · Keystone ·

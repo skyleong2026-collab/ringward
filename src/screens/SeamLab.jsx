@@ -837,7 +837,7 @@ const RELIC_SETS = [
   { id: 'berserker', name: 'Berserker', icon: '🔥', need: 2, desc: '+12% damage',
     members: ['r_whetfang', 'r_reckless', 'r_wrathcore', 'r_glassedge', 'r_bloodpact', 'r_frenzy'],
     apply: (m) => { m.dmgMult *= 1.12; } },
-  { id: 'warden', name: 'Warden', icon: '🛡️', need: 2, desc: '+12% max HP',
+  { id: 'warden', name: 'Stonehide', icon: '🛡️', need: 2, desc: '+12% max HP',
     members: ['r_ironwood', 'r_stoneblood', 'r_bulwark', 'r_bramble'],
     apply: (m) => { m.hpMult *= 1.12; } },
   { id: 'lifeblood', name: 'Lifeblood', icon: '🩸', need: 2, desc: '+8% lifesteal',
@@ -1373,7 +1373,7 @@ const INNATES = {
   buzzline:    { name: 'Hum',          line: 'Every amp it gifts lands a stack stronger.',         apply: (m) => { m.ampBonus += 1; } },
   tanglewing:  { name: 'Tailwind',     line: 'It comes off the line already part-charged.',        apply: (m) => { m.chargeStart += 1; } },
   // Striker — opener vs finisher (complementary pair)
-  swiftpaw:    { name: 'Ambush',       line: 'Its first blow on an unwounded foe cuts 25% deeper.', apply: (m) => { m.opener = true; } },
+  swiftpaw:    { name: 'First Pounce', line: 'Its first blow on an unwounded foe cuts 25% deeper.', apply: (m) => { m.opener = true; } },
   dartwing:    { name: 'Finisher',     line: 'Hits 25% harder against anything below half HP.',    apply: (m) => { m.executioner = Math.max(m.executioner || 0, 0.25); } },
   // Assassin — blood
   shadefang:   { name: 'Bloodthirst',  line: 'Drains a tenth of every wound back into itself.',    apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.12; } },
@@ -3475,7 +3475,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           <span style={{ fontSize: T.micro, color: DIM, fontWeight: 700, marginLeft: 'auto' }}>{slotsUsed}/{slotMax} active{slotsFull ? ' · full' : ''}{slotMax < 8 ? ' · unlock more for +slots' : ''}</span>
         </div>
         <div style={{ fontSize: T.small, color: '#cdb6ff', background: '#0c0c16', border: `1px solid ${LINE}`, borderRadius: 10, padding: '9px 12px', marginBottom: 14, lineHeight: 1.45 }}>
-          {tree.blurb} <span style={{ color: DIM }}>Unlocking is forever; you run <b style={{ color: '#9be7ff' }}>{slotMax}</b> at once (more slots as you unlock more). Tap an unlocked path to equip or bench it. <b style={{ color: '#9be7ff' }}>Refinement</b> nodes can be bought again and again. A creature swears <b style={{ color: '#ffd166' }}>one ★ keystone</b> — swapping refunds the old one ({RESPEC_FEE} ⬡ fee).</span>
+          {tree.blurb} <span style={{ color: DIM }}>Unlocking is forever; you run <b style={{ color: '#9be7ff' }}>{slotMax}</b> at once (more slots as you unlock more). Tap an unlocked path to equip or bench it. <b style={{ color: '#9be7ff' }}>Refinement</b> nodes can be bought again and again. A creature swears <b style={{ color: '#ffd166' }}>one ★ Oath</b> — swapping refunds the old one ({RESPEC_FEE} ⬡ fee).</span>
         </div>
         {/* ★ SWAP confirm — trading the sworn keystone for another. */}
         {keystoneSwap && keystoneSwap.creatureId === treeFor && (() => {
@@ -3780,7 +3780,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       ['summon', '✨', 'Summon'],
       ['forge', '⚒', 'Forge'],
       ['relics', '✦', 'Relics'],
-      ['holdfast', '🏚', 'Holdfast'],
+      ['holdfast', '🏚', '🏚 Home'],
     ];
     const tabTitle = { raid: 'Take the Approach', summon: 'Summon', forge: 'The Cracked Forge', relics: 'Relics', holdfast: 'The Holdfast' }[homeTab];
     return (
@@ -4901,7 +4901,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               name the threat + what to do, BEFORE the fight, so targeting it is a plan. */}
           {nextWave.mirror && (
             <div style={{ marginTop: 7 }}>
-              <div style={{ display: 'inline-block', fontSize: T.micro, fontWeight: 800, color: '#cdb6ff', background: '#120c1c', border: '1px solid #4a3a6a', borderRadius: 999, padding: '2px 9px' }}>⟡ {nextWave.mirror.name} · {nextWave.mirror.keystone}</div>
+              <div style={{ display: 'inline-block', fontSize: T.micro, fontWeight: 800, color: '#cdb6ff', background: '#120c1c', border: '1px solid #4a3a6a', borderRadius: 999, padding: '2px 9px' }}>⟡ {nextWave.mirror.name} · ★ Oath: {nextWave.mirror.keystone}</div>
               <div style={{ fontSize: T.micro, color: '#9a8ab8', marginTop: 3 }}>{nextWave.mirror.line} <b style={{ color: '#cdb6ff' }}>{nextWave.mirror.ask}</b></div>
             </div>
           )}

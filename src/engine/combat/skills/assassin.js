@@ -22,7 +22,7 @@ export const ASSASSIN_SKILLS = {
   // Builder — build charge and a measured strike, harder on an already-hurt target.
   mark: {
     id: 'mark',
-    name: 'Mark',
+    name: 'Stalk',
     kind: 'builder',
     blurb: '+2 charge and a measured strike — harder on a target that is already hurt.',
     targetMode: 'enemy',
