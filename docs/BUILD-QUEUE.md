@@ -69,9 +69,20 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   creature exists + a slot is free). swornOathNode reads equipped keystone per creature. Seasoning
   carried as TEXT only (no combat effect — R3 wires it). Goldens byte-identical; node-tested
   matcher across 12 squads; Playwright confirmed lit + near-miss render, no page errors.
-- [ ] **U5 · MODEL=opus · Character sheet + ⓘ InfoDot** — HANDHELD-DIRECTION.md spec: full
-  sheet from any creature card (art slot reserved for portraits), skills + ⓘ long copy
-  (reuse Spotter glossary), lore bio from roster-character-sheets.md, recipes listing.
+- [x] **U5 · MODEL=opus · Character sheet + ⓘ InfoDot** — DONE. `CharacterSheet` component
+  (module-level, prop-driven so U6's master-detail can reuse it): big sprite (battle sprite
+  scaled; `portrait` slot reserved for art instance), name/rarity/Type/nick/role, ⮑ build line,
+  scaled stats; ✦ innate; ★ sworn Oath (reads equipped keystone via swornOathNode, shows
+  node.desc or "none sworn yet"); the kit (3 skills, BUILDER/PAYOFF/WILDCARD tags + blurbs);
+  "teams it belongs to" (recipesForCreature, names the seat it fills); folk-voice field notes
+  (CREATURE_LORE rumor + where — the LIVE 17 roster, NOT the stale old-roster doc); PATHS
+  routing. Opens via a new "ⓘ SHEET" button on every squad-pick card; overlay early-return like
+  the tree, routes through to PATHS. InfoDot = existing GlossaryDot; added 12 current-vocabulary
+  glossary entries (Amp, Burn/Freeze/Poison/Vulnerability/Regen/Thorns, Cores, Sigil, Crossing,
+  Oath, Team Recipe) in the two-depth folk voice + aliases; dots wired on Oath + Team Recipe.
+  Goldens byte-identical; lint/build clean; Playwright confirmed full sheet renders for Frostward
+  (innate, Absolute Zero Oath, both teams, lore) + glossary popover opens, zero page errors.
+  Follow-on (cheap): sprinkle GlossaryDots on Amp/statuses across the battle UI now entries exist.
 - [x] **R2 · MODEL=opus · Pull-beat team reveal** — DONE. recipes.js `pullReveal(ownedMembers,
   newId)`: ownership-aware — recipes the new creature COMPLETES that the roster couldn't field
   without it (each with partner ids: "with your Frostward"), else ONE nearest-miss the new

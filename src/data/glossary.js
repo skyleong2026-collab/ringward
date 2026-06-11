@@ -283,6 +283,80 @@ export const GLOSSARY = {
     short: 'The voice in your ear.',
     long: "A voice that knows what your mentor knew. Leave it there for now.",
   },
+
+  // ── Current manual-combat vocabulary (vF — the live game) ─────────────────
+  amp: {
+    term: 'Amp',
+    cat: 'combat',
+    short: "A buff a Booster lends: the target's hits land harder for a round, then it fades.",
+    long: "A Booster's gift. Lay Amp on your hardest hitter and every blow it throws lands harder until the stack fades — one per round. Stack it, then spend the round it's hot. The Booster does no damage of its own worth speaking of; it makes someone else's count double.",
+  },
+  burn: {
+    term: 'Burn',
+    cat: 'status',
+    short: 'Fire damage over time — ticks each round until it burns out.',
+    long: "A Reactor's mark. A burning enemy loses health every round on its own, no further action needed. Stack the burns high, then an Overload lands double on anything already alight — light it twice, then blow on it.",
+  },
+  freeze: {
+    term: 'Freeze',
+    cat: 'status',
+    short: "A frozen creature skips its turn — locked out of acting.",
+    long: "A Warden's whole game. Freeze takes an enemy's turn away — it stands there, useless, while you work. Hold a threat frozen and it never gets to swing; the Killing Frost folk hit the frozen 50% harder. The cold is the cage; the rest of the squad is the knife.",
+  },
+  poison: {
+    term: 'Poison',
+    cat: 'status',
+    short: 'Stacking damage over time that ignores shields and only grows.',
+    long: "An Assassin's slow patience. Poison ticks like Burn but stacks deeper and, sworn to Plague, ignores shields and never fades — it only climbs. Against a wall that out-heals your hits, poison is the answer it can't block.",
+  },
+  vulnerability: {
+    term: 'Vulnerability',
+    cat: 'status',
+    short: 'A curse that makes a target take more from EVERY source — it stacks.',
+    long: "A Hexer's multiplier. Each stack of vulnerability means the marked enemy takes more from every blow your whole squad lands (+15% a stack). Pile it on one target, then drop everything on it at once — mark the tree, then fell it.",
+  },
+  regen: {
+    term: 'Regen',
+    cat: 'status',
+    short: 'Healing over time — an ally mends a little each round on its own.',
+    long: "A Mender's quiet work. Regen heals a bit every round without spending another action — lay a ward of it over the team and they knit themselves back up while you fight. Sworn to Evergreen, it never expires; the team is always healing.",
+  },
+  thorns: {
+    term: 'Thorns',
+    cat: 'status',
+    short: 'Reflect — whatever strikes the warded creature bleeds for part of the blow.',
+    long: "A Bulwark's spite (and a couple of innates carry it too). Thorns turn a hit back on its sender — strike the wall and you bleed for a share of what you dealt. Pile shields and reflect high enough and the enemy breaks itself on you; you barely have to swing.",
+  },
+  cores: {
+    term: 'Cores',
+    cat: 'economy',
+    short: "A creature's own growth currency — feeds ITS skill tree, not the squad's.",
+    long: "The seeds a grunling grows on. Cores are per-creature — a dupe pull melts into Cores for that exact creature, and you spend them in its PATHS to unlock nodes. They are not a shared wallet (that's slag). One creature's Cores never help another.",
+  },
+  sigil: {
+    term: 'Sigil',
+    cat: 'economy',
+    short: 'A token won by clearing a deep ring — collect enough to challenge an Apex creature.',
+    long: "The rarest creatures aren't pulled, they're beaten. Raiding their ring drips sigils toward them; gather the full set and you can challenge the Apex itself. Win, and it joins you. A sigil counts toward a creature you earn by fight, not by luck.",
+  },
+  crossing: {
+    term: 'Crossing',
+    cat: 'meta',
+    short: 'Stepping through the Drop into a harder world — Ringward’s new-game-plus.',
+    long: "When you've reclaimed the whole climb you can step through the Drop and start again, every ring stronger than before, your roster and progress carried with you. The question the game asks, re-asked at higher stakes. Each crossing tempers the world another notch.",
+  },
+  oath: {
+    term: 'Oath',
+    cat: 'progression',
+    short: "A creature's single sworn keystone — the ★ commitment at the top of one path.",
+    long: "The tier-5 ★ at a path's end is an Oath, and a creature swears only one. Lower nodes you can dabble in freely; the Oath is the build's commitment — swapping it refunds the old one for a fee. An Oath is what turns a creature into a specific way to play, and some team recipes ask for specific Oaths.",
+  },
+  recipe: {
+    term: 'Team Recipe',
+    cat: 'progression',
+    short: 'A named squad — creatures whose kits already work together, with a folk name for it.',
+    long: "Some creatures belong together — a Warden to freeze and a knife to finish, two Reactors to stack and blow the fire. A recipe is just the name for that, so 'let me try The Long Winter' replaces 'let me try... these three?' The synergy is real before any bonus; the name only helps you see it. Fielding a full recipe lights its chip at squad pick.",
+  },
 };
 
 // Map old / internal / alternate names onto the canonical entry key so a lookup
@@ -309,6 +383,15 @@ const ALIASES = {
   unit: 'grunling',
   creature: 'grunling',
   groundling: 'grunling',
+  // current-vocabulary plural / variant lookups
+  vuln: 'vulnerability',
+  vulnerable: 'vulnerability',
+  oaths: 'oath',
+  sigils: 'sigil',
+  crossings: 'crossing',
+  recipes: 'recipe',
+  'team recipe': 'recipe',
+  'team recipes': 'recipe',
 };
 
 // Normalize an arbitrary term/key into a canonical glossary key, or null.

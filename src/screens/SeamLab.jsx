@@ -22,7 +22,8 @@ import { endlessWaveSpec, endlessRoundSlag, endlessReached } from '../data/endle
 import { evalFeats, featTally, FEAT_GROUPS, TIER_COLOR } from '../data/feats.js';
 import { UPGRADES, UPGRADE_BY_ID } from '../data/upgrades.js';
 import { RELICS, RELIC_BY_ID, cutsFor, cutEffect } from '../data/relics.js';
-import { detectRecipes, memberFits, pullReveal, slotLabel } from '../data/recipes.js';
+import { detectRecipes, memberFits, pullReveal, slotLabel, recipesForCreature } from '../data/recipes.js';
+import { GlossaryDot } from '../components/GlossaryPopover.jsx';
 import {
   createBattleState,
   runBattle,
@@ -2626,6 +2627,127 @@ function RingMap({ accessDepth, selectedId, clears, onSelect }) {
   );
 }
 
+// A titled block in the character sheet (module-level so it isn't re-created each render).
+function SheetSection({ title, accent = '#9aa3b2', children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.2, color: accent, marginBottom: 7, textTransform: 'uppercase' }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+// ── CHARACTER SHEET (U5) — the full read on one creature: identity, innate, sworn ★ Oath,
+// the kit (each skill's plain one-liner), the team recipes it belongs to, and its lore. The
+// long copy for vocabulary lives behind ⓘ dots (the Spotter glossary), never in tooltips.
+// Self-contained + prop-driven so U6's landscape master-detail can drop the SAME component
+// into a right pane (one component, two shells — HANDHELD-DIRECTION.md). The big art slot
+// shows the battle sprite scaled now; a fuller `portrait` is reserved for the art instance.
+function CharacterSheet({ id, swornNodeId, coresBal = 0, hasTree = false, narrow = true, onClose, onOpenTree }) {
+  const c = COMBAT_CREATURES[id];
+  if (!c) return null;
+  const ti = TYPE_INFO[c.type];
+  const rar = rarityOf(id); const rinfo = RARITY_INFO[rar]; const tm = rinfo.mult;
+  const inn = innateFor(id);
+  const oath = swornNodeId ? NODE_BY_ID[swornNodeId] : null;
+  const skills = (c.skillIds || []).map((sid) => getSkill(sid)).filter(Boolean);
+  const teams = recipesForCreature(id, c.type);
+  const lore = CREATURE_LORE[id];
+  const KIND = { builder: { label: 'BUILDER', color: '#9be7ff' }, payoff: { label: 'PAYOFF', color: ACCENT }, wildcard: { label: 'WILDCARD', color: '#cba6ff' } };
+  // Which seat this creature fills in a given recipe — for the "teams" list.
+  const seatIn = (r) => {
+    const s = r.slots.find((sl) => sl.c === id || (sl.oneOf && sl.oneOf.includes(id)) || sl.t === c.type);
+    return s ? slotLabel(s) : c.type;
+  };
+  return (
+    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+      <button onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 10, border: `1px solid ${LINE}`, background: PANEL, color: '#ddd', fontWeight: 800, fontSize: T.small, cursor: 'pointer', marginBottom: 12 }}>← back</button>
+
+      {/* Identity header — big art, name, rarity, Type, role */}
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 16 }}>
+        <div style={{ flexShrink: 0, background: `radial-gradient(circle at 50% 40%, ${ti.accent}22, #0c0c14)`, borderRadius: 14, border: `1px solid ${ti.accent}44`, padding: 6 }}>
+          <Sprite spriteId={c.spriteId} color={ti.accent} glyph={ti.glyph} anim="idle" size={narrow ? 88 : 116} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: T.head, fontWeight: 900, color: ti.accent }}>{c.name}</span>
+            <span style={{ fontSize: T.small, fontWeight: 900, color: rinfo.color }} title={rar}>{rinfo.pips}</span>
+          </div>
+          <div style={{ fontSize: T.small, fontWeight: 800, color: '#cfd6e2', marginTop: 2 }}>{ti.glyph} {c.type} <span style={{ color: DIM, fontWeight: 600 }}>· {ti.nick} · {rar}</span></div>
+          <div style={{ fontSize: T.small, color: '#9aa3b2', lineHeight: 1.4, marginTop: 5 }}>{ti.role}</div>
+          <div style={{ fontSize: 9.5, fontWeight: 800, color: ti.accent, marginTop: 5, letterSpacing: 0.3 }}>⮑ plays the {BUILD_LINE[c.type] || ti.nick} build</div>
+          <div style={{ fontSize: T.micro, color: DIM, marginTop: 6 }}>HP {Math.round(c.hp * tm)} · ATK {Math.round(c.atk * tm)} · SPD {c.speed}{tm > 1 && <span style={{ color: rinfo.color, fontWeight: 800 }}> · ×{tm.toFixed(2)}</span>}</div>
+        </div>
+      </div>
+
+      {/* Innate — born-in, always on */}
+      {inn && (
+        <SheetSection title="✦ Innate — born in, always on" accent="#7ee0c0">
+          <div style={{ background: '#0a1c16', border: '1px solid #2a5040', borderRadius: 9, padding: '9px 12px' }}>
+            <div style={{ fontSize: T.small, fontWeight: 900, color: '#7ee0c0' }}>{inn.name}</div>
+            <div style={{ fontSize: T.micro, color: '#9fb4ad', lineHeight: 1.45, marginTop: 2 }}>{inn.line}</div>
+          </div>
+        </SheetSection>
+      )}
+
+      {/* Sworn ★ Oath — one per creature, the build's commitment */}
+      <SheetSection title={<>★ Sworn Oath <GlossaryDot term="Oath" /></>} accent="#ffd166">
+        {oath ? (
+          <div style={{ background: 'linear-gradient(180deg,#1c1810,#13110a)', border: '1px solid #6a5a2a', borderRadius: 9, padding: '9px 12px' }}>
+            <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffe08a' }}>★ {oath.name}</div>
+            <div style={{ fontSize: T.micro, color: '#c9b98a', lineHeight: 1.45, marginTop: 2 }}>{oath.desc}</div>
+          </div>
+        ) : (
+          <div style={{ fontSize: T.micro, color: DIM, fontStyle: 'italic' }}>No Oath sworn yet — the ★ at the end of a path in PATHS.</div>
+        )}
+      </SheetSection>
+
+      {/* The kit — three skills, each plain one-liner */}
+      <SheetSection title="The kit">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {skills.map((sk) => { const k = KIND[sk.kind] || { label: (sk.kind || '').toUpperCase(), color: DIM }; return (
+            <div key={sk.id} style={{ background: PANEL, border: `1px solid ${LINE}`, borderRadius: 9, padding: '8px 11px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ fontSize: T.small, fontWeight: 900, color: '#e6e6ef' }}>{sk.name}</span>
+                <span style={{ fontSize: 8.5, fontWeight: 900, letterSpacing: 0.6, color: k.color, border: `1px solid ${k.color}66`, borderRadius: 6, padding: '1px 5px' }}>{k.label}</span>
+              </div>
+              <div style={{ fontSize: T.micro, color: '#9aa3b2', lineHeight: 1.45, marginTop: 3 }}>{sk.blurb}</div>
+            </div>
+          ); })}
+        </div>
+      </SheetSection>
+
+      {/* Teams it belongs to — the recipe lane (R1) */}
+      {teams.length > 0 && (
+        <SheetSection title={<>Teams it belongs to <GlossaryDot term="Team Recipe" /></>} accent="#ffd166">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {teams.map((r) => (
+              <div key={r.id} title={r.how} style={{ background: '#13110a', border: '1px dashed #6a5a2a', borderRadius: 9, padding: '7px 11px' }}>
+                <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffe08a' }}>{r.icon} {r.name}{r.tier === 'sworn' && <span style={{ fontSize: 8.5, color: '#cdb6ff', fontWeight: 800, marginLeft: 6 }}>★ sworn</span>}</div>
+                <div style={{ fontSize: T.micro, color: '#c9b98a', fontStyle: 'italic', marginTop: 1 }}>{r.line} <span style={{ color: DIM, fontStyle: 'normal' }}>— as {seatIn(r)}</span></div>
+              </div>
+            ))}
+          </div>
+        </SheetSection>
+      )}
+
+      {/* Lore — folk-voice fiction (CREATURE_LORE rumor) */}
+      {lore && (
+        <SheetSection title="Field notes" accent="#9a8fb0">
+          <div style={{ fontSize: T.small, color: '#bcc3d0', lineHeight: 1.55, fontStyle: 'italic' }}>“{lore.rumor}”</div>
+          {lore.where && <div style={{ fontSize: T.micro, color: DIM, marginTop: 4 }}>Said to roam {lore.where}.</div>}
+        </SheetSection>
+      )}
+
+      {/* Through to PATHS */}
+      <button onClick={() => onOpenTree?.(id)} disabled={!hasTree}
+        style={{ width: '100%', marginTop: 4, padding: '12px 0', borderRadius: 11, border: `1px solid ${hasTree ? '#2a4a5a' : LINE}`, background: hasTree ? '#101a22' : '#0c0c14', color: hasTree ? '#9be7ff' : DIM, fontSize: T.body, fontWeight: 900, letterSpacing: 0.5, cursor: hasTree ? 'pointer' : 'default' }}>
+        🌳 PATHS{coresBal > 0 ? ` · ${coresBal} ⬡ to spend` : ''}
+      </button>
+    </div>
+  );
+}
+
 // ── RUN MODE — squad pick → (upgrade → wave) ×3 → boss, HP carries, win or wipe. ──
 function RunMode({ narrow, slag = 0, onSlag }) {
   const [draftCoachSeen, setDraftCoachSeen] = useState(() => !!localStorage.getItem('ringward_draft_seen'));
@@ -2720,6 +2842,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [treeEquip, setTreeEquip] = useState(loadEquip); // {creatureId: [nodeId]} equipped loadout
   const [treeRanks, setTreeRanks] = useState(loadRanks); // {creatureId: {nodeId: rank}} for Refinement
   const [treeFor, setTreeFor] = useState(null); // creatureId whose skill tree is open (overlay)
+  const [sheetFor, setSheetFor] = useState(null); // creatureId whose character sheet is open (overlay)
   const [keystoneSwap, setKeystoneSwap] = useState(null); // {creatureId, from, to} — pending ★ swap awaiting confirm
   const [coresRun, setCoresRun] = useState({}); // {creatureId: Cores earned THIS run} for recap
   const [auto, setAutoState] = useState(loadAuto); // AUTO: let the AI fight your squad
@@ -3389,7 +3512,22 @@ function RunMode({ narrow, slag = 0, onSlag }) {
     const bestMult = results.reduce((m, r) => Math.max(m, RARITY_INFO[r.rarity].mult), 0);
     if (bestMult >= RARITY_INFO.Legendary.mult) setTimeout(() => sfx.caughtCreature(), 200); else sfx.upgradePick();
   }
-  function newRun() { fight.reset(); setRunPhase('pick'); setEndless(false); setEndlessResult(null); setEndlessRound(0); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setCoresRun({}); setStoneNow(null); }
+  function newRun() { fight.reset(); setRunPhase('pick'); setEndless(false); setEndlessResult(null); setEndlessRound(0); setPicked(savedSquadIn(stable)); setSquad([]); setWaveIdx(0); setRunMods({ ...EMPTY_MODS }); setTaken([]); setOffer([]); setStats({ dmg: 0, biggest: 0, waves: 0 }); setEarned(0); setPullNow(null); setCaughtFrom(null); setSigilGain(null); setUnlockedNow(null); setWardBlock(null); setWardSolvedNow(null); setHoldfastNow(null); setEnteredRing(null); setPendingEvent(null); setPendingElite(null); setEventOutcome(null); setEventStep(null); setRelicChoices([]); setRelicDrop(null); setChallenge(null); setPendingUpgrade(null); setTargetChoice(null); setUpgradeChoice(null); setTreeFor(null); setSheetFor(null); setCoresRun({}); setStoneNow(null); }
+
+  // ── Character sheet overlay (U5) — the full read on one creature; routes to PATHS. ──
+  if (sheetFor) {
+    return (
+      <CharacterSheet
+        id={sheetFor}
+        swornNodeId={swornOathNode(sheetFor, treeEquip)}
+        coresBal={cores[sheetFor] || 0}
+        hasTree={!!treeForCreature(sheetFor)}
+        narrow={narrow}
+        onClose={() => setSheetFor(null)}
+        onOpenTree={(id) => { setSheetFor(null); setTreeFor(id); }}
+      />
+    );
+  }
 
   // ── Skill tree overlay — a creature's permanent paths (fog-of-war reveal) ──
   if (treeFor) {
@@ -3892,12 +4030,18 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                         </div>
                       )}
                     </button>
-                    <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
-                        background: cBal > 0 ? '#101a22' : '#0c0c14', border: `1px solid ${cBal > 0 ? '#2a4a5a' : LINE}`, opacity: hasTree ? 1 : 0.4 }}>
-                      <span style={{ fontSize: T.small, fontWeight: 900, color: hasTree ? '#9be7ff' : DIM }}>🌳 PATHS</span>
-                      {hasTree && <span style={{ fontSize: T.micro, fontWeight: 800, color: cBal > 0 ? '#9be7ff' : DIM }}>{cBal} ⬡{cBal > 0 ? ' to spend' : ''}</span>}
-                    </button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setSheetFor(c.id)}
+                        style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 12px', borderRadius: 9, cursor: 'pointer', background: '#0c0c14', border: `1px solid ${LINE}` }}>
+                        <span style={{ fontSize: T.small, fontWeight: 900, color: '#cfd6e2' }}>ⓘ SHEET</span>
+                      </button>
+                      <button onClick={() => setTreeFor(c.id)} disabled={!hasTree}
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', borderRadius: 9, cursor: hasTree ? 'pointer' : 'default',
+                          background: cBal > 0 ? '#101a22' : '#0c0c14', border: `1px solid ${cBal > 0 ? '#2a4a5a' : LINE}`, opacity: hasTree ? 1 : 0.4 }}>
+                        <span style={{ fontSize: T.small, fontWeight: 900, color: hasTree ? '#9be7ff' : DIM }}>🌳 PATHS</span>
+                        {hasTree && <span style={{ fontSize: T.micro, fontWeight: 800, color: cBal > 0 ? '#9be7ff' : DIM }}>{cBal} ⬡{cBal > 0 ? ' to spend' : ''}</span>}
+                      </button>
+                    </div>
                   </div>
                 );
               })}
