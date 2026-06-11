@@ -1,8 +1,12 @@
-# Ringward — Mender & Bulwark Manual Verbs (design proposal)
-*2026-06-10. **PROPOSAL — AWAITING SKY'S CALL.** The kit design pass the manual-verb audit
-(`RINGWARD-MANUAL-VERB-AUDIT.md` §5–6) queued. Designed by a Fable agent (claude-fable-5);
-channel-audited line-by-line against the engine by Opus — every mechanism named below exists
-in the code today (refs verified 2026-06-10). Nothing here is built.*
+# Ringward — Mender & Bulwark Manual Verbs (design → BUILT)
+*2026-06-10. **✅ BUILT & VERIFIED** (Opus implementation; design by a Fable agent, claude-fable-5).
+The kit design pass the manual-verb audit (`RINGWARD-MANUAL-VERB-AUDIT.md` §5–6) queued. Every
+mechanism was channel-audited against the engine before building. Shipped exactly as specced:
+`allyAim` flag on mend/brace (targetMode stays `'enemy'`, so the AI path is provably untouched),
+ally-tap routes the payload, chip falls to the lowest-HP enemy. Goldens byte-identical
+(manual-golden-mender 665795899 + -bulwark 2406512973 unchanged); Playwright confirmed both
+verbs live — aimed Mend on a full-HP ally landed as an overheal plate while the chip hit the
+lowest-HP enemy ("Mend: 5 → Glowtail"); zero page errors. NOT deployed; not version-cut.*
 
 ---
 

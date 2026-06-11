@@ -123,6 +123,14 @@ and Bulwark as true mechanical gaps.
 > the ASSASSIN dial). Verified live: Playwright manual fight, all three cues asserted, zero page errors.
 > Re-judge Warden/Striker/Booster under these cues before opening their kits.
 
+> ✅ **MENDER + BULWARK FIXED (2026-06-10).** Both flat kits got the same verb — *"the builder goes
+> where you point it"*: tap an ally on Mend/Brace to route the heal/wall to them (chip falls to the
+> lowest-HP enemy), tap an enemy for the old behavior. Lives on the always-legal builder, so it
+> exists from turn one (clears the §2 trap). Pure routing — zero new channels/dials, goldens
+> byte-identical. Full design + verification: `docs/RINGWARD-KIT-VERBS-DESIGN.md`. Booster remains
+> the one flagged kit not yet addressed (its inputs are already visible; re-judge it under the new
+> legibility cues + these verbs before deciding it needs surgery).
+
 ## 6. Recommendation
 - **Strong, ship-as-is:** Reactor, Assassin, Hexer (with a carry). These three already deliver "a decision
   only a human makes well." Don't touch them.

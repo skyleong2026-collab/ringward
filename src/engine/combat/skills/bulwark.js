@@ -1,5 +1,5 @@
 import { BULWARK } from '../dials.js';
-import { alliesOf } from '../state.js';
+import { alliesOf, enemiesOf } from '../state.js';
 import { dealDamage, addBlock, applyRegen, seedReflect, applyVuln } from './combatMath.js';
 
 // The most-wounded living ally (by HP fraction) — the natural cover target.
@@ -16,15 +16,20 @@ export const BULWARK_SKILLS = {
     id: 'brace',
     name: 'Brace',
     kind: 'builder',
-    blurb: 'Dig in: +2 charge, raise a shield on yourself, and chip the target.',
+    blurb: 'Set the wall where you point (yourself by default), +2 charge, and chip.',
     targetMode: 'enemy',
+    allyAim: true, // "Move the wall": a human can tap an ally to place the shield (UI-only flag)
     canUse: () => true,
     apply(actor, [target], state) {
       const gain = BULWARK.brace.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      // "Aegis Reflex" upgrade extends the self-shield to the whole line. Opt-in —
-      // with no mod the recipient list is just [actor], byte-identical to before.
-      const recipients = (actor.mods?.braceTeam && state) ? alliesOf(state, actor) : [actor];
+      // "Move the wall" (manual verb): a side-A human can tap an ALLY to set the wall in
+      // front of THEM (it MOVES — the Bulwark doesn't also keep one) ahead of a telegraphed
+      // hit; the chip then falls to the lowest-HP enemy. "Aegis Reflex" (braceTeam) covers
+      // the whole line, so it absorbs the choice. The AI never targets an ally, so the
+      // dig-in path — the recipient list [actor] — stays byte-identical in every transcript.
+      const aimedAlly = !!target && target.side === actor.side && actor.side === 'A';
+      const recipients = (actor.mods?.braceTeam && state) ? alliesOf(state, actor) : (aimedAlly ? [target] : [actor]);
       const shields = recipients.map((a) => addBlock(a, BULWARK.brace.blockGain, actor));
       recipients.forEach((a) => seedReflect(a, actor)); // RETRIBUTION: shielded allies counter
       // "Intercept" (GUARDIAN): also slam cover onto the most-wounded ally — take the blow.
@@ -34,13 +39,17 @@ export const BULWARK_SKILLS = {
       }
       // "Iron Bastion" upgrade: Brace also seeds regen on everyone it shields.
       const regens = (actor.mods?.braceRegen) ? recipients.map((a) => applyRegen(a, 1)) : [];
+      // Chip the tapped enemy normally; when the wall was aimed at an ally, chip the
+      // lowest-HP enemy instead, so a placed wall is never a dead turn.
+      let chipTarget = target;
+      if (aimedAlly) { const foes = enemiesOf(state, actor); chipTarget = foes.length ? foes.reduce((w, e) => (e.hp < w.hp ? e : w), foes[0]) : null; }
       // "Heavy Hold" (RETRIBUTION): the chip bites harder the more block you're holding.
       const heavy = actor.mods?.heavyHold ? (1 + Math.min(1, (actor.statuses.block || 0) / 200)) : 1;
-      const hits = target ? [dealDamage(target, actor.atk * BULWARK.brace.chipMult * heavy, actor)] : [];
-      // "Anvil Mark" (prototype, vF-?): Brace also MARKS the target with vulnerability so the
+      const hits = chipTarget ? [dealDamage(chipTarget, actor.atk * BULWARK.brace.chipMult * heavy, actor)] : [];
+      // "Anvil Mark" (prototype, vF-?): Brace also MARKS the chipped enemy with vulnerability so the
       // carries hit it harder — the tank contributes TEMPO, not just defense. Opt-in via
       // mods.braceMark (stack count); 0/undefined = byte-identical, every golden untouched.
-      if (actor.mods?.braceMark && target) applyVuln(target, actor.mods.braceMark);
+      if (actor.mods?.braceMark && chipTarget) applyVuln(chipTarget, actor.mods.braceMark);
       return { hits, chargeGained: gain, shields, regens };
     },
   },

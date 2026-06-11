@@ -47,13 +47,19 @@ export const MENDER_SKILLS = {
     id: 'mend',
     name: 'Mend',
     kind: 'builder',
-    blurb: '+2 charge, trickle a heal to your most-hurt ally, and chip the target.',
+    blurb: '+2 charge, put a heal where you point it (most-hurt ally by default), and chip.',
     targetMode: 'enemy',
+    allyAim: true, // "Point the mending": a human can tap an ally to route the heal (UI-only flag)
     canUse: () => true,
     apply(actor, [target], state) {
       const gain = MENDER.mend.chargeGain;
       actor.charge = Math.min(actor.maxCharge, actor.charge + gain);
-      const wounded = mostWounded(actor, state);
+      // "Point the mending" (manual verb): a side-A human can tap an ALLY to route the
+      // heal to THEM instead of the auto-pick most-wounded; the chip then falls to the
+      // lowest-HP enemy (same rule as the support tick, engine.js). The AI never targets
+      // an ally — its doctrine selectors return enemies — so every transcript is untouched.
+      const aimedAlly = !!target && target.side === actor.side && actor.side === 'A';
+      const wounded = aimedAlly ? target : mostWounded(actor, state);
       const heals = [mendHeal(wounded, MENDER.mend.healNow, actor)];
       // "Lifebond" keystone: you share in the mending — patch yourself for half of it.
       if (actor.mods?.lifebond && wounded !== actor) heals.push(mendHeal(actor, Math.round(MENDER.mend.healNow / 2), actor));
@@ -68,8 +74,12 @@ export const MENDER_SKILLS = {
       if (actor.mods?.cleanse) stripOneDebuff(wounded);
       // "Sanctuary": a healthy ally (>80%) is gifted amp instead of overheal.
       if (actor.mods?.sanctuary && wounded.hp / wounded.maxHp > 0.8) applyAmp(wounded, 1, actor);
+      // Chip falls on the tapped enemy normally; when the heal was aimed at an ally the
+      // chip falls on the lowest-HP living enemy instead, so a placed heal is never a dead turn.
+      let chipTarget = target;
+      if (aimedAlly) { const foes = enemiesOf(state, actor); chipTarget = foes.length ? foes.reduce((w, e) => (e.hp < w.hp ? e : w), foes[0]) : null; }
       // "Symbiosis" (VERDANT): your mending also chips the enemy line.
-      const hits = target ? [dealDamage(target, actor.atk * MENDER.mend.chipMult, actor)] : [];
+      const hits = chipTarget ? [dealDamage(chipTarget, actor.atk * MENDER.mend.chipMult, actor)] : [];
       if (actor.mods?.symbiosis && state) enemiesOf(state, actor).forEach((e) => hits.push(dealDamage(e, actor.atk * 0.2, actor)));
       return { hits, heals, regens, chargeGained: gain };
     },
