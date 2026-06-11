@@ -22,6 +22,7 @@ import { endlessWaveSpec, endlessRoundSlag, endlessReached } from '../data/endle
 import { evalFeats, featTally, FEAT_GROUPS, TIER_COLOR } from '../data/feats.js';
 import { UPGRADES, UPGRADE_BY_ID } from '../data/upgrades.js';
 import { RELICS, RELIC_BY_ID, cutsFor, cutEffect } from '../data/relics.js';
+import { detectRecipes, memberFits } from '../data/recipes.js';
 import {
   createBattleState,
   runBattle,
@@ -1346,6 +1347,11 @@ Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => {
 const NODE_BY_ID = {};
 Object.values(TYPE_TREES).forEach((t) => t.paths.forEach((p) => p.nodes.forEach((n) => { NODE_BY_ID[n.id] = { ...n, pathId: p.id }; })));
 const treeForCreature = (id) => TYPE_TREES[COMBAT_CREATURES[id]?.type] ?? null;
+// The ★ Oath a creature has sworn = the one keystone node in its EQUIPPED loadout (vF-CF
+// allows only one). Feeds Team Recipe detection (sworn recipes key on it). null = unsworn.
+const swornOathNode = (id, equipMap) => (equipMap?.[id] || []).find((nid) => NODE_BY_ID[nid]?.keystone) || null;
+// A creature → the { id, type, oath } member shape the recipe matcher reads.
+const recipeMember = (id, equipMap) => ({ id, type: COMBAT_CREATURES[id]?.type, oath: swornOathNode(id, equipMap) });
 
 // ── INNATES (vF-CG) — one born-in quirk per CREATURE, so a creature is distinct BEFORE any
 //    cores are spent. The collection unit shifts from Type → Creature: a second Reactor is no
@@ -3896,6 +3902,47 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 );
               })}
             </div>
+            {/* ── TEAM RECIPES (R1) — name the squad you're building. Lit when your picks cook
+                a recipe; an actionable near-miss when one bench creature would finish it. The
+                synergy is REAL before any seasoning — the chip just names what the kits do. ── */}
+            {picked.length >= 2 && (() => {
+              const equip = treeEquip;
+              const pickedMembers = picked.map((id) => recipeMember(id, equip));
+              const { lit, near } = detectRecipes(pickedMembers);
+              // Turn near-misses into "you have the piece" prompts: only show a near-miss when a
+              // creature you OWN (but haven't picked) would complete it, and you have a slot free.
+              const benchIds = stable.filter((id) => !picked.includes(id));
+              const actionable = picked.length < 3
+                ? near.map((n) => {
+                    const fit = benchIds.map((id) => recipeMember(id, equip)).find((m) => memberFits(m, n.missing));
+                    return fit ? { recipe: n.recipe, addId: fit.id } : null;
+                  }).filter(Boolean).slice(0, 2)
+                : [];
+              if (!lit.length && !actionable.length) return null;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                  {lit.map((r) => (
+                    <div key={r.id} title={r.how} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 10,
+                      background: 'linear-gradient(180deg,#1c1810,#13110a)', border: '1px solid #6a5a2a', boxShadow: '0 0 14px #6a5a2a33' }}>
+                      <span style={{ fontSize: 17, lineHeight: 1 }}>{r.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffd166', letterSpacing: 0.3 }}>🍳 {r.name}{r.tier === 'sworn' && <span style={{ fontSize: 9, color: '#cdb6ff', fontWeight: 800, marginLeft: 6 }}>★ sworn</span>}</div>
+                        <div style={{ fontSize: T.micro, color: '#c9b98a', fontStyle: 'italic', marginTop: 1 }}>{r.line}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {actionable.map(({ recipe, addId }) => (
+                    <div key={recipe.id} title={recipe.how} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', borderRadius: 10,
+                      background: '#101019', border: `1px dashed ${LINE}` }}>
+                      <span style={{ fontSize: 14, lineHeight: 1, opacity: 0.5 }}>{recipe.icon}</span>
+                      <div style={{ fontSize: T.micro, color: '#9a9aac', lineHeight: 1.4 }}>
+                        one short of <b style={{ color: '#cbb98a' }}>{recipe.name}</b> — add <button onClick={() => toggle(addId)} style={{ display: 'inline', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: '#9be7ff', fontWeight: 800, fontSize: T.micro, textDecoration: 'underline' }}>{COMBAT_CREATURES[addId].name}</button> to finish it.
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             {/* ── THE GAUNTLET — endless survival end-game; enter with the picked squad. ── */}
             {(() => {
               const gauntletReady = picked.length >= 2 && reclaimed >= 1;

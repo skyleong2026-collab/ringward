@@ -61,9 +61,14 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   reclaimed≥1 ("opens after your first ring"). First-draft coach line "Before each fight, take
   one boon — yours for this climb only" (one-time, dismissed on first confirm). Loss screen: "⚒
   N banked — the Forge makes it permanent" when earned>0. Goldens green, lint/build clean.
-- [ ] **R1 · MODEL=sonnet · Team recipes: data + squad-pick chips** — src/data/recipes.js
-  (shared game+sim) with the v1 recipe book (RINGWARD-COLLECTION-ENGINE.md), detection,
-  lit/near-miss chips at squad pick. Display only — NO seasoning effects in this slice.
+- [x] **R1 · MODEL=sonnet · Team recipes: data + squad-pick chips** — DONE (Opus, unblocks the
+  R-lane). src/data/recipes.js: 11-recipe book v1, slot kinds (type/creature/oneOf/any/oath),
+  backtracking matcher (detectRecipes → {lit, near}, memberFits, recipesForCreature, OATH_NODE).
+  Squad-pick: lit 🍳 chips (name + folk line, ⓘ in title) + actionable near-miss ("one short of
+  X — add <bench creature> to finish it", tappable, capped 2, only when a SLOT-fitting bench
+  creature exists + a slot is free). swornOathNode reads equipped keystone per creature. Seasoning
+  carried as TEXT only (no combat effect — R3 wires it). Goldens byte-identical; node-tested
+  matcher across 12 squads; Playwright confirmed lit + near-miss render, no page errors.
 - [ ] **U5 · MODEL=opus · Character sheet + ⓘ InfoDot** — HANDHELD-DIRECTION.md spec: full
   sheet from any creature card (art slot reserved for portraits), skills + ⓘ long copy
   (reuse Spotter glossary), lore bio from roster-character-sheets.md, recipes listing.
