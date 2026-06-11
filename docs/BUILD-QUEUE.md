@@ -39,5 +39,38 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   Verified: `--depths` byte-identical, `--parity` all 29 win-rates identical (only cosmetic labels
   changed), goldens green, lint/build clean, Playwright confirms relics/forge render.
 
-NOT in this queue (needs Sky or attended judgment): PixelLab 8-stone batch (spends generations;
-art-direction calls), carrier/R3 re-tuning (gated on Sky's playtest), audio, anything Fable-tier.
+## Round 2 queue (2026-06-10 evening — specs in docs/RINGWARD-COPY-AUDIT.md and
+## docs/RINGWARD-COLLECTION-ENGINE.md; renames + copy flow approved by Sky)
+
+- [ ] **U1 · MODEL=sonnet · Copy honesty + jargon pass** — apply the U1 rewrite table in
+  RINGWARD-COPY-AUDIT.md (~15 entries: kill "chip", ONE cost vocabulary, Execute states
+  ×2.5@45%, Amp defined, "The Watch" matches its apply, ward-gate Warden→Bulwark factual fix,
+  summon rates sum to 100, typos, Apex Quarry explained, minors batch). Canon-table lines are
+  NOT in scope (await Sky). Goldens key on skill.id — verify byte-identical anyway.
+- [ ] **U2 · MODEL=sonnet · Approved renames** — U2 spec: relic set Warden→Stonehide; tree
+  tier-5 "keystone"→★ Oath (UI copy only, ids stay); tab Holdfast→🏚 Home; innate Ambush→First
+  Pounce; Assassin Mark→Stalk (name only); feat Warden-Breaker→Gauntlet-Holder.
+- [ ] **U3 · MODEL=sonnet · Battle skill descriptions + legend** — U3 spec: visible blurb line
+  on move buttons, "needs ⚡⚡" on disabled spenders, first-run ⚡▲/⚡▼ caption, de-tooltip
+  recut/salvage panels.
+- [ ] **U4 · MODEL=sonnet · First-session routing** — U4 spec: fresh save lands on LEARN;
+  Gauntlet gated until first clear; one-time draft coach line; loss screen Forge routing line.
+- [ ] **R1 · MODEL=sonnet · Team recipes: data + squad-pick chips** — src/data/recipes.js
+  (shared game+sim) with the v1 recipe book (RINGWARD-COLLECTION-ENGINE.md), detection,
+  lit/near-miss chips at squad pick. Display only — NO seasoning effects in this slice.
+- [ ] **U5 · MODEL=opus · Character sheet + ⓘ InfoDot** — HANDHELD-DIRECTION.md spec: full
+  sheet from any creature card (art slot reserved for portraits), skills + ⓘ long copy
+  (reuse Spotter glossary), lore bio from roster-character-sheets.md, recipes listing.
+- [ ] **R2 · MODEL=opus · Pull-beat team reveal** — owned-roster recipe computation in the
+  staged reveal: "NEW TEAM POSSIBLE" beat + nearest-miss chase pointer.
+- [ ] **R3 · MODEL=opus · Recipe seasoning + sim sweep** — run-layer mods via perkBaseMods;
+  PRUNS=200 GEAR=1 depth sweep before/after; ladder stays a ladder (20–90 geared band).
+- [ ] **U6 · MODEL=opus · Landscape battle prototype** — 3-pane FightView at landscape widths
+  (extends narrow branches ~SeamLab:2326), viewport meta. Menus master-detail NOT in scope.
+- [ ] **R4 · MODEL=sonnet · Law recipe-pointers + recipe feats** — threshold copy naming the
+  answering recipe; "cook the book" feat group.
+
+NOT in this queue (needs Sky or attended judgment): canon copy table (RINGWARD-COPY-AUDIT.md,
+awaiting his checkmarks), per-creature attack-VFX signature table (Fable+Sky pass), portrait
+art (art instance + PixelLab budget), R5 creature-18+/Apex recipe authoring (Fable), PixelLab
+8-stone batch, carrier/R3 re-tuning (gated on Sky's playtest), audio.
