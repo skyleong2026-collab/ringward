@@ -94,18 +94,18 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   family, zero page errors). NOTE: the auto-win Playwright harness was too flaky/slow to land an
   RNG pull in time — reveal logic instead proven by the node suite + clean render of the shared
   module; recommend Sky eyeball one live pull.
-- [ ] **R3 · MODEL=opus · Recipe seasoning + sim sweep** — run-layer mods via perkBaseMods;
-  PRUNS=200 GEAR=1 depth sweep before/after; ladder stays a ladder (20–90 geared band).
-  ⚠ DEFERRED from the overnight run (2026-06-11, Opus) — wants an attended session, by design:
-  (1) only 4 of 11 seasonings map to EXISTING squad mods (executeWindow, extraHits, chargeStart,
-  burnBonus); the other 7 (shatter, thorns, vulnDecay, blitzFirst, poison, regen, reflectCap)
-  need NEW mod reads in src/engine/combat/* — deep, golden-risky, game↔sim drift-prone. (2) It's
-  balance-touching and the CLAUDE.md gate says don't re-tune the ring ladder before your R3
-  manual playtest. (3) The design doc builds in a tuning loop (halve seasonings if a ring leaves
-  the 20–90 band) that wants you in the loop. Recommend: do it attended after the playtest, with
-  the report-don't-retune discipline (implement → goldens green + sweep in-band → commit; if any
-  ring drifts, stop and decide together). Recipe `season` fields are already authored in
-  recipes.js as text, ready to wire.
+- [~] **R3 · MODEL=opus · Recipe seasoning + sim sweep** — BUILT ON BRANCH `r3-recipe-seasoning`
+  (commit 461f3c7), NOT merged — awaits Sky's tuning call (the gate reserves it). Full Layer-2
+  seasoning wired: each recipe's `season.apply(m)`, ONE active per squad, game (perkBaseMods ×3) +
+  sim mirror (run-sim-tier2, same recipes.js → no drift). 9 reuse existing mods; 3 tiny opt-in
+  engine reads (thornsBonus/vulnBonus/blitzFirstBonus, default-0). **All 6 golden checksums
+  byte-identical**; lint/build clean. Sweep done (PRUNS=200 GEAR=1 --depths, before main vs after):
+  ladder still descends, only the 4 recipe-cooking sweep squads move — BUT 2 values are too hot:
+  PYRE PACK (burnBonus+1) swings +33pp, WIDOWING (vulnBonus+1) +22pp, while FIRST POUNCE
+  (blitzFirstBonus+0.15) is correctly ~+5pp. Lesson: a flat +1 on a RECURRING/team-wide lever
+  compounds. **Sky's call: soften burn/vuln (make them fractional, or re-lever onto one-shot
+  bonuses), re-sweep, merge when all in ~+5–10pp band.** Full analysis: branch's
+  `docs/RINGWARD-R3-SWEEP-FINDINGS.md`. To review: `git checkout r3-recipe-seasoning`.
 - [x] **U6 · MODEL=opus · Landscape battle prototype** — DONE. FightView becomes a 3-pane TABLE
   at landscape widths (wide = !narrow): squad column | center pane (moves + BATTLE LOG stacked) |
   enemy column — the log now sits BESIDE the moves instead of below the arena. StageUnit gains a
