@@ -242,6 +242,7 @@ const HOLDFAST_STAGES = [
 const HOLDFAST_MAX = HOLDFAST_STAGES.length; // 8 — reaching the Drop
 const stageAtDepth = (d) => HOLDFAST_STAGES.find((s) => s.depth === d) || null;
 const HOLDFAST_KEY = '8gents_seam_holdfast'; // deepest ring boss ever beaten (0..8) = reclaim depth
+const LEARN_DONE_KEY = 'ringward_learn_done'; // set on first LEARN graduation; gates default-tab + onboarding copy
 function loadReclaimed() { try { const n = parseInt(localStorage.getItem(HOLDFAST_KEY), 10); return Number.isFinite(n) ? Math.min(HOLDFAST_MAX, Math.max(0, n)) : 0; } catch { return 0; } }
 function saveReclaimed(n) { try { localStorage.setItem(HOLDFAST_KEY, String(n)); } catch { /* best-effort */ } }
 const HOLDFAST_PICKS_KEY = '8gents_seam_holdfast_picks';
@@ -2621,6 +2622,7 @@ function RingMap({ accessDepth, selectedId, clears, onSelect }) {
 
 // ── RUN MODE — squad pick → (upgrade → wave) ×3 → boss, HP carries, win or wipe. ──
 function RunMode({ narrow, slag = 0, onSlag }) {
+  const [draftCoachSeen, setDraftCoachSeen] = useState(() => !!localStorage.getItem('ringward_draft_seen'));
   const fight = useFight();
   const [runPhase, setRunPhase] = useState('pick'); // pick | upgrade | fighting | won | lost
   const [picked, setPicked] = useState(() => savedSquadIn(loadStable())); // creature ids (2–3) — defaults to last squad
@@ -3895,19 +3897,24 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               })}
             </div>
             {/* ── THE GAUNTLET — endless survival end-game; enter with the picked squad. ── */}
-            <button onClick={startEndless} disabled={picked.length < 2}
-              style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 11, marginBottom: 16, cursor: picked.length >= 2 ? 'pointer' : 'default',
-                background: 'linear-gradient(180deg,#1a1020,#100a16)', border: '1px solid #5a3a7a', opacity: picked.length >= 2 ? 1 : 0.5 }}>
+            {(() => {
+              const gauntletReady = picked.length >= 2 && reclaimed >= 1;
+              const gauntletLocked = reclaimed < 1;
+              return (
+            <button onClick={gauntletReady ? startEndless : undefined} disabled={!gauntletReady}
+              style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 11, marginBottom: 16, cursor: gauntletReady ? 'pointer' : 'default',
+                background: 'linear-gradient(180deg,#1a1020,#100a16)', border: '1px solid #5a3a7a', opacity: gauntletReady ? 1 : 0.5 }}>
               <span style={{ fontSize: 22, lineHeight: 1 }}>♾️</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: T.small, fontWeight: 900, color: '#cba6ff' }}>THE GAUNTLET <span style={{ color: DIM, fontWeight: 700 }}>· endless</span></div>
-                <div style={{ fontSize: T.micro, color: '#9a8fb0', lineHeight: 1.4 }}>{picked.length >= 2 ? 'Rounds rise until they break you — no upgrades, just your build. How far can you get?' : 'Pick a squad above to enter.'}</div>
+                <div style={{ fontSize: T.micro, color: '#9a8fb0', lineHeight: 1.4 }}>{gauntletLocked ? 'Opens after your first ring — clear one ring boss to unlock.' : picked.length >= 2 ? 'Rounds rise until they break you — no upgrades, just your build. How far can you get?' : 'Pick a squad above to enter.'}</div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontSize: T.micro, color: DIM, fontWeight: 700, letterSpacing: 0.5 }}>BEST</div>
                 <div style={{ fontSize: T.body, fontWeight: 900, color: endlessBest > 0 ? '#cba6ff' : '#555' }}>{endlessBest > 0 ? `R${endlessBest}` : '—'}</div>
               </div>
             </button>
+              ); })()}
             {/* ── Active WARD riddles — the wall ahead + how to solve it (always visible). ── */}
             {WARDS.filter((w) => wards[w.id]?.active && !wards[w.id]?.solved).map((w) => (
               <div key={w.id} style={{ borderRadius: 10, border: `1px solid ${w.tint}66`, background: 'linear-gradient(180deg,#0c1620,#0a0e16)', padding: '11px 13px', marginBottom: 16 }}>
@@ -4906,6 +4913,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <SquadState squad={squad} runMods={runMods} />
         {/* Calm header: ONE decision, one line. (vF-CB declutter — the blurb lives on the fight screen.) */}
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
+          {!draftCoachSeen && <div style={{ fontSize: T.small, color: '#9a9aac', marginBottom: 6, fontStyle: 'italic' }}>Before each fight, take one boon — yours for this climb only.</div>}
           <div style={{ fontSize: T.head, fontWeight: 900, color: '#eee', textShadow: `0 0 14px ${ACCENT}44` }}>Pick one → {nextWave.boss ? '💀 ' : ''}{nextWave.name}</div>
           {nextWave.boss && <div style={{ fontSize: T.small, fontWeight: 800, color: '#ffb38a', marginTop: 4 }}>Final stand — choose well.</div>}
           {waveIdx > 0 && <div style={{ fontSize: T.micro, color: DIM, marginTop: 3 }}>✓ wave {waveIdx} cleared · patched +{Math.round(patchup * 100)}%</div>}
@@ -4951,7 +4959,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             });
           })()}
         </div>
-        <button onClick={() => { if (upgradeChoice) applyUpgrade(UPGRADE_BY_ID[upgradeChoice]); }} disabled={!upgradeChoice}
+        <button onClick={() => { if (upgradeChoice) { if (!draftCoachSeen) { setDraftCoachSeen(true); localStorage.setItem('ringward_draft_seen', '1'); } applyUpgrade(UPGRADE_BY_ID[upgradeChoice]); } }} disabled={!upgradeChoice}
           style={{ width: '100%', marginTop: 14, padding: '14px 0', borderRadius: 12, border: 'none', background: upgradeChoice ? ACCENT : '#222', color: upgradeChoice ? '#1a1408' : '#555', fontSize: T.sub, fontWeight: 900, letterSpacing: 0.5, cursor: upgradeChoice ? 'pointer' : 'default' }}>
           {upgradeChoice ? ((UPGRADE_BY_ID[upgradeChoice].scope !== 'unit') ? `CONFIRM ${UPGRADE_BY_ID[upgradeChoice].name} → ${nextWave.name}` : `CONFIRM — choose who gets ${UPGRADE_BY_ID[upgradeChoice].name} →`) : 'TAP AN UPGRADE ABOVE'}
         </button>
@@ -5351,6 +5359,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         <div style={{ fontSize: T.body, color: '#d8b8b8', margin: '6px 0 16px', textShadow: '0 1px 5px #000' }}>Fell at {wave.boss ? '💀 ' : ''}{wave.name} — wave {waveIdx + 1}/{WAVE_COUNT}.</div>
         {featCelebration}
         <SlagBanked earned={earned} balance={slag} />
+        {earned > 0 && <div style={{ fontSize: T.small, color: '#c9c98a', marginTop: 4, marginBottom: 2 }}>⚒ {earned} banked — the Forge makes it permanent.</div>}
         <CoresBanked coresRun={coresRun} />
         <button onClick={() => setResultDetails((v) => !v)}
           style={{ background: 'transparent', border: 'none', color: DIM, fontSize: T.small, fontWeight: 800, cursor: 'pointer', padding: '6px 0', letterSpacing: 0.5 }}>
@@ -5526,7 +5535,11 @@ function LearnMode({ narrow, onGraduate }) {
 export function SeamLab({ slag = 0, onSlag, version }) {
   const vw = useViewport();
   const narrow = vw < 760;
-  const [tab, setTab] = useState('run'); // 'learn' | 'run' | 'sandbox'
+  const [tab, setTab] = useState(() => {
+    const learned = !!localStorage.getItem(LEARN_DONE_KEY);
+    const hasClears = loadReclaimed() > 0;
+    return (!learned && !hasClears) ? 'learn' : 'run';
+  }); // 'learn' | 'run' | 'sandbox'
   // Sandbox is a dev/debug matchup tool — keep it out of a tester's face.
   // It reappears once beta mode is toggled on (⚙ Settings → Beta) + a reload.
   const [devTools] = useState(loadBeta);
@@ -5556,7 +5569,7 @@ export function SeamLab({ slag = 0, onSlag, version }) {
           {tabBtn('run', '⚔ RUN')}
           {devTools && tabBtn('sandbox', '🔬 Sandbox')}
         </div>
-        {tab === 'learn' ? <LearnMode narrow={narrow} onGraduate={() => setTab('run')} /> : tab === 'sandbox' && devTools ? <Sandbox narrow={narrow} /> : <RunMode narrow={narrow} slag={slag} onSlag={onSlag} />}
+        {tab === 'learn' ? <LearnMode narrow={narrow} onGraduate={() => { localStorage.setItem(LEARN_DONE_KEY, '1'); setTab('run'); }} /> : tab === 'sandbox' && devTools ? <Sandbox narrow={narrow} /> : <RunMode narrow={narrow} slag={slag} onSlag={onSlag} />}
       </div>
     </div>
   );

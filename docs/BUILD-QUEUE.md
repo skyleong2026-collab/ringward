@@ -56,8 +56,11 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   shows "needs ⚡⚡" chip. First-run "⚡▲ banks charge · ⚡▼ spends it" caption via
   useState+localStorage (shown once, dismissed on first move pick). Recut/salvage already had
   visible text at lines 4346-4347. Goldens green, lint/build clean.
-- [ ] **U4 · MODEL=sonnet · First-session routing** — U4 spec: fresh save lands on LEARN;
-  Gauntlet gated until first clear; one-time draft coach line; loss screen Forge routing line.
+- [x] **U4 · MODEL=sonnet · First-session routing** — DONE. Fresh save (no clears + no
+  LEARN_DONE_KEY) defaults to 'learn' tab; graduation sets LEARN_DONE_KEY. Gauntlet locked until
+  reclaimed≥1 ("opens after your first ring"). First-draft coach line "Before each fight, take
+  one boon — yours for this climb only" (one-time, dismissed on first confirm). Loss screen: "⚒
+  N banked — the Forge makes it permanent" when earned>0. Goldens green, lint/build clean.
 - [ ] **R1 · MODEL=sonnet · Team recipes: data + squad-pick chips** — src/data/recipes.js
   (shared game+sim) with the v1 recipe book (RINGWARD-COLLECTION-ENGINE.md), detection,
   lit/near-miss chips at squad pick. Display only — NO seasoning effects in this slice.
