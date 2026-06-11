@@ -182,6 +182,39 @@ export const RING_LAWS = {
 
 export const ringLawFor = (ground) => (ground && RING_LAWS[ground.id]) || null;
 
+// ─── LAW → RECIPE POINTERS (R4) — which Team Recipe answers each ring law? ────
+// The hint phrase is short + folk-honest: what the recipe DOES about the law.
+// Only roster recipes are listed first where attainable — sworn follow when they
+// genuinely answer better. IDs match RECIPES in src/data/recipes.js.
+export const LAW_RECIPE = {
+  'fallen-gate': [
+    { recipe: 'pyre_pack',  hint: 'burns through the wall' },
+    { recipe: 'widowing',   hint: 'stacks vuln, then drops it' },
+  ],
+  'green-seam': [
+    { recipe: 'widowing',   hint: 'burst ignores the regen' },
+    { recipe: 'slow_rot',   hint: 'poison that never fades (needs ★ Oaths)' },
+  ],
+  'storm-wire': [
+    { recipe: 'thornwall',  hint: 'let them break on the wall' },
+  ],
+  'fast-trails': [
+    { recipe: 'thornwall',  hint: 'reflect punishes their opener' },
+    { recipe: 'unbroken_line', hint: 'the floor holds while you answer (needs ★ Oaths)' },
+  ],
+  'lightless': [
+    { recipe: 'stormcourt', hint: 'spread the threat, no single carry' },
+    { recipe: 'thornwall',  hint: 'the marked one reflects back' },
+  ],
+  'witherfen': [
+    { recipe: 'first_pounce', hint: 'race it down before you need to heal' },
+    { recipe: 'pyre_pack',  hint: 'burn closes fights fast' },
+  ],
+  'frostbound': [
+    { recipe: 'pyre_pack',  hint: 'thaws fast' },
+  ],
+};
+
 // Apply a ring's law to a freshly created battle state (no-op for law-less rings).
 // ctx: { repeatIds?: Set<creatureId> } — extra inputs some laws read.
 export function applyRingLaw(state, ground, ctx = {}) {

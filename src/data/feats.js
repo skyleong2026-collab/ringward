@@ -62,9 +62,17 @@ export const FEATS = [
     desc: 'Clear rings fielding 5 different Types.', stat: 'typesMastered', need: 5 },
   { id: 'types_all', group: 'Mastery', tier: 'Gold', icon: '🎭', name: 'Every Hand',
     desc: 'Clear rings fielding all 8 Types.', stat: 'typesMastered', need: 8 },
+
+  // ── Cook the Book (Team Recipe rotation — R4) ──
+  { id: 'recipes_3', group: 'Recipes', tier: 'Bronze', icon: '🍳', name: 'First Dishes',
+    desc: 'Field a complete Team Recipe in 3 different ring clears.', stat: 'recipesCooked', need: 3 },
+  { id: 'recipes_6', group: 'Recipes', tier: 'Silver', icon: '🍳', name: 'Short-Order',
+    desc: 'Cook 6 distinct Team Recipes.', stat: 'recipesCooked', need: 6 },
+  { id: 'recipes_all', group: 'Recipes', tier: 'Gold', icon: '📖', name: 'Cook the Book',
+    desc: 'Cook every Team Recipe at least once.', stat: 'recipesCooked', needStat: 'recipesTotal' },
 ];
 
-export const FEAT_GROUPS = ['Climb', 'Collection', 'Gauntlet', 'Mastery'];
+export const FEAT_GROUPS = ['Climb', 'Collection', 'Gauntlet', 'Mastery', 'Recipes'];
 
 // Evaluate one feat against a snapshot → { have, need, done, pct }.
 export function evalFeat(feat, snap) {

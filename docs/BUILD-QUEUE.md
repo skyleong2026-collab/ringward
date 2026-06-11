@@ -116,8 +116,7 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   prop-driven to drop into a landscape right pane). Goldens byte-identical (pure presentation);
   lint/build clean; Playwright confirmed both orientations render in-fight (squad/center+log/enemy
   panes in landscape, unchanged portrait) with zero page errors. Prototype for Sky's look.
-- [ ] **R4 · MODEL=sonnet · Law recipe-pointers + recipe feats** — threshold copy naming the
-  answering recipe; "cook the book" feat group.
+- [x] **R4 · MODEL=sonnet · Law recipe-pointers + recipe feats** — LAW_RECIPE map in waves.js (7 laws → roster recipes with folk-honest hints); RingLawChip 'detail' variant now shows ↳ icon NAME — hint; Cook the Book feat group (Bronze/Silver/Gold) in feats.js; recipesCooked persisted at boss-clear, added to featSnapshot. Goldens byte-identical, lint/build/Playwright clean, zero page errors.
 
 NOT in this queue (needs Sky or attended judgment): canon copy table (RINGWARD-COPY-AUDIT.md,
 awaiting his checkmarks), per-creature attack-VFX signature table (Fable+Sky pass), portrait

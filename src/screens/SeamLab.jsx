@@ -22,7 +22,7 @@ import { endlessWaveSpec, endlessRoundSlag, endlessReached } from '../data/endle
 import { evalFeats, featTally, FEAT_GROUPS, TIER_COLOR } from '../data/feats.js';
 import { UPGRADES, UPGRADE_BY_ID } from '../data/upgrades.js';
 import { RELICS, RELIC_BY_ID, cutsFor, cutEffect } from '../data/relics.js';
-import { detectRecipes, memberFits, pullReveal, slotLabel, recipesForCreature } from '../data/recipes.js';
+import { detectRecipes, memberFits, pullReveal, slotLabel, recipesForCreature, RECIPE_BY_ID, RECIPES } from '../data/recipes.js';
 import { GlossaryDot } from '../components/GlossaryPopover.jsx';
 import {
   createBattleState,
@@ -38,7 +38,7 @@ import {
 } from '../engine/combat/index.js';
 import {
   HUNTING_GROUNDS, D_HP, D_ATK, crossMult, foe, wavesForGround,
-  ringLawFor, applyRingLaw, ringLawMods,
+  ringLawFor, applyRingLaw, ringLawMods, LAW_RECIPE,
 } from '../engine/waves.js';
 // Read-only imports for the combat legibility cues (manual-verb audit §5): the
 // doctrine walk that predicts an enemy's next move, and the dials the cues quote.
@@ -304,6 +304,13 @@ function savePity(n) { try { localStorage.setItem(PITY_KEY, String(n)); } catch 
 const TYPES_MASTERED_KEY = '8gents_seam_types';
 function loadTypesMastered() { const a = loadJson(TYPES_MASTERED_KEY, []); return Array.isArray(a) ? a : []; }
 function saveTypesMastered(a) { saveJson(TYPES_MASTERED_KEY, a); }
+
+// COOKED RECIPES (R4) — set of recipe ids the player has fielded a complete squad for in a
+// ring clear. Recorded once per unique recipe at the boss-clear moment (projection-safe: a
+// pure subset of what the save already proved). Never mutated inside a run.
+const RECIPES_COOKED_KEY = '8gents_seam_recipes';
+function loadRecipesCooked() { const a = loadJson(RECIPES_COOKED_KEY, []); return Array.isArray(a) ? a : []; }
+function saveRecipesCooked(a) { saveJson(RECIPES_COOKED_KEY, a); }
 
 // Which apex creature a clear of this ring drops a sigil toward: an uncaught, not-yet-
 // challengeable apex in the hunted ring, fewest sigils first (focus one at a time), then
@@ -2382,7 +2389,7 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
 //  'detail' — boxed chip with full line + ask (ring-select screen)
 //  'line'   — inline bold text (first-wave pre-battle reveal)
 //  'pill'   — compact badge with title tooltip (upgrade header)
-function RingLawChip({ law, variant = 'detail' }) {
+function RingLawChip({ law, lawId, variant = 'detail' }) {
   if (!law) return null;
   if (variant === 'line') return (
     <div style={{ fontSize: T.micro, fontWeight: 800, color: '#ffd166', marginTop: 7 }}>
@@ -2394,10 +2401,19 @@ function RingLawChip({ law, variant = 'detail' }) {
       {law.icon} {law.name}
     </div>
   );
+  // 'detail' variant — full chip with law text + optional recipe pointer (R4)
+  const pointers = (lawId && LAW_RECIPE[lawId]) || [];
+  const firstPointer = pointers.length > 0 ? pointers[0] : null;
+  const rec = firstPointer ? RECIPE_BY_ID[firstPointer.recipe] : null;
   return (
     <div style={{ marginTop: 6, padding: '6px 9px', borderRadius: 8, background: '#16130a', border: '1px solid #4a3f1c' }}>
       <div style={{ fontSize: T.micro, fontWeight: 900, color: '#ffd166' }}>{law.icon} RING LAW — {law.name}</div>
       <div style={{ fontSize: T.micro, color: '#d8cba0', lineHeight: 1.4, marginTop: 2 }}>{law.line} <span style={{ color: '#9a8c5a', fontStyle: 'italic' }}>{law.ask}</span></div>
+      {rec && (
+        <div style={{ fontSize: T.micro, color: '#8a9a6a', marginTop: 4, fontStyle: 'italic' }}>
+          ↳ {rec.icon} {rec.name} — {firstPointer.hint}.
+        </div>
+      )}
     </div>
   );
 }
@@ -2839,6 +2855,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
   const [sigilGain, setSigilGain] = useState(null); // {id, count, ready} — sigil earned this clear (reveal)
   const [pity, setPity] = useState(loadPity); // pulls since the last Legendary
   const [typesMastered, setTypesMastered] = useState(loadTypesMastered); // Types ever fielded in a ring clear (drives the mastery feat)
+  const [recipesCooked, setRecipesCooked] = useState(loadRecipesCooked); // recipe ids cooked in a ring clear (drives the Cook the Book feat)
   const [pullNow, setPullNow] = useState(null); // { id, rarity, isDupe, gainedCores } — this clear's pull
   const [wonStep, setWonStep] = useState(0);    // staged result reveal: 0 = payoff, 1..n = one spoil at a time, last = onward
   const [resultDetails, setResultDetails] = useState(false); // "▸ run details" expander on the result screens
@@ -3233,6 +3250,17 @@ function RunMode({ narrow, slag = 0, onSlag }) {
           if (merged.length !== prev.length) saveTypesMastered(merged);
           return merged.length !== prev.length ? merged : prev;
         });
+        // COOK THE BOOK (feat, R4) — record any recipe the fielded squad cooked this clear.
+        // Pure projection: detectRecipes reads the squad state that already determined the run.
+        const squadMembers = squad.map((m) => recipeMember(m.id, treeEquip));
+        const cookedIds = detectRecipes(squadMembers).lit.map((r) => r.id);
+        if (cookedIds.length > 0) {
+          setRecipesCooked((prev) => {
+            const merged = [...new Set([...prev, ...cookedIds])];
+            if (merged.length !== prev.length) saveRecipesCooked(merged);
+            return merged.length !== prev.length ? merged : prev;
+          });
+        }
         const deed = advanceWardDeeds(wards, hunted.id, squadTypes);
         if (deed.changed) { setWards(deed.wards); saveWards(deed.wards); }
         if (deed.solved.length) {
@@ -3423,6 +3451,8 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       keystonesOwned: KEYSTONE_IDS.filter((id) => relics.includes(id)).length,
       crossings: crossing,
       typesMastered: typesMastered.length,
+      recipesCooked: recipesCooked.length,
+      recipesTotal: RECIPES.length,
     };
   }
   const doneFeatIds = () => new Set(evalFeats(featSnapshot()).filter((f) => f.done).map((f) => f.id));
@@ -4170,7 +4200,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                           Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
                         </div>
                         {/* RING LAW (vF-CC) — the ring's one rule, read BEFORE you pick a squad. */}
-                        <RingLawChip law={ringLawFor(sel)} />
+                        <RingLawChip law={ringLawFor(sel)} lawId={sel.id} />
                       </div>
                     );
                   })()}
