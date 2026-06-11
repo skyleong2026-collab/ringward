@@ -38,6 +38,10 @@ import {
   HUNTING_GROUNDS, D_HP, D_ATK, crossMult, foe, wavesForGround,
   ringLawFor, applyRingLaw, ringLawMods,
 } from '../engine/waves.js';
+// Read-only imports for the combat legibility cues (manual-verb audit §5): the
+// doctrine walk that predicts an enemy's next move, and the dials the cues quote.
+import { applyTemperament } from '../engine/combat/doctrines.js';
+import { ASSASSIN, STRIKER } from '../engine/combat/dials.js';
 import { DEEP_INSCRIPTIONS, loadStones, saveStones } from '../data/lore.js';
 
 const ACCENT = '#e8a040';
@@ -1516,19 +1520,46 @@ function feedLine(e) {
   return { kind: 'turn', side: e.actor.side, text: `${e.actor.name} — ${e.skill.name}${amp}${hits ? `: ${hits}` : ''}${extra ? ` · ${extra}` : ''}${chg}` };
 }
 
+// ── Combat legibility cues (manual-verb audit §5) — three honest reads, no engine
+// change. predictSpend walks the SAME doctrine ladder the AI driver will walk on
+// this unit's next turn, but only the `when` conditions and `canUse` charge gates —
+// never a selector. Selectors are the only doctrine code that draws state.rng, so
+// the seeded stream is untouched and transcripts stay byte-identical.
+function predictSpend(u, state) {
+  if (!u.alive || (u.statuses.freeze || 0) > 0) return null; // frozen — it has no next move to telegraph
+  const doctrine = applyTemperament(u.type, u.temperament);
+  for (const rule of doctrine.rules) {
+    const skill = getSkill(rule.skillId);
+    if (rule.when(u, state) && skill.canUse(u, state)) {
+      return rule.skillId === u.skillIds[0] ? null : skill.name; // builder = quiet turn, no cue
+    }
+  }
+  return null;
+}
+
 function snapshot(state) {
+  // Execute kill-line: drawn on enemy HP bars only while a living squad unit can Execute.
+  const execLine = state.units.A.some((a) => a.alive && a.skillIds.includes('execute'));
   const map = (u) => ({
     uid: u.uid, name: u.name, side: u.side, spriteId: u.spriteId, type: u.type,
     hp: u.hp, maxHp: u.maxHp, charge: u.charge, maxCharge: u.maxCharge,
     burn: u.statuses.burn || 0, block: u.statuses.block || 0, regen: u.statuses.regen || 0, amp: u.statuses.amp || 0, freeze: u.statuses.freeze || 0, vuln: u.statuses.vuln || 0, alive: u.alive,
+    // enemy-intent telegraph: the payoff this AI unit will open with if it acts now
+    nextMove: u.side === 'B' ? predictSpend(u, state) : null,
+    // strike-first window: a squad Striker with Blitz legal before anyone has acted this round
+    strikeFirst: u.side === 'A' && u.alive && !state.firstActionDone && (u.statuses.freeze || 0) === 0
+      && u.skillIds.includes('blitz') && getSkill('blitz').canUse(u, state),
+    execMark: u.side === 'B' && execLine ? ASSASSIN.execute.executeThreshold : null,
   });
   return { A: state.units.A.map(map), B: state.units.B.map(map), round: state.round };
 }
 
-function Bar({ value, max, color, h = 10 }) {
+function Bar({ value, max, color, h = 10, mark }) {
   return (
-    <div style={{ background: '#1a1a26', borderRadius: 5, height: h, overflow: 'hidden', border: '1px solid #2a2a3a' }}>
+    <div style={{ position: 'relative', background: '#1a1a26', borderRadius: 5, height: h, overflow: 'hidden', border: '1px solid #2a2a3a' }}>
       <div style={{ width: `${Math.max(0, (value / max) * 100)}%`, height: '100%', background: color, transition: 'width .25s ease' }} />
+      {/* breakpoint notch (e.g. the Assassin's 45% execute line) — a faint cut in the bar */}
+      {mark != null && <div style={{ position: 'absolute', left: `${mark * 100}%`, top: 0, bottom: 0, width: 2, background: '#0b0b14', boxShadow: '0 0 3px #ff3b30aa' }} />}
     </div>
   );
 }
@@ -1579,6 +1610,7 @@ const FX_STYLE = `
 @keyframes seam-float { 0%{transform:translate(-50%,4px);opacity:0} 18%{opacity:1} 100%{transform:translate(-50%,-38px);opacity:0} }
 @keyframes seam-hitring { 0%{transform:translate(-50%,-50%) scale(.5);opacity:.9} 100%{transform:translate(-50%,-50%) scale(1.7);opacity:0} }
 @keyframes seam-ready { 0%,100%{box-shadow:0 0 0 0 rgba(232,160,64,0)} 50%{box-shadow:0 0 14px 3px rgba(232,160,64,.7)} }
+@keyframes seam-loaded { 0%,100%{opacity:.55} 50%{opacity:1} }
 @keyframes seam-targetpulse { 0%,100%{box-shadow:0 0 0 0 rgba(126,211,33,0)} 50%{box-shadow:0 0 14px 3px rgba(126,211,33,.75)} }
 @keyframes seam-aoepulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,122,58,0)} 50%{box-shadow:0 0 16px 4px rgba(255,122,58,.85)} }
 @keyframes seam-iconpop { 0%{transform:translate(-50%,-50%) scale(.3);opacity:0} 28%{opacity:1} 100%{transform:translate(-50%,-115%) scale(1.7);opacity:0} }
@@ -1846,9 +1878,13 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {ti.glyph} {u.name}
       </div>
-      <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} /></div>
+      <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} mark={dead ? null : u.execMark} /></div>
       <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aab', marginTop: 2, fontWeight: 700 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
       <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center' }}><ChargeDots value={u.charge} max={u.maxCharge} /></div>
+      {/* legibility cues (manual-verb audit §5): what the enemy will do next, and the
+          Striker's open strike-first window — shown only while you're picking who acts */}
+      {u.nextMove && !dead && <div style={{ fontSize: T.micro, fontWeight: 800, color: '#ffb38a', marginTop: 2, animation: 'seam-loaded 1.2s ease-in-out infinite', whiteSpace: 'nowrap' }}>⚠ {u.nextMove} next</div>}
+      {u.strikeFirst && !dead && (selectable || isActor) && <div style={{ fontSize: T.micro, fontWeight: 800, color: CHG, marginTop: 2, animation: 'seam-loaded 1.2s ease-in-out infinite', whiteSpace: 'nowrap' }}>⚡ ×{STRIKER.blitz.firstStrikeBonus} Blitz now</div>}
       <div style={{ display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center', marginTop: 3, flexWrap: 'wrap', minHeight: 15 }}>
         {u.burn > 0 && <span style={{ fontSize: T.micro, color: BURN, fontWeight: 700 }}>🔥{u.burn}</span>}
         {u.block > 0 && <span style={{ fontSize: T.micro, color: '#7fd6ff', fontWeight: 700 }}>🛡{u.block}</span>}
@@ -2076,6 +2112,7 @@ function useFight(opts = {}) {
       legalIds: legalSkills(unit, battleRef.current).map((s) => s.id),
       enemyUids: enemiesOf(battleRef.current, unit).map((u) => u.uid),
       allyUids: alliesOf(battleRef.current, unit).map((u) => u.uid),
+      firstWindow: !battleRef.current.firstActionDone, // nobody has acted this round → Blitz's ×1.6 is live
     };
   }
 
@@ -2162,6 +2199,10 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
                 {(MOVE_FX[sid] || [sk.blurb]).map((chip, i) => (
                   <span key={i} style={{ fontSize: T.micro, fontWeight: 800, color: usable ? '#d8d8e2' : '#555', background: usable ? '#00000038' : 'transparent', border: `1px solid ${usable ? ef.color + '55' : '#2a2a36'}`, borderRadius: 7, padding: '1px 6px', whiteSpace: 'nowrap' }}>{chip}</span>
                 ))}
+                {/* the Blitz tempo window, live: nobody has moved yet, so the ×1.6 is on the table */}
+                {sid === 'blitz' && usable && moves.firstWindow && (
+                  <span style={{ fontSize: T.micro, fontWeight: 900, color: '#0b0b14', background: CHG, borderRadius: 7, padding: '1px 6px', whiteSpace: 'nowrap', animation: 'seam-loaded 1.2s ease-in-out infinite' }}>⚡ ×{STRIKER.blitz.firstStrikeBonus} NOW</span>
+                )}
               </div>
             </span>
           </button>

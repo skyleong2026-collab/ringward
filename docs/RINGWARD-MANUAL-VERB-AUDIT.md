@@ -114,6 +114,15 @@ This is a feel/legibility pass (Sonnet-tier, low risk) and probably belongs *bef
 may reveal that Warden/Striker/Booster are fine once you can see what you're deciding, leaving only Mender
 and Bulwark as true mechanical gaps.
 
+> ✅ **BUILT same day (2026-06-10).** All three cues shipped in SeamLab.jsx, UI-only: (1) "⚠ ‹move› next"
+> telegraph on enemies — an honest prediction made by walking the SAME doctrine ladder the AI will walk
+> (`when` conditions + `canUse` gates only, never a selector, so the seeded RNG is untouched and goldens
+> stay byte-identical); suppressed while frozen, quiet on builder turns. (2) "⚡ ×1.6 Blitz now" on a squad
+> Striker while the round's first action is unspent + a matching "×1.6 NOW" chip on the Blitz button.
+> (3) 45% execute notch on enemy HP bars while a living squad unit carries Execute (threshold read from
+> the ASSASSIN dial). Verified live: Playwright manual fight, all three cues asserted, zero page errors.
+> Re-judge Warden/Striker/Booster under these cues before opening their kits.
+
 ## 6. Recommendation
 - **Strong, ship-as-is:** Reactor, Assassin, Hexer (with a carry). These three already deliver "a decision
   only a human makes well." Don't touch them.
