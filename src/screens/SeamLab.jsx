@@ -223,12 +223,12 @@ const HOLDFAST_STAGES = [
     alt:  { icon: '🌿', name: "Tender's Shelf", desc: 'Healing is 15% stronger, every run.', apply: (m) => { m.healMult *= 1.15; } },
     beat: 'The well still runs clean — the one thing the blight never fouled. "It fell seventy-five years back," he told you once. "Out of a clear sky. We\'ve called it the Drop ever since."' },
   { depth: 5, part: 'The Watchtower',
-    boon: { icon: '⚡', name: 'The Watch',     desc: 'One grunling starts each run already Primed.', apply: (m) => { m.chargeStart += 2; } },
+    boon: { icon: '⚡', name: 'The Watch',     desc: 'The squad starts every fight with +2 charge already banked.', apply: (m) => { m.chargeStart += 2; } },
     alt:  { icon: '🗡️', name: 'Murder Holes',  desc: '+6% squad damage, every run.',                 apply: (m) => { m.dmgMult *= 1.06; } },
     beat: 'From the tower you can finally see inward — ring on ring, closing like a wound. "He went in," says the wind, or memory. "Past the fifth. Came back wrong. Then went in again."' },
   { depth: 6, part: 'The Deep Cellar',
     boon: { icon: '🗡️', name: 'Cold Edge',     desc: '+8% squad damage, every run.',   apply: (m) => { m.dmgMult *= 1.08; } },
-    alt:  { icon: '🔥', name: 'Wrapped Wool',  desc: '+6% max HP, every run.',          apply: (m) => { m.hpMult *= 1.06; } },
+    alt:  { icon: '❤️', name: 'Wrapped Wool',  desc: '+6% max HP, every run.',          apply: (m) => { m.hpMult *= 1.06; } },
     beat: "Past the Warden, the cold gets honest. You understand now why he kept climbing. Down here the blight isn't spreading. It's remembering — and it remembers you." },
   { depth: 7, part: 'The Map-Room',
     boon: { icon: '❤️', name: "Hunter's Heart", desc: '+6% max HP, every run.',          apply: (m) => { m.hpMult *= 1.06; } },
@@ -345,8 +345,8 @@ const SUMMON10_COST = 420; // slag for a ten-fold call (bigger discount + a guar
 // Summon banners (vF-BJ2): a choice of pool. Deep Call costs more but pulls Legendaries far
 // more often (boosts their weight). Cost of any draw = base × the banner's costMult.
 const SUMMON_BANNERS = [
-  { id: 'wild', name: 'The Wild Call', legBoost: 1,   costMult: 1,   blurb: 'every grunling, honest rates' },
-  { id: 'deep', name: 'The Deep Call', legBoost: 2.2, costMult: 1.5, blurb: 'pricier — but Legendaries answer far more often' },
+  { id: 'wild', name: 'The Wild Call', legBoost: 1,   costMult: 1,   blurb: 'the full roster, at base odds' },
+  { id: 'deep', name: 'The Deep Call', legBoost: 2.2, costMult: 1.5, blurb: 'costs more — Legendaries answer ~2× as often' },
   { id: 'near', name: 'The Near Call', legBoost: 1,   costMult: 1,   biasMult: 5, blurb: 'leans toward where you stand' },
 ];
 // `biasIds` + `biasMult` = a "Near Call": the camped ring's locals get their weight
@@ -476,7 +476,7 @@ const WAYSIDE_EVENTS = [
       { label: 'Strip it for slag', detail: 'Safe, smaller.', apply: (c) => (c.slag(25), '⚒ You strip the casing for slag instead. +25 ⚒.') },
     ] },
   { id: 'mender', glyph: '✚', tint: '#9be7c0', title: 'The Wayside Mender',
-    text: 'An old healer tends a low fire at the crossfire, humming a tune your mentor used to whistle. She looks up, unsurprised.',
+    text: 'An old healer tends a low fire at the crossroads, humming a tune your mentor used to whistle. She looks up, unsurprised.',
     choices: [
       { label: 'Let her tend the squad', detail: 'Heal up.', apply: (c) => (c.heal(0.4), '✚ Wounds close under her hands. The squad breathes easier.') },
       { label: 'Take her blessing instead', detail: 'Power, not patching.', apply: (c) => (c.buff((m) => { m.dmgMult *= 1.12; }), '🔥 She marks your grunlings. +12% damage for the rest of the climb.') },
@@ -690,7 +690,7 @@ const WAYSIDE_EVENTS = [
         text: "A ring of white salt, poured careful on bare stone, mostly unbroken after who knows how long — a warding circle, the old kind, meant to keep something out. Or in. At its center sits a single grunling core, dark and cold and still, set down with intention. The salt line is the only thing between you and it.",
         choices: [
           { icon: '👣', label: 'Step over the salt', detail: 'Break the ward, take the core.', goto: 'cross' },
-          { icon: '🧂', label: 'Mend the salt line', detail: "Keep held whatever this held.", apply: (c) => (c.buff((m) => { m.blockMult *= 1.12; }), "🧂 You pour your own ration of salt to close the gaps and leave the ward whole. Some doors you don't open. The squad climbs warier, harder to crack. +12% block onward.") },
+          { icon: '🧂', label: 'Mend the salt line', detail: "Hold the ward — keep what it kept.", apply: (c) => (c.buff((m) => { m.blockMult *= 1.12; }), "🧂 You pour your own ration of salt to close the gaps and leave the ward whole. Some doors you don't open. The squad climbs warier, harder to crack. +12% block onward.") },
           { icon: '👁', label: 'Read the ward', detail: 'Learn what it warns.', goto: 'read' },
         ] },
       cross: {
@@ -1149,7 +1149,7 @@ const TYPE_TREES = {
   },
 
   Mender: {
-    blurb: 'Wins by outlasting, not out-damaging. Burst-heal the team, lay down endless regen, or bind your life to a carry.',
+    blurb: 'Wins by outlasting, not out-damaging. Burst-heal the team, lay down endless regen, or fuel your hardest hitter.',
     paths: [
       { id: 'bloom', name: 'BLOOM', tag: 'burst heal', icon: '🌸', color: WIN, nodes: [
         { id: 'bloom1', tier: 1, cost: 4, costStep: 3, ranks: 3, name: 'Greenheart', desc: '+15% to all your healing per rank (max +45%).',            apply: (m, r) => { m.healMult *= (1 + 0.15 * r); } },
@@ -1165,39 +1165,39 @@ const TYPE_TREES = {
         { id: 'verdant4', tier: 4, cost: 22, name: 'Symbiosis', desc: 'Your mending also chips the enemy line — sustain that bites.', apply: (m) => { m.symbiosis = true; } },
         { id: 'verdant5', tier: 5, cost: 36, keystone: true, name: 'Evergreen', desc: 'Your regen never expires — the team is always healing.', apply: (m) => { m.evergreen = true; } },
       ] },
-      { id: 'lifebond', name: 'LIFEBOND', tag: 'fuel a carry', icon: '🔗', color: WIN, hiddenUntilCapstone: true, nodes: [
+      { id: 'lifebond', name: 'LIFEBOND', tag: 'fuel your hitter', icon: '🔗', color: WIN, hiddenUntilCapstone: true, nodes: [
         { id: 'lifebond1', tier: 1, cost: 4,  name: 'Wellspring', desc: 'Mend also gifts 1 charge to the ally it heals — fuel their payoff.', apply: (m) => { m.wellspring = true; } },
         { id: 'lifebond2', tier: 2, cost: 8,  name: 'Cleansing Touch', desc: 'Your heal also strips one debuff (poison/burn/curse/freeze) off the ally.', apply: (m) => { m.cleanse = true; } },
         { id: 'lifebond3', tier: 3, cost: 14, capstone: true, name: 'Sanctuary', desc: 'A healthy ally (above 80% HP) is gifted Amp instead of wasted healing.', apply: (m) => { m.sanctuary = true; } },
-        { id: 'lifebond4', tier: 4, cost: 22, name: 'Channel', desc: 'Mend pours 2 charge into the ally it heals — pure fuel for the carry.', apply: (m) => { m.channel = true; } },
+        { id: 'lifebond4', tier: 4, cost: 22, name: 'Channel', desc: 'Mend pours 2 charge into the ally it heals — pure fuel for their payoff.', apply: (m) => { m.channel = true; } },
         { id: 'lifebond5', tier: 5, cost: 36, keystone: true, name: 'Lifebond', desc: 'You share in every mend — patch yourself for half of whatever you heal an ally.', apply: (m) => { m.lifebond = true; } },
       ] },
     ],
   },
 
   Booster: {
-    blurb: 'Makes someone else hit like a truck. Spread amp across the team, load a single carry, or steal the enemy tempo.',
+    blurb: 'Makes someone else hit like a truck. Spread Amp across the team, load your hardest hitter, or steal the enemy tempo.',
     paths: [
       { id: 'reso', name: 'RESONANCE', tag: 'amp the team', icon: '✦', color: AMP, nodes: [
         { id: 'reso1', tier: 1, cost: 4, costStep: 4, ranks: 2, name: 'Harmonize', desc: 'Your Amp lands +1 extra stack per rank (max +2).',             apply: (m, r) => { m.ampBonus += r; } },
         { id: 'reso2', tier: 2, cost: 6, costStep: 4, ranks: 2, name: 'Tuning', desc: 'Start every fight with +1 charge banked per rank (max +2).',       apply: (m, r) => { m.chargeStart += r; } },
-        { id: 'reso3', tier: 3, cost: 14, capstone: true, name: 'Power Chord', desc: 'Prime amps your WHOLE team, not just the carry.', apply: (m) => { m.primeTeam = 1; } },
+        { id: 'reso3', tier: 3, cost: 14, capstone: true, name: 'Power Chord', desc: 'Prime amps your WHOLE team, not just your hardest hitter.', apply: (m) => { m.primeTeam = 1; } },
         { id: 'reso4', tier: 4, cost: 22, name: 'Full Harmony', desc: 'Your Amp also hardens — every ally it touches gains a small shield.', apply: (m) => { m.fullHarmony = true; } },
         { id: 'reso5', tier: 5, cost: 36, keystone: true, name: 'Crescendo', desc: 'Your Amp never fades — every round the whole team only hits harder.', apply: (m) => { m.crescendo = true; } },
       ] },
-      { id: 'odrive', name: 'OVERDRIVE', tag: 'load a carry', icon: '⬆️', color: '#c89bff', nodes: [
+      { id: 'odrive', name: 'OVERDRIVE', tag: 'load your hitter', icon: '⬆️', color: '#c89bff', nodes: [
         { id: 'odrive1', tier: 1, cost: 4, costStep: 3, ranks: 3, name: 'Live Current', desc: '+12% damage from your attacks per rank (max +36%).',        apply: (m, r) => { m.dmgMult *= (1 + 0.12 * r); } },
         { id: 'odrive2', tier: 2, cost: 6, costStep: 4, ranks: 2, name: 'Capacitor', desc: 'Start every fight with +1 charge banked per rank (max +2).',    apply: (m, r) => { m.chargeStart += r; } },
         { id: 'odrive3', tier: 3, cost: 14, capstone: true, name: 'Surge', desc: 'Overdrive floods ALL allies with Amp, not just one.', apply: (m) => { m.overdriveAll = true; } },
         { id: 'odrive4', tier: 4, cost: 22, name: 'Power Spike', desc: 'The first Overdrive each fight spikes with +2 extra Amp.', apply: (m) => { m.powerSpike = true; } },
-        { id: 'odrive5', tier: 5, cost: 36, keystone: true, name: 'Critical Mass', desc: 'Overdrive dumps a FULL bar of Amp onto the carry — feast or famine.', apply: (m) => { m.criticalMass = true; } },
+        { id: 'odrive5', tier: 5, cost: 36, keystone: true, name: 'Critical Mass', desc: 'Overdrive dumps a FULL bar of Amp onto your hardest hitter — feast or famine.', apply: (m) => { m.criticalMass = true; } },
       ] },
       { id: 'cond', name: 'CONDUCTOR', tag: 'steal the tempo', icon: '🎼', color: AMP, hiddenUntilCapstone: true, nodes: [
-        { id: 'cond1', tier: 1, cost: 4,  name: 'Pull', desc: "Resonate pulls the carry's strike forward — it also gifts them a charge.", apply: (m) => { m.pull = true; } },
-        { id: 'cond2', tier: 2, cost: 8,  name: 'Quicken', desc: 'Prime also nudges the carry +1 charge — get their payoff online sooner.', apply: (m) => { m.quicken = true; } },
+        { id: 'cond1', tier: 1, cost: 4,  name: 'Pull', desc: "Resonate pulls your hardest hitter's strike forward — it also gifts them a charge.", apply: (m) => { m.pull = true; } },
+        { id: 'cond2', tier: 2, cost: 8,  name: 'Quicken', desc: 'Prime also nudges your hardest hitter +1 charge — get their payoff online sooner.', apply: (m) => { m.quicken = true; } },
         { id: 'cond3', tier: 3, cost: 14, capstone: true, name: 'Tempo Theft', desc: "Overdrive saps 2 charge from the enemy's fastest — steal their tempo.", apply: (m) => { m.tempoTheft = true; } },
-        { id: 'cond4', tier: 4, cost: 22, name: 'Double Time', desc: 'Overdrive pours an extra +3 charge into the carry — load them to swing again now.', apply: (m) => { m.doubleTime = true; } },
-        { id: 'cond5', tier: 5, cost: 36, keystone: true, name: 'Maestro', desc: 'Every round, gift the carry a free stack of Amp — the band never stops.', apply: (m) => { m.maestro = true; } },
+        { id: 'cond4', tier: 4, cost: 22, name: 'Double Time', desc: 'Overdrive pours an extra +3 charge into your hardest hitter — load them to swing again now.', apply: (m) => { m.doubleTime = true; } },
+        { id: 'cond5', tier: 5, cost: 36, keystone: true, name: 'Maestro', desc: 'Every round, gift your hardest hitter a free stack of Amp — the band never stops.', apply: (m) => { m.maestro = true; } },
       ] },
     ],
   },
@@ -1755,7 +1755,7 @@ const MOVE_FX = {
   chargeUp: ['⚡▲2', '🔥', '👊'],            overload: ['⚡▼', '💥 big', '🔥×2'],     backdraft: ['⚡▼', '💥 all', '🔥'],
   brace: ['⚡▲', '🛡 self', '👊'],          aegis: ['⚡▼', '🛡 team'],               bodyguard: ['⚡▼', '🛡 ally'],
   mend: ['⚡▲', '💚 heal', '👊'],           bloom: ['⚡▼', '💚 big'],                ward: ['⚡▼', '🌿 team'],
-  prime: ['⚡▲', '✦ ally', '👊'],           overdrive: ['⚡▼', '✦ carry'],           resonate: ['⚡▼', '✦ team'],
+  prime: ['⚡▲', '✦ ally', '👊'],           overdrive: ['⚡▼', '✦ ally'],            resonate: ['⚡▼', '✦ team'],
   jab: ['⚡▲', '👊👊'],                      flurry: ['⚡▼', '👊 lots'],               blitz: ['⚡▼', '💥 fast'],
   mark: ['⚡▲', '🎯 hurt'],                 execute: ['⚡▼', '💀 low HP'],            ambush: ['⚡▼', '🗡 weakest'],
 };
@@ -2211,7 +2211,7 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
       {phase === 'select-target' && (
         <div style={{ marginTop: 4 }}>
           <div style={{ fontSize: T.micro, color: WIN, textAlign: 'center', fontWeight: 800, marginBottom: 6 }}>
-            {allyAim ? `↓ tap an ally to ${(placeVerb || 'place').toLowerCase()}, or an enemy to chip` : tgtAll ? `↓ tap to confirm — ${tgtAllies ? 'whole team' : 'all enemies'}` : `↓ tap ${tgtAllies ? 'an ally' : 'an enemy'}`}
+            {allyAim ? `↓ tap an ally to ${(placeVerb || 'place').toLowerCase()} them — or an enemy to poke it (${(placeVerb || 'effect').toLowerCase()} still lands)` : tgtAll ? `↓ tap to confirm — ${tgtAllies ? 'whole team' : 'all enemies'}` : `↓ tap ${tgtAllies ? 'an ally' : 'an enemy'}`}
           </div>
           <button onClick={onBack} style={{ width: '100%', background: 'transparent', border: `1px solid ${LINE}`, color: DIM, borderRadius: 8, padding: '5px 0', cursor: 'pointer', fontSize: T.micro, fontWeight: 800 }}>↩ Back</button>
         </div>
@@ -2279,8 +2279,8 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
       })}
     </div>
   );
-  const prompt = phase === 'select' ? '👆 Tap a unit (switch freely), then pick its move in the middle'
-    : phase === 'select-target' ? (allyAim ? `🎯 Tap an ALLY to set the ${placeVerb.toLowerCase()} there — or an enemy to chip`
+  const prompt = phase === 'select' ? '👆 Tap a unit (any of yours — costs nothing), then pick its move in the middle'
+    : phase === 'select-target' ? (allyAim ? `🎯 Tap an ALLY to ${placeVerb.toLowerCase()} them — or an enemy to poke it (${placeVerb.toLowerCase()} still lands)`
       : tgtAll ? `🎯 Tap to confirm — ${verb.toLowerCase()}s ${tgtAllies ? 'your whole team' : 'ALL enemies'}` : `🎯 Tap ${tgtAllies ? 'an ally' : 'an enemy'} to ${verb.toLowerCase()}`)
     : null;
   const live = phase !== 'done'; // an active fight — show the in-battle auto/manual switch
@@ -3782,7 +3782,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
       ['relics', '✦', 'Relics'],
       ['holdfast', '🏚', 'Holdfast'],
     ];
-    const tabTitle = { raid: 'Take the Approach', summon: 'The Wild Call', forge: 'The Cracked Forge', relics: 'Relics', holdfast: 'The Holdfast' }[homeTab];
+    const tabTitle = { raid: 'Take the Approach', summon: 'Summon', forge: 'The Cracked Forge', relics: 'Relics', holdfast: 'The Holdfast' }[homeTab];
     return (
       <div style={{ paddingBottom: 84 }}>
         {/* ── Top utility bar: page title + NG+ pill + ⚙ settings ── */}
@@ -3938,7 +3938,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                           <span style={{ fontSize: T.small, fontWeight: 900, color: '#eaf2ff' }}>{sel.name}</span>
                           <span style={{ fontSize: 10 }}>{ringRars.map((r) => <span key={r} title={r} style={{ color: RARITY_INFO[r].color, fontWeight: 900, marginRight: 1 }}>{RARITY_INFO[r].pips}</span>)}</span>
                           <span style={{ fontSize: T.micro, fontWeight: 800, color: diff.color }}>· {diff.label}</span>
-                          <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `farmed ×${n} — Cores ×${m.toFixed(2)}`}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 700, color: n === 0 ? WIN : '#b58a3a' }}>{n === 0 ? '✦ fresh: full Cores' : `repeat clear ×${n} — Cores ×${m.toFixed(2)}`}</span>
                         </div>
                         <div style={{ fontSize: T.micro, color: '#9be7ff', fontWeight: 700, marginTop: 3 }}>
                           Raiding {sel.tag} — pull weighted by rarity{(() => { const u = sel.biasIds.find((id) => rarityOf(id) === 'Unique'); return u ? <span style={{ color: RARITY_INFO.Unique.color }}> · ✦ {COMBAT_CREATURES[u].name} (challenge)</span> : ''; })()}.
@@ -3964,11 +3964,12 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               const ringOf = (id) => HUNTING_GROUNDS.find((g) => g.biasIds.includes(id));
               return (
                 <div style={{ borderRadius: 10, border: `1px solid #2a3a5a`, background: '#0a1018', padding: '12px 14px', marginBottom: 18 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <span style={{ fontSize: 16, lineHeight: 1 }}>★</span>
                     <div style={{ fontSize: T.small, fontWeight: 900, color: '#9be7ff' }}>APEX QUARRY</div>
-                    <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>gather sigils, then win it over</span>
+                    <span style={{ marginLeft: 'auto', fontSize: T.micro, color: '#666', fontStyle: 'italic' }}>the rarest — won by fight, not luck</span>
                   </div>
+                  <div style={{ fontSize: T.micro, color: DIM, marginBottom: 10 }}>Clear their ring for sigils ({APEX_SIGILS}) → challenge it. Beat it, it joins.</div>
                   {gathering.map((id) => {
                     const ac = COMBAT_CREATURES[id]; const ati = TYPE_INFO[ac.type];
                     const have = Math.min(APEX_SIGILS, sigils[id] || 0);
@@ -4014,7 +4015,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
         {/* ═══════════════ SUMMON — spend slag to call a wild grunling (gacha) ═══════════════ */}
         {homeTab === 'summon' && (() => {
           const toLeg = Math.max(0, PITY_AT - pity); // pulls until a Legendary is guaranteed
-          const rates = [['Common', 60], ['Rare', 28], ['Legendary', 10]];
+          const rates = [['Common', 60], ['Rare', 30], ['Legendary', 10]];
           return (
             <div>
               {(() => {
@@ -5131,7 +5132,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ ...calm, background: 'rgba(16,15,13,0.9)', border: '1px solid #3a362c' }}>
               <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#b8ab8a' }}>🪨 A CARVED STONE — {stoneNow.title}</div>
               <div style={{ fontSize: T.small, color: '#cfc6ae', lineHeight: 1.7, fontStyle: 'italic', margin: '8px 0 6px' }}>{stoneNow.text}</div>
-              <div style={{ fontSize: T.micro, color: '#8a8068', fontStyle: 'italic' }}>Old words. Heavy, though. — kept in ❖ The Chronicle ({stones.length}/8 stones)</div>
+              <div style={{ fontSize: T.micro, color: '#8a8068', fontStyle: 'italic' }}>Old words. Heavy, though. — kept in ❖ The Chronicle (🏚 Home → Chronicles, {stones.length}/8 stones)</div>
             </div>
           )}
           {step === 'pull' && pullNow && (() => {
@@ -5190,7 +5191,7 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             const ac = COMBAT_CREATURES[sigilGain.id]; const ati = TYPE_INFO[ac.type];
             return (
               <div style={{ ...calm, textAlign: 'center' }}>
-                <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 8 }}>✦ SIGIL FOUND</div>
+                <div style={{ fontSize: T.micro, color: DIM, fontWeight: 800, letterSpacing: 1.5, marginBottom: 8 }}>{sigilGain.ready ? '✦ SIGIL FOUND — ready to challenge' : `✦ SIGIL FOUND — ${APEX_SIGILS - sigilGain.count} more and you can challenge it`}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
                   <Sprite spriteId={ac.spriteId} color={ati.accent} glyph={ati.glyph} anim="idle" size={56} />
                   <div style={{ textAlign: 'left' }}>

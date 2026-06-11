@@ -79,7 +79,7 @@ export const STRIKER_SKILLS = {
     id: 'blitz',
     name: 'Blitz',
     kind: 'wildcard',
-    blurb: 'Vent half your charge for a hard strike — extra vicious if you move first.',
+    blurb: 'Spend half your charge for a hard strike — extra vicious if you move first.',
     targetMode: 'enemy',
     canUse: (actor) => actor.charge >= STRIKER.blitz.minCharge,
     apply(actor, [target], state) {

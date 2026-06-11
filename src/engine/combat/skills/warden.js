@@ -14,7 +14,7 @@ export const WARDEN_SKILLS = {
     id: 'frostnip',
     name: 'Frost Nip',
     kind: 'builder',
-    blurb: '+2 charge and a cold chip. Bank it for a Glaciate.',
+    blurb: '+2 charge and a cold chip. Save the charge — Glaciate is what it\'s for.',
     targetMode: 'enemy',
     canUse: () => true,
     apply(actor, [target]) {
@@ -63,7 +63,7 @@ export const WARDEN_SKILLS = {
     id: 'coldsnap',
     name: 'Cold Snap',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to freeze the whole enemy line for a turn.',
+    blurb: 'Spend half your charge to freeze the whole enemy line for a turn.',
     targetMode: 'allEnemies',
     canUse: (actor) => actor.charge >= WARDEN.coldsnap.minCharge,
     apply(actor, _targets, state) {

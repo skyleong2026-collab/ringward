@@ -16,7 +16,7 @@ export const BULWARK_SKILLS = {
     id: 'brace',
     name: 'Brace',
     kind: 'builder',
-    blurb: 'Set the wall where you point (yourself by default), +2 charge, and chip.',
+    blurb: '+2 charge. Set the wall where you point — yourself, or tap an ally — and deal a little damage besides.',
     targetMode: 'enemy',
     allyAim: true, // "Move the wall": a human can tap an ally to place the shield (UI-only flag)
     canUse: () => true,
@@ -81,7 +81,7 @@ export const BULWARK_SKILLS = {
     id: 'bodyguard',
     name: 'Bodyguard',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to slam a heavy shield onto one ally — cover the wounded.',
+    blurb: 'Spend half your charge to slam a heavy shield onto one ally — cover the wounded.',
     targetMode: 'ally',
     canUse: (actor) => actor.charge >= BULWARK.bodyguard.minCharge,
     apply(actor, [target]) {

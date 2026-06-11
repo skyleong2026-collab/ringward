@@ -47,7 +47,7 @@ export const MENDER_SKILLS = {
     id: 'mend',
     name: 'Mend',
     kind: 'builder',
-    blurb: '+2 charge, put a heal where you point it (most-hurt ally by default), and chip.',
+    blurb: '+2 charge. Put the heal where you point — your most-hurt ally if you don\'t — and deal a little damage besides.',
     targetMode: 'enemy',
     allyAim: true, // "Point the mending": a human can tap an ally to route the heal (UI-only flag)
     canUse: () => true,
@@ -123,7 +123,7 @@ export const MENDER_SKILLS = {
     id: 'ward',
     name: 'Ward',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to lay a regen ward over the whole team.',
+    blurb: 'Spend half your charge to lay a regen ward over the whole team.',
     targetMode: 'allAllies',
     canUse: (actor) => actor.charge >= MENDER.ward.minCharge,
     apply(actor, _targets, state) {

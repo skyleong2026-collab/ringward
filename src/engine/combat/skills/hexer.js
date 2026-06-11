@@ -79,7 +79,7 @@ export const HEXER_SKILLS = {
     id: 'blight',
     name: 'Blight',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to curse every enemy at once — the whole line takes more.',
+    blurb: 'Spend half your charge to curse every enemy at once — the whole line takes more.',
     targetMode: 'allEnemies',
     canUse: (actor) => actor.charge >= HEXER.blight.minCharge,
     apply(actor, _targets, state) {

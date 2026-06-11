@@ -81,7 +81,7 @@ export const REACTOR_SKILLS = {
     id: 'backdraft',
     name: 'Backdraft',
     kind: 'wildcard',
-    blurb: 'Blow off half your charge to hit every enemy at once and spread Burn.',
+    blurb: 'Spend half your charge to hit every enemy at once and spread Burn.',
     targetMode: 'allEnemies',
     // Singularity routes all your charge into Overload — Backdraft is given up.
     canUse: (actor) => actor.charge >= REACTOR.backdraft.minCharge && !actor.mods?.singularity,

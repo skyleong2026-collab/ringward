@@ -11,7 +11,7 @@
 export const WARDS = [
   { atDepth: 4, id: 'paired', name: "The Warden's Lock", glyph: '🜸', tint: '#9be7ff',
     // The story shown the first time you reach the sealed gate — the reason WHY it asks this.
-    story: "The way out of the Storm-Wire ends at a gate older than the blight: two iron sockets where a single core should lock, not one. Your people built it back when the rim was held in pairs — a Warden to hold the line, a Reactor to break what came at it — never one climber alone. The mentor's mark is cut fresh beside the sockets: “It still remembers how we did it. Show it, and it'll let you by.”",
+    story: "The way out of the Storm-Wire ends at a gate older than the blight: two iron sockets where a single core should lock, not one. Your people built it back when the rim was held in pairs — a Bulwark to hold the line, a Reactor to break what came at it — never one climber alone. The mentor's mark is cut fresh beside the sockets: “It still remembers how we did it. Show it, and it'll let you by.”",
     clue: 'A shield and a flame, set in the old gate together. Bring a 🛡 Bulwark and a 🔥 Reactor back through the Fallen Gate side by side — twice over — and the lock will know its own.',
     deed: { ring: 'fallen-gate', types: ['Bulwark', 'Reactor'], count: 2,
       told: 'Clear the Fallen Gate with a 🛡 Bulwark AND a 🔥 Reactor in your squad' } },

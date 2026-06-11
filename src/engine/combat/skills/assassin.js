@@ -46,7 +46,7 @@ export const ASSASSIN_SKILLS = {
     id: 'execute',
     name: 'Execute',
     kind: 'payoff',
-    blurb: 'Spend all charge for a lethal blow — devastating against a wounded target.',
+    blurb: 'Spend all charge for a killing blow — ×2.5 once a target is under 45% health. Don\'t waste it on the healthy.',
     targetMode: 'enemy',
     canUse: (actor) => actor.charge >= ASSASSIN.execute.minCharge,
     apply(actor, [target], state) {
@@ -92,7 +92,7 @@ export const ASSASSIN_SKILLS = {
     id: 'ambush',
     name: 'Ambush',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to lunge at the weakest enemy — a finisher.',
+    blurb: 'Spend half your charge to lunge at the weakest enemy — a finisher.',
     targetMode: 'enemy',
     canUse: (actor) => actor.charge >= ASSASSIN.ambush.minCharge,
     apply(actor, [target]) {

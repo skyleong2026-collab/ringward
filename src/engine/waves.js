@@ -164,13 +164,13 @@ export const RING_LAWS = {
   },
   'witherfen': {
     icon: '🕯', name: 'The Blight Pools',
-    line: 'Healing withers here — every mend only part-takes.',
+    line: 'Healing withers here — every mend closes only part of the wound.',
     ask: 'Sustain crutches fail. Stack HP, or end fights fast.',
     mods: (m) => { m.healMult *= 0.65; },
   },
   'frostbound': {
     icon: '❄', name: 'The Cold Remembers',
-    line: 'Creatures you brought last run start every fight chilled.',
+    line: 'Creatures you brought last run start every fight frozen for one turn.',
     ask: 'The Stillness knows the returning — rotate your squad, or thaw the hard way.',
     atStart: (state, ctx) => {
       const repeat = ctx?.repeatIds;

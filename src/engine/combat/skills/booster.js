@@ -29,7 +29,7 @@ export const BOOSTER_SKILLS = {
     id: 'prime',
     name: 'Prime',
     kind: 'builder',
-    blurb: '+2 charge, lend a stack of Amp to your strongest ally, and chip the target.',
+    blurb: '+2 charge, lend Amp (hits land harder — fades 1/round) to your strongest ally, and chip the target.',
     targetMode: 'enemy', // select() points at the chip target; the buff picks the carry
     canUse: () => true,
     apply(actor, [target], state) {
@@ -85,7 +85,7 @@ export const BOOSTER_SKILLS = {
     id: 'resonate',
     name: 'Resonate',
     kind: 'wildcard',
-    blurb: 'Vent half your charge to lend Amp to the whole ally line at once.',
+    blurb: 'Spend half your charge to lend Amp to the whole ally line at once.',
     targetMode: 'allAllies',
     canUse: (actor) => actor.charge >= BOOSTER.resonate.minCharge,
     apply(actor, _targets, state) {
