@@ -85,6 +85,16 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   module; recommend Sky eyeball one live pull.
 - [ ] **R3 · MODEL=opus · Recipe seasoning + sim sweep** — run-layer mods via perkBaseMods;
   PRUNS=200 GEAR=1 depth sweep before/after; ladder stays a ladder (20–90 geared band).
+  ⚠ DEFERRED from the overnight run (2026-06-11, Opus) — wants an attended session, by design:
+  (1) only 4 of 11 seasonings map to EXISTING squad mods (executeWindow, extraHits, chargeStart,
+  burnBonus); the other 7 (shatter, thorns, vulnDecay, blitzFirst, poison, regen, reflectCap)
+  need NEW mod reads in src/engine/combat/* — deep, golden-risky, game↔sim drift-prone. (2) It's
+  balance-touching and the CLAUDE.md gate says don't re-tune the ring ladder before your R3
+  manual playtest. (3) The design doc builds in a tuning loop (halve seasonings if a ring leaves
+  the 20–90 band) that wants you in the loop. Recommend: do it attended after the playtest, with
+  the report-don't-retune discipline (implement → goldens green + sweep in-band → commit; if any
+  ring drifts, stop and decide together). Recipe `season` fields are already authored in
+  recipes.js as text, ready to wire.
 - [ ] **U6 · MODEL=opus · Landscape battle prototype** — 3-pane FightView at landscape widths
   (extends narrow branches ~SeamLab:2326), viewport meta. Menus master-detail NOT in scope.
 - [ ] **R4 · MODEL=sonnet · Law recipe-pointers + recipe feats** — threshold copy naming the
