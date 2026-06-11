@@ -2171,11 +2171,19 @@ function useFight(opts = {}) {
 // enemy — for whichever unit you're previewing. Tapping a move commits (or asks for
 // a target). Floating it here keeps your eyes in the arena, not in a panel below.
 function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, tgtAll, allyAim, placeVerb, hintSkill }) {
+  const [legendSeen, setLegendSeen] = useState(() => !!localStorage.getItem('ringward_charge_legend_seen'));
   if (!moves) return <span style={{ color: DIM, fontWeight: 900, fontSize: T.head, opacity: 0.5 }}>VS</span>;
   const { unit, skillIds, legalIds } = moves;
+  const handleSkill = (sid) => {
+    if (!legendSeen) { setLegendSeen(true); localStorage.setItem('ringward_charge_legend_seen', '1'); }
+    onSkill(sid);
+  };
   return (
     <div style={{ width: '100%' }}>
       <div style={{ fontSize: T.small, color: ACCENT, fontWeight: 800, textAlign: 'center', marginBottom: 6 }}>{unit.name} — pick a move</div>
+      {!legendSeen && phase === 'select' && (
+        <div style={{ fontSize: T.micro, color: '#8a8a9e', textAlign: 'center', marginBottom: 6, fontWeight: 700 }}>⚡▲ banks charge · ⚡▼ spends it</div>
+      )}
       {skillIds.map((sid) => {
         const sk = getSkill(sid);
         const usable = legalIds.includes(sid);
@@ -2184,7 +2192,7 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
         const tt = TARGET_TAG[sk.targetMode];
         const hinted = hintSkill === sid && usable && !chosen; // LEARN points a finger at the move to tap
         return (
-          <button key={sid} onClick={usable ? () => onSkill(sid) : undefined} disabled={!usable} title={sk.blurb}
+          <button key={sid} onClick={usable ? () => handleSkill(sid) : undefined} disabled={!usable} title={sk.blurb}
             style={{ position: 'relative', display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%', textAlign: 'left', marginBottom: 6, background: usable ? ef.bg : '#14141c', border: `2px solid ${chosen ? '#fff' : hinted ? ACCENT : usable ? ef.color : '#1d1d28'}`, color: usable ? '#eee' : '#555', borderRadius: 9, padding: '8px 10px', cursor: usable ? 'pointer' : 'not-allowed', opacity: usable ? 1 : 0.55, animation: hinted ? 'seam-hintglow 1s ease-in-out infinite' : 'none' }}>
             {hinted && <span style={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', fontSize: T.head, animation: 'seam-point .7s ease-in-out infinite', pointerEvents: 'none', zIndex: 8, filter: 'drop-shadow(0 1px 3px #000)' }}>👈</span>}
             <span style={{ fontSize: T.label, lineHeight: 1, marginTop: 1, filter: usable ? 'none' : 'grayscale(1)' }}>{ef.icon}</span>
@@ -2194,16 +2202,21 @@ function CenterMoves({ moves, pendingSkill, phase, onSkill, onBack, tgtAllies, t
                 <span style={{ fontSize: T.micro, color: usable ? ef.color : '#555', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>· {ef.label}</span>
                 {tt && <span style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 0.3, padding: '0 6px', borderRadius: 10, whiteSpace: 'nowrap', border: `1px solid ${tt.aoe ? '#ff7a4a' : '#55556a'}`, background: tt.aoe ? '#3a1d10' : 'transparent', color: !usable ? '#555' : tt.aoe ? '#ffb38a' : '#9a9aaa' }}>{tt.icon} {tt.aoe ? 'AOE' : 'SINGLE'}</span>}
               </div>
-              {/* effect strip — icons instead of a sentence, so the kit reads at a glance */}
+              {/* effect strip — icons for at-a-glance scan */}
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                {(MOVE_FX[sid] || [sk.blurb]).map((chip, i) => (
+                {MOVE_FX[sid] && MOVE_FX[sid].map((chip, i) => (
                   <span key={i} style={{ fontSize: T.micro, fontWeight: 800, color: usable ? '#d8d8e2' : '#555', background: usable ? '#00000038' : 'transparent', border: `1px solid ${usable ? ef.color + '55' : '#2a2a36'}`, borderRadius: 7, padding: '1px 6px', whiteSpace: 'nowrap' }}>{chip}</span>
                 ))}
+                {!usable && (sk.kind === 'payoff' || sk.kind === 'wildcard') && (
+                  <span style={{ fontSize: T.micro, fontWeight: 800, color: '#666', background: '#1a1a28', border: '1px solid #2e2e40', borderRadius: 7, padding: '1px 6px', whiteSpace: 'nowrap' }}>needs ⚡⚡</span>
+                )}
                 {/* the Blitz tempo window, live: nobody has moved yet, so the ×1.6 is on the table */}
                 {sid === 'blitz' && usable && moves.firstWindow && (
                   <span style={{ fontSize: T.micro, fontWeight: 900, color: '#0b0b14', background: CHG, borderRadius: 7, padding: '1px 6px', whiteSpace: 'nowrap', animation: 'seam-loaded 1.2s ease-in-out infinite' }}>⚡ ×{STRIKER.blitz.firstStrikeBonus} NOW</span>
                 )}
               </div>
+              {/* blurb — plain-English one-liner, always visible (not tooltip-only) */}
+              <div style={{ fontSize: T.micro, color: usable ? '#7a7a8e' : '#383848', marginTop: 3, lineHeight: 1.3 }}>{sk.blurb}</div>
             </span>
           </button>
         );

@@ -47,12 +47,15 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   ×2.5@45%, Amp defined, "The Watch" matches its apply, ward-gate Warden→Bulwark factual fix,
   summon rates sum to 100, typos, Apex Quarry explained, minors batch). Canon-table lines are
   NOT in scope (await Sky). Goldens key on skill.id — verify byte-identical anyway.
-- [ ] **U2 · MODEL=sonnet · Approved renames** — U2 spec: relic set Warden→Stonehide; tree
-  tier-5 "keystone"→★ Oath (UI copy only, ids stay); tab Holdfast→🏚 Home; innate Ambush→First
-  Pounce; Assassin Mark→Stalk (name only); feat Warden-Breaker→Gauntlet-Holder.
-- [ ] **U3 · MODEL=sonnet · Battle skill descriptions + legend** — U3 spec: visible blurb line
-  on move buttons, "needs ⚡⚡" on disabled spenders, first-run ⚡▲/⚡▼ caption, de-tooltip
-  recut/salvage panels.
+- [x] **U2 · MODEL=sonnet · Approved renames** — DONE (commit 5b9e077). Stonehide relic set
+  (id 'warden' stays); ★ Oath in all tier-5 UI copy incl. swear block + mirror chip (KEYSTONE_IDS
+  intact); 🏚 Home tab (lore "the Holdfast" stays); First Pounce innate (swiftpaw); Stalk skill
+  (id 'mark' stays; goldens byte-identical); Gauntlet-Holder feat. Third standing rule in COPY-AUDIT.md.
+- [x] **U3 · MODEL=sonnet · Battle skill descriptions + legend** — DONE. Visible blurb text
+  always shown below FX chips on every move button (was title=-only). Disabled payoff/wildcard
+  shows "needs ⚡⚡" chip. First-run "⚡▲ banks charge · ⚡▼ spends it" caption via
+  useState+localStorage (shown once, dismissed on first move pick). Recut/salvage already had
+  visible text at lines 4346-4347. Goldens green, lint/build clean.
 - [ ] **U4 · MODEL=sonnet · First-session routing** — U4 spec: fresh save lands on LEARN;
   Gauntlet gated until first clear; one-time draft coach line; loss screen Forge routing line.
 - [ ] **R1 · MODEL=sonnet · Team recipes: data + squad-pick chips** — src/data/recipes.js
