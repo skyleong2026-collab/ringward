@@ -1781,12 +1781,13 @@ function ChargeDots({ value, max }) {
 
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire, heavy, justKilled }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, bigger, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire, heavy, justKilled }) {
   const dead = !u.alive;
   const struck = burst === 'attack'; // taking a hit this action → pop the sprite
   const hurt = u.alive && u.maxHp > 0 && u.hp / u.maxHp <= 0.3; // badly wounded — show distress so the player KNOWS to heal/guard it
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
-  const size = boss ? (big ? 122 : 108) : big ? 92 : 78; // the boss looms larger
+  const baseSize = boss ? (big ? 122 : 108) : big ? 92 : 78; // the boss looms larger
+  const size = bigger ? baseSize + 26 : baseSize; // landscape (U6): the stage has room — sprites grow
   const burstEf = burst ? EFFECT[burst] : null; // colored impact on whoever was affected
   const castEf = cast ? EFFECT[cast] : null; // the actor briefly glows the move's color
   const impactIcon = (move && MOVE_ICON[move]) || (burstEf && burstEf.icon); // signature per-move icon
@@ -2275,6 +2276,10 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
   const targetLabel = tgtAll ? `◀ ${verb} ALL` : `◀ TAP TO ${verb}`;
   const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : fx.bursts?.[u.uid] === 'attack' ? 'damaged' : 'idle';
   const popsFor = (uid) => popups.filter((p) => p.uid === uid);
+  // Landscape (U6): the fight becomes a TABLE of three panes — squad column | center
+  // (moves + log) | enemy column — instead of a portrait river with the log below. Bigger
+  // sprites, the log beside the moves. Portrait (narrow) is unchanged, byte-for-byte.
+  const wide = !narrow;
   const side = (units, isEnemy) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
       <div style={{ fontSize: T.small, color: isEnemy ? '#e07a7a' : '#3ec9a0', fontWeight: 800, letterSpacing: 1 }}>{isEnemy ? 'ENEMY' : 'YOUR SQUAD'}</div>
@@ -2288,7 +2293,7 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
         const mark = isTgt ? (allyAim ? (isEnemy ? '👊' : placeMark) : tgtAll ? (tgtAllies ? '✨' : '💥') : '🎯') : null;
         const tLabel = isTgt && allyAim ? (isEnemy ? '◀ CHIP' : `◀ ${placeVerb} HERE`) : targetLabel;
         return (
-          <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
+          <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2} bigger={wide}
             isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={tLabel}
             targetMark={mark} aoe={isTgt && tgtAll && !tgtAllies}
             burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move} hitN={fx.hitCounts?.[u.uid]} fire={fx.fire}
@@ -2305,6 +2310,21 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
       : tgtAll ? `🎯 Tap to confirm — ${verb.toLowerCase()}s ${tgtAllies ? 'your whole team' : 'ALL enemies'}` : `🎯 Tap ${tgtAllies ? 'an ally' : 'an enemy'} to ${verb.toLowerCase()}`)
     : null;
   const live = phase !== 'done'; // an active fight — show the in-battle auto/manual switch
+  // The battle log, extracted so it can sit BESIDE the moves (landscape) or below (portrait).
+  const logPane = (
+    <div>
+      <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>BATTLE LOG</div>
+      <div ref={feedBoxRef} style={{ background: '#0a0a12', border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, maxHeight: narrow ? 300 : 440, overflowY: 'auto' }}>
+        {feed.length === 0 && <div style={{ fontSize: T.body, color: '#555' }}>Battle log…</div>}
+        {feed.map((f, i) => (
+          <div key={i} style={{ fontSize: T.body, padding: '3px 0', lineHeight: 1.5,
+            color: f.kind === 'round' ? ACCENT : f.kind === 'end' ? WIN : f.kind === 'burn' ? BURN : f.kind === 'regen' ? WIN : f.side === 'A' ? '#9cd' : '#e0a0b8',
+            fontWeight: f.kind === 'round' || f.kind === 'end' ? 800 : 500,
+            borderTop: f.kind === 'round' ? `1px solid ${LINE}` : 'none', marginTop: f.kind === 'round' ? 6 : 0, paddingTop: f.kind === 'round' ? 6 : 3 }}>{f.text}</div>
+        ))}
+      </div>
+    </div>
+  );
   return (
     <div>
       {/* In-battle switch: take over an auto fight, or hand it back. Flips instantly. */}
@@ -2338,26 +2358,21 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
       {/* The arena: your squad — center move lane — the enemy */}
       <div ref={arenaRef} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6, background: bgImg ? `radial-gradient(ellipse at center, rgba(20,20,31,0.72) 0%, rgba(11,11,20,0.85) 100%), url(${bgImg}) center/cover no-repeat` : 'radial-gradient(ellipse at center, #14141f 0%, #0b0b14 100%)', border: `1px solid ${LINE}`, borderRadius: 16, padding: '16px 8px', marginBottom: 14, minHeight: 210 }}>
         {side(snap.A, false)}
-        <div style={{ flex: moves ? 1.5 : 0.5, minWidth: moves ? 150 : 28, alignSelf: 'center', display: 'flex', justifyContent: 'center' }}>
-          <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} onBack={cancelTarget} tgtAllies={tgtAllies} tgtAll={tgtAll} allyAim={allyAim} placeVerb={placeVerb} hintSkill={hintSkill} />
+        <div style={wide
+          ? { flex: 2, minWidth: 280, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', gap: 12 }
+          : { flex: moves ? 1.5 : 0.5, minWidth: moves ? 150 : 28, alignSelf: 'center', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <CenterMoves moves={moves} pendingSkill={fight.pendingSkill} phase={phase} onSkill={chooseSkill} onBack={cancelTarget} tgtAllies={tgtAllies} tgtAll={tgtAll} allyAim={allyAim} placeVerb={placeVerb} hintSkill={hintSkill} />
+          </div>
+          {/* Landscape: the log lives in the center pane, beside the two creature columns. */}
+          {wide && <div style={{ flex: 1, minHeight: 0 }}>{logPane}</div>}
         </div>
         {side(snap.B, true)}
       </div>
-      {/* Banner + log below the arena */}
-      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 16 }}>
+      {/* Below the arena: the banner full-width; in portrait the log stacks under it. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
         <div>{banner}</div>
-        <div>
-          <div style={{ fontSize: T.small, color: DIM, letterSpacing: 2, fontWeight: 700, marginBottom: 6 }}>BATTLE LOG</div>
-          <div ref={feedBoxRef} style={{ background: '#0a0a12', border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, maxHeight: narrow ? 300 : 440, overflowY: 'auto' }}>
-            {feed.length === 0 && <div style={{ fontSize: T.body, color: '#555' }}>Battle log…</div>}
-            {feed.map((f, i) => (
-              <div key={i} style={{ fontSize: T.body, padding: '3px 0', lineHeight: 1.5,
-                color: f.kind === 'round' ? ACCENT : f.kind === 'end' ? WIN : f.kind === 'burn' ? BURN : f.kind === 'regen' ? WIN : f.side === 'A' ? '#9cd' : '#e0a0b8',
-                fontWeight: f.kind === 'round' || f.kind === 'end' ? 800 : 500,
-                borderTop: f.kind === 'round' ? `1px solid ${LINE}` : 'none', marginTop: f.kind === 'round' ? 6 : 0, paddingTop: f.kind === 'round' ? 6 : 3 }}>{f.text}</div>
-            ))}
-          </div>
-        </div>
+        {!wide && logPane}
       </div>
     </div>
   );

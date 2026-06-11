@@ -106,8 +106,16 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   the report-don't-retune discipline (implement → goldens green + sweep in-band → commit; if any
   ring drifts, stop and decide together). Recipe `season` fields are already authored in
   recipes.js as text, ready to wire.
-- [ ] **U6 · MODEL=opus · Landscape battle prototype** — 3-pane FightView at landscape widths
-  (extends narrow branches ~SeamLab:2326), viewport meta. Menus master-detail NOT in scope.
+- [x] **U6 · MODEL=opus · Landscape battle prototype** — DONE. FightView becomes a 3-pane TABLE
+  at landscape widths (wide = !narrow): squad column | center pane (moves + BATTLE LOG stacked) |
+  enemy column — the log now sits BESIDE the moves instead of below the arena. StageUnit gains a
+  `bigger` prop (+26px) so landscape sprites grow (~78→104 / 92→118 / boss 122→148). Portrait
+  (narrow) path is byte-for-byte unchanged — log still stacks below the arena. viewport meta
+  already sane in index.html (width=device-width); no orientation lock. Menus master-detail NOT
+  in scope (next round, per HANDHELD-DIRECTION.md — but CharacterSheet from U5 is already built
+  prop-driven to drop into a landscape right pane). Goldens byte-identical (pure presentation);
+  lint/build clean; Playwright confirmed both orientations render in-fight (squad/center+log/enemy
+  panes in landscape, unchanged portrait) with zero page errors. Prototype for Sky's look.
 - [ ] **R4 · MODEL=sonnet · Law recipe-pointers + recipe feats** — threshold copy naming the
   answering recipe; "cook the book" feat group.
 
