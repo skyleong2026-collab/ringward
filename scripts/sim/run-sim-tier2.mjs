@@ -17,6 +17,10 @@ import { runBattle } from '../../src/engine/combat/engine.js';
 import { createRng } from '../../src/engine/rng.js';
 // ONE shared source with the live game (vF-CC) — no more hand-mirrored wave copies.
 import { HUNTING_GROUNDS, wavesForGround, applyRingLaw, ringLawMods } from '../../src/engine/waves.js';
+// ONE shared source with the live game (vF-CH, S7) — the upgrade pool + relic cuts, no longer
+// hand-mirrored here (the old drift-bug class the waves.js extraction closed for wave-gen).
+import { UPGRADES, UPGRADE_BY_ID } from '../../src/data/upgrades.js';
+import { RELIC_BY_ID, cutsFor, cutEffect } from '../../src/data/relics.js';
 
 const OUTER_RING = HUNTING_GROUNDS[0];
 const RINGS = HUNTING_GROUNDS;
@@ -37,34 +41,9 @@ const RARITY_OF = {
 const RARITY_MULT = { Common: 1.0, Rare: 1.2, Legendary: 1.45, Unique: 1.7, Keystone: 2.0 };
 const rarityMult = (id) => RARITY_MULT[RARITY_OF[id] || 'Common'];
 
-// ─── The upgrade pool (ported verbatim from SeamLab.jsx:753-783) ────────────────
-const UPGRADES = [
-  { id: 'sharpen',     scope: 'squad', apply: (m) => { m.dmgMult   *= 1.3; } },
-  { id: 'wellspring',  scope: 'squad', needsCap: 'heal',  apply: (m) => { m.healMult  *= 1.4; } },
-  { id: 'bastion',     scope: 'squad', needsCap: 'shield', apply: (m) => { m.blockMult *= 1.4; } },
-  { id: 'primed',      scope: 'squad', apply: (m) => { m.chargeStart += 2; } },
-  { id: 'thickhide',   scope: 'squad', apply: (m) => { m.hpMult    *= 1.2; } },
-  { id: 'wildfire',    scope: 'squad', apply: (m) => { m.burnBonus += 1; } },
-  { id: 'overhype',    scope: 'squad', apply: (m) => { m.ampBonus  += 1; } },
-  { id: 'firststrike', scope: 'squad', apply: (m) => { m.opener = true; } },
-  { id: 'leech',       scope: 'squad', apply: (m) => { m.lifesteal = (m.lifesteal || 0) + 0.12; } },
-  { id: 'killingblow', scope: 'squad', apply: (m) => { m.executioner = (m.executioner || 0) + 0.3; } },
-  { id: 'secondwind',  scope: 'squad', apply: (m) => { m.phoenix = true; } },
-  { id: 'bloodrush',   scope: 'squad', apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
-  { id: 'embertrail',  scope: 'unit', needsType: 'Reactor',  apply: (m) => { m.overloadBurn = (m.overloadBurn || 0) + 2; } },
-  { id: 'twinstrike',  scope: 'unit', needsType: 'Striker',  apply: (m) => { m.extraHits = (m.extraHits || 0) + 1; } },
-  { id: 'huntersmark', scope: 'unit', needsType: 'Assassin', apply: (m) => { m.executeWindow = (m.executeWindow || 0) + 0.15; } },
-  { id: 'aegisreflex', scope: 'unit', needsType: 'Bulwark',  apply: (m) => { m.braceTeam = 1; } },
-  { id: 'lifebloom',   scope: 'unit', needsType: 'Mender',   apply: (m) => { m.mendRegen = (m.mendRegen || 0) + 1; } },
-  { id: 'powerchord',  scope: 'unit', needsType: 'Booster',  apply: (m) => { m.primeTeam = 1; } },
-  { id: 'combustion',  scope: 'unit', needsType: 'Reactor',  chain: 'embertrail',  apply: (m) => { m.overloadAOE = true; } },
-  { id: 'blitzstorm',  scope: 'unit', needsType: 'Striker',  chain: 'twinstrike',  apply: (m) => { m.blitzMulti = true; } },
-  { id: 'bloodhunt',   scope: 'unit', needsType: 'Assassin', chain: 'huntersmark', apply: (m) => { m.executeHunt = true; } },
-  { id: 'ironbastion', scope: 'unit', needsType: 'Bulwark',  chain: 'aegisreflex', apply: (m) => { m.braceRegen = true; } },
-  { id: 'fullbloom',   scope: 'unit', needsType: 'Mender',   chain: 'lifebloom',   apply: (m) => { m.bloomAll = true; } },
-  { id: 'surge',       scope: 'unit', needsType: 'Booster',  chain: 'powerchord',  apply: (m) => { m.overdriveAll = true; } },
-];
-const UP_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
+// ─── The upgrade pool — imported from the shared src/data/upgrades.js (S7). The sim reads
+//     id/scope/needsType/needsCap/chain/apply; the UI fields (icon/name/desc/color) are inert here.
+const UP_BY_ID = UPGRADE_BY_ID;
 
 const freshMods = () => ({ dmgMult: 1, healMult: 1, blockMult: 1, hpMult: 1, chargeStart: 0, burnBonus: 0, ampBonus: 0 });
 
@@ -226,68 +205,34 @@ async function sweep(policy) {
 // Each relic is run on ONE squad chosen so its conditional cut is "live" (e.g. a Warden
 // in the squad makes Frostfang's shatter matter). All of a relic's cuts run on that same
 // squad → the Original is the baseline; a balanced cut lands within ~±2.5pp of it.
+// vF-CH (S7): the cut applies are no longer hand-mirrored here — `cutsFor`/`cutEffect` from
+// the shared src/data/relics.js derive them, so the §31 numbers can't drift from the game.
+// (Pure-verb relics — opener/shatter/apex/executioner — have no recut by design.)
 const RECUT_FIXTURES = [
-  { relic: 'Whetstone Fang (Rare)', squad: ['frostwarden', 'cinderpaw', 'swiftpaw'], cuts: [
-    { label: 'Original  +35% dmg',          apply: (m) => { m.dmgMult *= 1.35; } },
-    { label: 'Tempo Edge +28% dmg +1c',     apply: (m) => { m.dmgMult *= 1.28; m.chargeStart += 1; } },
-    { label: 'Frostfang +30% dmg +shatter', apply: (m) => { m.dmgMult *= 1.3; m.shatter = true; } },
-  ] },
-  { relic: 'Ironwood Charm (Common)', squad: ['ironwall', 'cinderpaw', 'swiftpaw'], cuts: [
-    { label: 'Original  +18% HP',            apply: (m) => { m.hpMult *= 1.18; } },
-    { label: 'Thornwood +12% HP +5% thorns', apply: (m) => { m.hpMult *= 1.12; m.thorns = (m.thorns || 0) + 0.05; } },
-  ] },
-  { relic: 'Bulwark Stone (Rare)', squad: ['ironwall', 'mossback', 'cinderpaw'], cuts: [
-    { label: 'Original +30% HP +30% shield',  apply: (m) => { m.hpMult *= 1.3; m.blockMult *= 1.3; } },
-    { label: 'Bastion  +24/+24 +10% thorns',  apply: (m) => { m.hpMult *= 1.24; m.blockMult *= 1.24; m.thorns = (m.thorns || 0) + 0.1; } },
-    { label: 'Lifewall +24% HP +14% heal',    apply: (m) => { m.hpMult *= 1.24; m.healMult *= 1.14; } },
-  ] },
-  { relic: 'Bloodpact (Legendary)', squad: ['cinderpaw', 'swiftpaw', 'glowtail'], cuts: [
-    { label: 'Original  +30dmg +40heal -10HP', apply: (m) => { m.dmgMult *= 1.3; m.healMult *= 1.4; m.hpMult *= 0.9; } },
-    { label: "Berserker +48dmg -10HP",         apply: (m) => { m.dmgMult *= 1.48; m.hpMult *= 0.9; } },
-    // ⚠ MIRROR: keep these cut numbers in sync with RELIC_CUTS in SeamLab.jsx (shipped 17/9).
-    { label: 'Bloodwell +17dmg +9% steal -10HP', apply: (m) => { m.dmgMult *= 1.17; m.lifesteal = (m.lifesteal || 0) + 0.09; m.hpMult *= 0.9; } },
-  ] },
-  { relic: 'Drop-Shard (Legendary)', squad: ['cinderpaw', 'swiftpaw', 'mossback'], cuts: [
-    { label: 'Original  +18dmg +18HP +1c', apply: (m) => { m.dmgMult *= 1.18; m.hpMult *= 1.18; m.chargeStart += 1; } },
-    { label: 'Edge-Shard +25% dmg +1c',    apply: (m) => { m.dmgMult *= 1.25; m.chargeStart += 1; } },
-  ] },
-  // ── Phase 2 (stat/tempo cuts that balance generically; pure-verb relics — opener/shatter/
-  //    apex/executioner — DROPPED: their verb is their identity and a flat cut over-performs) ──
-  { relic: 'Stoneblood (Common)', squad: ['ironwall', 'cinderpaw', 'swiftpaw'], cuts: [
-    { label: 'Original  +22% HP',           apply: (m) => { m.hpMult *= 1.22; } },
-    { label: 'Spineblood +16% HP +5% thorns', apply: (m) => { m.hpMult *= 1.16; m.thorns = (m.thorns || 0) + 0.05; } },
-  ] },
-  { relic: 'Ember Brand (Rare)', squad: ['cinderpaw', 'glowtail', 'swiftpaw'], cuts: [
-    { label: 'Original  burns+2 +10% dmg',  apply: (m) => { m.burnBonus += 2; m.dmgMult *= 1.1; } },
-    { label: 'Searbrand +16% dmg burns+1',  apply: (m) => { m.dmgMult *= 1.16; m.burnBonus += 1; } },
-  ] },
-  { relic: 'Reckless Charm (Rare)', squad: ['cinderpaw', 'swiftpaw', 'glowtail'], cuts: [
-    { label: 'Original  +55% dmg -18% HP',  apply: (m) => { m.dmgMult *= 1.55; m.hpMult *= 0.82; } },
-    { label: 'Bloodrage +48% dmg +1c -15% HP', apply: (m) => { m.dmgMult *= 1.48; m.chargeStart += 1; m.hpMult *= 0.85; } },
-  ] },
-  { relic: 'Wrathcore (Rare)', squad: ['cinderpaw', 'swiftpaw', 'glowtail'], cuts: [
-    { label: 'Original +42% dmg -12% heal', apply: (m) => { m.dmgMult *= 1.42; m.healMult *= 0.88; } },
-    { label: 'Warcry  +34% dmg +1c -12% heal', apply: (m) => { m.dmgMult *= 1.34; m.chargeStart += 1; m.healMult *= 0.88; } },
-  ] },
-  { relic: 'Bramble Hide (Rare)', squad: ['ironwall', 'cinderpaw', 'swiftpaw'], cuts: [
-    { label: 'Original  25% thorns',        apply: (m) => { m.thorns = (m.thorns || 0) + 0.25; } },
-    { label: 'Razorvine +8% dmg +12% thorns', apply: (m) => { m.dmgMult *= 1.08; m.thorns = (m.thorns || 0) + 0.12; } },
-  ] },
-  { relic: 'Reservoir Core (Rare)', squad: ['cinderpaw', 'swiftpaw', 'glowtail'], cuts: [
-    { label: 'Original  killCharge+2',      apply: (m) => { m.killCharge = (m.killCharge || 0) + 2; } },
-    { label: 'Surge Core killCharge+1 +8% dmg', apply: (m) => { m.killCharge = (m.killCharge || 0) + 1; m.dmgMult *= 1.08; } },
-  ] },
-  { relic: 'Glass Edge (Legendary)', squad: ['cinderpaw', 'swiftpaw', 'glowtail'], cuts: [
-    { label: 'Original   +70% dmg -30% HP', apply: (m) => { m.dmgMult *= 1.7; m.hpMult *= 0.7; } },
-    { label: 'Edgewalker +56% dmg +1c -25% HP', apply: (m) => { m.dmgMult *= 1.56; m.chargeStart += 1; m.hpMult *= 0.75; } },
-  ] },
-  // Vampiric Edge dropped from recut: its lifesteal is a sustain verb (ill-defined parity on the
-  // short Outer Ring — any damage cut over-performs it generically). Same as the other verb relics.
-  { relic: 'Frenzy Totem (Legendary)', squad: ['cinderpaw', 'swiftpaw', 'glowtail'], cuts: [
-    { label: 'Original  +20% dmg +1c',      apply: (m) => { m.dmgMult *= 1.2; m.chargeStart += 1; } },
-    { label: 'Onslaught +26% dmg',          apply: (m) => { m.dmgMult *= 1.26; } },
-  ] },
+  { relicId: 'r_whetfang',   squad: ['frostwarden', 'cinderpaw', 'swiftpaw'] },
+  { relicId: 'r_ironwood',   squad: ['ironwall', 'cinderpaw', 'swiftpaw'] },
+  { relicId: 'r_bulwark',    squad: ['ironwall', 'mossback', 'cinderpaw'] },
+  { relicId: 'r_bloodpact',  squad: ['cinderpaw', 'swiftpaw', 'glowtail'] },
+  { relicId: 'r_dropshard',  squad: ['cinderpaw', 'swiftpaw', 'mossback'] },
+  { relicId: 'r_stoneblood', squad: ['ironwall', 'cinderpaw', 'swiftpaw'] },
+  { relicId: 'r_emberbrand', squad: ['cinderpaw', 'glowtail', 'swiftpaw'] },
+  { relicId: 'r_reckless',   squad: ['cinderpaw', 'swiftpaw', 'glowtail'] },
+  { relicId: 'r_wrathcore',  squad: ['cinderpaw', 'swiftpaw', 'glowtail'] },
+  { relicId: 'r_bramble',    squad: ['ironwall', 'cinderpaw', 'swiftpaw'] },
+  { relicId: 'r_reservoir',  squad: ['cinderpaw', 'swiftpaw', 'glowtail'] },
+  { relicId: 'r_glassedge',  squad: ['cinderpaw', 'swiftpaw', 'glowtail'] },
+  { relicId: 'r_frenzy',     squad: ['cinderpaw', 'swiftpaw', 'glowtail'] },
 ];
+// Derive the cut list (Original at idx 0, then each alternate) straight from shared relic data.
+function fixtureCuts(relicId) {
+  const relic = RELIC_BY_ID[relicId];
+  const out = [];
+  for (let idx = 0; idx <= cutsFor(relicId).length; idx++) {
+    const eff = cutEffect(relic, idx);
+    out.push({ label: `${eff.name} — ${eff.desc}`, apply: eff.apply });
+  }
+  return out;
+}
 async function parity() {
   const N = Number(process.env.PRUNS || 400);
   const CM = Number(process.env.DIFF || 1.5); // harder-than-Ring-1 so win-rates de-saturate and DEFENSE can matter
@@ -295,9 +240,11 @@ async function parity() {
   process.stderr.write(`(Δ = vs Original on the SAME squad; |Δ| ≤ ~2.5pp = balanced sidegrade)\n`);
   const report = [];
   for (const fx of RECUT_FIXTURES) {
-    process.stderr.write(`\n${fx.relic}   [squad: ${fx.squad.join(', ')}]\n`);
+    const relic = RELIC_BY_ID[fx.relicId];
+    const relicLabel = `${relic.name} (${relic.rarity})`;
+    process.stderr.write(`\n${relicLabel}   [squad: ${fx.squad.join(', ')}]\n`);
     let baseWr = null;
-    for (const cut of fx.cuts) {
+    for (const cut of fixtureCuts(fx.relicId)) {
       let wins = 0;
       for (let i = 0; i < N; i++) { const r = await runOne(fx.squad, 20000 + i * 7, 'greedy', cut, CM); if (r.won) wins++; }
       const wr = wins / N;
@@ -305,7 +252,7 @@ async function parity() {
       const d = (wr - baseWr) * 100;
       const flag = Math.abs(d) > 2.5 && baseWr !== wr ? '  ⚠' : '';
       process.stderr.write(`  ${(wr * 100).toFixed(1).padStart(5)}%  Δ${(d >= 0 ? '+' : '') + d.toFixed(1)}pp${flag.padStart(4)}  ${cut.label}\n`);
-      report.push({ relic: fx.relic, cut: cut.label, wr, delta: d });
+      report.push({ relic: relicLabel, cut: cut.label, wr, delta: d });
     }
   }
   console.log(JSON.stringify(report, null, 2));

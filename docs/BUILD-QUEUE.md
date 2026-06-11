@@ -31,9 +31,13 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
   component (3 variants: detail/line/pill) replaces the 3 inline law-chip JSX blocks. loadJson/
   saveJson helpers collapse 10 identical JSON load/save pairs to 1-line wrappers. Zero behavior
   change; goldens byte-identical; Playwright smoke confirms law chip renders.
-- [ ] **S7 · MODEL=opus · Sim mirror extraction** — RELIC_CUTS/UPGRADES are hand-mirrored in the
-  sim (the drift-bug class waves.js extraction killed). Extract to a shared module the same way.
-  Verify: sim outputs identical before/after on a fixed seed set.
+- [x] **S7 · MODEL=opus · Sim mirror extraction** — DONE. UPGRADES → `src/data/upgrades.js`,
+  RELICS+RELIC_CUTS+cutsFor/cutEffect → `src/data/relics.js` (plain JS, no React). SeamLab + the
+  sim both import them (same pattern as engine/waves.js); the sim's RECUT_FIXTURES now derive cut
+  applies via `cutEffect` (the old ⚠ MIRROR copy is gone). Unit-scope applies use the defensive
+  `(x||0)+n` form so they work with the sim's bare `{}` mods — math identical to the game's `+=`.
+  Verified: `--depths` byte-identical, `--parity` all 29 win-rates identical (only cosmetic labels
+  changed), goldens green, lint/build clean, Playwright confirms relics/forge render.
 
 NOT in this queue (needs Sky or attended judgment): PixelLab 8-stone batch (spends generations;
 art-direction calls), carrier/R3 re-tuning (gated on Sky's playtest), audio, anything Fable-tier.
