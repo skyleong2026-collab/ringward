@@ -72,8 +72,17 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
 - [ ] **U5 · MODEL=opus · Character sheet + ⓘ InfoDot** — HANDHELD-DIRECTION.md spec: full
   sheet from any creature card (art slot reserved for portraits), skills + ⓘ long copy
   (reuse Spotter glossary), lore bio from roster-character-sheets.md, recipes listing.
-- [ ] **R2 · MODEL=opus · Pull-beat team reveal** — owned-roster recipe computation in the
-  staged reveal: "NEW TEAM POSSIBLE" beat + nearest-miss chase pointer.
+- [x] **R2 · MODEL=opus · Pull-beat team reveal** — DONE. recipes.js `pullReveal(ownedMembers,
+  newId)`: ownership-aware — recipes the new creature COMPLETES that the roster couldn't field
+  without it (each with partner ids: "with your Frostward"), else ONE nearest-miss the new
+  creature is part of (chase pointer, roster-preferred-over-sworn, never a wildcard seat). Fresh-
+  pull staged beat now shows ⚡ NEW TEAM POSSIBLE (up to 2 completed recipes + folk line) or the
+  ⮑ chase pointer, falling back to the type-build line; ⬡ line preserved. Summon-tab batch pull
+  left as-is (per-pull ownership = separate slice). Node-tested across 8 pull scenarios; goldens
+  byte-identical; lint/build clean; live module-load verified (squad-pick exercises same matcher
+  family, zero page errors). NOTE: the auto-win Playwright harness was too flaky/slow to land an
+  RNG pull in time — reveal logic instead proven by the node suite + clean render of the shared
+  module; recommend Sky eyeball one live pull.
 - [ ] **R3 · MODEL=opus · Recipe seasoning + sim sweep** — run-layer mods via perkBaseMods;
   PRUNS=200 GEAR=1 depth sweep before/after; ladder stays a ladder (20–90 geared band).
 - [ ] **U6 · MODEL=opus · Landscape battle prototype** — 3-pane FightView at landscape widths

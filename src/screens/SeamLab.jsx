@@ -22,7 +22,7 @@ import { endlessWaveSpec, endlessRoundSlag, endlessReached } from '../data/endle
 import { evalFeats, featTally, FEAT_GROUPS, TIER_COLOR } from '../data/feats.js';
 import { UPGRADES, UPGRADE_BY_ID } from '../data/upgrades.js';
 import { RELICS, RELIC_BY_ID, cutsFor, cutEffect } from '../data/relics.js';
-import { detectRecipes, memberFits } from '../data/recipes.js';
+import { detectRecipes, memberFits, pullReveal, slotLabel } from '../data/recipes.js';
 import {
   createBattleState,
   runBattle,
@@ -5227,11 +5227,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                 </div>
               );
             }
-            // Fresh pull beat: 1) type+rarity  2) innate  3) opens line  4) stats last
+            // Fresh pull beat: 1) type+rarity  2) innate  3) NEW TEAM POSSIBLE  4) stats last.
+            // R2: the "opens" line is now ownership-aware — which named TEAM the new creature
+            // completes with creatures you already own (the hour-15 hook), or the nearest team
+            // it's one piece short of, as a chase pointer. Falls back to the type-build line.
+            const reveal = pullReveal(stable.map((id) => recipeMember(id, treeEquip)), pullNow.id);
             const sameType = stable.filter((id) => COMBAT_CREATURES[id]?.type === ac.type && id !== pullNow.id);
-            const opensLine = sameType.length >= 2
-              ? `With ${COMBAT_CREATURES[sameType[sameType.length - 1]].name} — full ${ac.type} squad reachable`
-              : `Opens the ${BUILD_LINE[ac.type] || ati.nick} build`;
+            const partnerName = (ids) => ids.map((id) => COMBAT_CREATURES[id]?.name).filter(Boolean).join(' + ');
             return (
               <div style={{ ...calm, textAlign: 'center' }}>
                 {/* 1. Type + rarity identity */}
@@ -5247,8 +5249,24 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                     <div style={{ fontSize: T.micro, color: '#8fa0a0', lineHeight: 1.4, marginTop: 2 }}>{inn.line}</div>
                   </div>
                 )}
-                {/* 3. What this opens — computed from stable state */}
-                <div style={{ fontSize: T.small, fontWeight: 800, color: '#9be7ff', marginBottom: 6 }}>⮑ {opensLine}{pullNow.gainedCores > 0 ? ` · +${pullNow.gainedCores} ⬡` : ''}</div>
+                {/* 3. NEW TEAM POSSIBLE — ownership-aware. The recipe(s) this pull completes with
+                    creatures you already own; else the nearest team it's one piece short of. */}
+                {reveal.completes.length > 0 ? (
+                  <div style={{ background: 'linear-gradient(180deg,#1c1810,#13110a)', border: '1px solid #6a5a2a', borderRadius: 9, padding: '9px 12px', margin: '0 auto 8px', maxWidth: 320, boxShadow: '0 0 16px #6a5a2a44' }}>
+                    <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1, color: '#ffd166', marginBottom: 4 }}>⚡ NEW TEAM POSSIBLE</div>
+                    {reveal.completes.slice(0, 2).map(({ recipe, partners }) => (
+                      <div key={recipe.id} style={{ marginTop: 3 }}>
+                        <div style={{ fontSize: T.small, fontWeight: 900, color: '#ffe08a' }}>{recipe.icon} {recipe.name}{partners.length ? <span style={{ color: '#c9b98a', fontWeight: 700 }}> — with your {partnerName(partners)}</span> : null}</div>
+                        <div style={{ fontSize: T.micro, color: '#c9b98a', fontStyle: 'italic', marginTop: 1 }}>{recipe.line}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : reveal.chase ? (
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: '#9be7ff', marginBottom: 6 }}>⮑ one short of <b style={{ color: '#cbe8ff' }}>{reveal.chase.recipe.name}</b> — {slotLabel(reveal.chase.missing)} would finish it.</div>
+                ) : (
+                  <div style={{ fontSize: T.small, fontWeight: 800, color: '#9be7ff', marginBottom: 6 }}>⮑ {sameType.length >= 2 ? `With ${COMBAT_CREATURES[sameType[sameType.length - 1]].name} — full ${ac.type} squad reachable` : `Opens the ${BUILD_LINE[ac.type] || ati.nick} build`}</div>
+                )}
+                {pullNow.gainedCores > 0 && <div style={{ fontSize: T.micro, color: WIN, fontWeight: 800, marginBottom: 6 }}>+{pullNow.gainedCores} ⬡ toward {ac.name}'s build</div>}
                 {/* 4. Stats last — dimmest, smallest */}
                 <div style={{ fontSize: T.micro, color: DIM }}>HP {ac.hp} · ATK {ac.atk} · SPD {ac.speed}</div>
               </div>

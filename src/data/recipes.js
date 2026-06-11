@@ -184,3 +184,62 @@ export function recipesForCreature(id, type) {
   return RECIPES.filter((r) => r.slots.some((s) =>
     s.c === id || (s.oneOf && s.oneOf.includes(id)) || s.t === type));
 }
+
+// First complete assignment that USES `mustUseId` → the other member ids filling the rest of
+// the slots ("with your Frostward"). null if no complete assignment needs that member.
+function partnersUsing(slots, members, mustUseId) {
+  const used = new Array(members.length).fill(false);
+  let result = null;
+  const rec = (si, picks) => {
+    if (result) return;
+    if (si === slots.length) {
+      if (picks.some((mi) => members[mi].id === mustUseId)) {
+        result = picks.filter((mi) => members[mi].id !== mustUseId).map((mi) => members[mi].id);
+      }
+      return;
+    }
+    for (let mi = 0; mi < members.length && !result; mi++) {
+      if (!used[mi] && memberFits(members[mi], slots[si])) {
+        used[mi] = true; picks.push(mi);
+        rec(si + 1, picks);
+        picks.pop(); used[mi] = false;
+      }
+    }
+  };
+  rec(0, []);
+  return result;
+}
+
+// THE PULL MOMENT (R2) — ownership-aware. `ownedMembers` is the WHOLE owned roster (already
+// including the just-pulled `newId`). Returns:
+//   completes: recipes the new creature COMPLETES that the roster couldn't field without it,
+//              each with the partner ids that fill the other seats ("with your Frostward").
+//   chase:     when nothing completed, ONE nearest-miss the new creature is part of — it fills
+//              one seat and the other seat is empty — framed as the next acquisition. null else.
+// Guardrails (design doc): chase only when genuinely one seat short; never a wildcard seat;
+// roster recipes are preferred over sworn (more attainable now).
+export function pullReveal(ownedMembers, newId) {
+  const newMember = (ownedMembers || []).find((m) => m.id === newId);
+  const others = (ownedMembers || []).filter((m) => m.id !== newId);
+  const completes = [];
+  for (const r of RECIPES) {
+    if (recipeComplete(r, ownedMembers) && !recipeComplete(r, others)) {
+      completes.push({ recipe: r, partners: partnersUsing(r.slots, ownedMembers, newId) || [] });
+    }
+  }
+  let chase = null;
+  if (!completes.length && newMember) {
+    for (const r of RECIPES) {
+      if (r.slots.length !== 2) continue;
+      const [s0, s1] = r.slots;
+      let missing = null;
+      if (memberFits(newMember, s0) && !others.some((m) => memberFits(m, s1))) missing = s1;
+      else if (memberFits(newMember, s1) && !others.some((m) => memberFits(m, s0))) missing = s0;
+      if (missing && !missing.any) {
+        // prefer a roster recipe (attainable now) over a sworn one (needs an Oath grind)
+        if (!chase || (chase.recipe.tier === 'sworn' && r.tier === 'roster')) chase = { recipe: r, missing };
+      }
+    }
+  }
+  return { completes, chase };
+}
