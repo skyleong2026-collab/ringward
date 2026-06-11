@@ -42,7 +42,7 @@ STOP. Specs live in `docs/RINGWARD-COLLECTION-DESIGN.md` unless noted.
 ## Round 2 queue (2026-06-10 evening — specs in docs/RINGWARD-COPY-AUDIT.md and
 ## docs/RINGWARD-COLLECTION-ENGINE.md; renames + copy flow approved by Sky)
 
-- [ ] **U1 · MODEL=sonnet · Copy honesty + jargon pass** — apply the U1 rewrite table in
+- [x] **U1 · MODEL=sonnet · Copy honesty + jargon pass** — DONE (commit d956b85). Vent→Spend everywhere; execute ×2.5@45%; Amp defined on Prime; "carry"→"your hardest hitter" (tree nodes + upgrades); The Watch matches apply; wards.js Bulwark fix; frostnip plain; chilled→frozen; part-takes fixed; Apex Quarry mechanic desc + dynamic SIGIL FOUND; rates 100; banner blurbs; ally-aim AND prompt; Chronicle pointer; crossroads; Wrapped Wool ❤️. Canon-table NOT applied (awaits Sky). Goldens green. — apply the U1 rewrite table in
   RINGWARD-COPY-AUDIT.md (~15 entries: kill "chip", ONE cost vocabulary, Execute states
   ×2.5@45%, Amp defined, "The Watch" matches its apply, ward-gate Warden→Bulwark factual fix,
   summon rates sum to 100, typos, Apex Quarry explained, minors batch). Canon-table lines are
