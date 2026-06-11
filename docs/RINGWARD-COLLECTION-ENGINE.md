@@ -31,9 +31,18 @@ Detection is pure data → UI:
   WINTER — freeze them, then break them."* Near-misses show dimmed: *"one short of THE PYRE PACK."*
 - **Pull reveal (the moment that decides hour 15):** computed against the player's OWNED roster,
   not the catalog. New creature → up to two lines: *"⚡ NEW TEAM POSSIBLE — THE PATIENT KNIFE
-  (with your Frostward): hold them frozen under the knife-line."* If it completes nothing → the
-  nearest miss becomes the chase pointer: *"one short of THE STORMCOURT — a Booster would finish
-  it."* Either way the pull ends with a team in the player's head or a name to hunt.
+  (with your Frostward): hold them frozen under the knife-line."* The ownership-aware part is the
+  leverage: generic "part of The Long Winter" is weak; *"completes it with creatures you already
+  own"* is where possibility becomes tangible. If it completes nothing → the nearest miss becomes
+  the chase pointer: *"one short of THE STORMCOURT — a Booster would finish it."* Either way the
+  pull ends with a team in the player's head or a name to hunt.
+  **Nearest-miss guardrails (watch closely in testing — "almost there" messaging can curdle into
+  frustration):** show it ONLY when genuinely one slot short; never list two-or-more-missing
+  recipes; frame as the next acquisition ("a Booster would finish it"), never as what this pull
+  failed to be; and the Near Call banner is the built-in release valve — the chase pointer names
+  what to hunt, the biased summon is how you hunt it. The emotional target: the player leaves
+  thinking "I need one more piece," never "I got junk." If pulls start FEELING like junk despite
+  the pointer, drop the pointer from dupe reveals first (dupes already pay ⬡ toward a build).
 - **Character sheet (queue slice U5):** "teams this one belongs to," tappable.
 - **Ring thresholds:** law chips name the recipe that answers them: *"The Cold Remembers —
   squads that ran last time start frozen. THE PYRE PACK thaws fast."* (Copy + detection only.)
@@ -94,7 +103,14 @@ Slots: `T:` any of Type · named creature = that creature · `★` = sworn Oath 
     *"Hit it harder. Please."* Seasoning: reflect cap +5%.
 
 **Apex recipes:** one per Apex Unique, authored when each Apex's kit is final — the Apex slot is
-non-substitutable. (Reserved; not authored here.)
+non-substitutable. (Reserved; not authored here.) The point: the chase stops being "number
+bigger" and becomes collecting an *archetype* — narrative desire, not stat desire.
+
+**Book-size discipline (standing rule):** eleven recipes is right; thirty would not be. A recipe
+ships only if it passes the inevitability test — a player who sees it thinks *"oh, of course
+those belong together"* (the synergy must be readable in the kits BEFORE the name arrives). The
+strongest collections feel inevitable after you see them; the weakest feel invented. When the
+book grows, it grows because the roster grew (Layer 3), never to pad a screen.
 
 **Rejected, with reasons:**
 - *Full pair-bond matrix (17×17):* content explosion, stat-soup; recipes keep the good half
@@ -130,8 +146,21 @@ laws + recipe pointers tell you which ingredient tonight's ring wants.
 - **R5 · fable · creature 18+ / Apex recipe authoring** — recipe-first creature design, when
   the roster next grows.
 
-## How we know it worked (Sky's one-session test)
-He pulls a creature and SAYS, unprompted, what team he wants to try — before reading stats.
-Failure smell: recipe chips read as buff-checklists ("I field the squad for the +10%") — if that
-happens, halve the seasonings; never let the label become the reward. Sim guard: R3 sweep shows
-no recipe pushing a ring's geared win-rate out of the 20–90 band that keeps the ladder a ladder.
+## How we know it worked (the tests, in order)
+1. **The imagination test (first, R1+R2):** Sky pulls a creature and the observable behavior is
+   he starts opening roster screens and comparing pieces — imagining the team — BEFORE reading
+   the stat line. If he still jumps straight to attack value and rarity pips, the system isn't
+   working yet (fix the signaling, not the bonuses). Retention/engagement metrics come later;
+   this comes first.
+2. **The identity-anchor test (over weeks):** he starts SAYING "I'm running The Long Winter"
+   instead of naming three creatures. When the recipe replaces the creature list in his own
+   speech, it has become a mental model — that's the success state. If recipes instead get
+   discussed as set bonuses ("I field it for the +10%"), halve the seasonings; never let the
+   label become the reward.
+3. **Sim guard (R3):** the depth sweep shows no seasoning pushing a ring's geared win-rate out
+   of the 20–90 band that keeps the ladder a ladder.
+
+*(External review folded in 2026-06-10 — ChatGPT, relayed by Sky: endorsed ownership-aware pull
+messaging as the highest-leverage idea, detection-before-power as the right test order, and Apex
+centerpieces; contributed the nearest-miss guardrails, the identity-anchor criterion, and the
+book-size discipline above.)*
