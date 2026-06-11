@@ -131,6 +131,11 @@ reuse the existing boon apply path (`holdfastMods`).
 4. Ring-biased summons + Type-mastery feat.
 5. Forge Tempering + Holdfast boon choice (independent, any time).
 6. Manual-verb audit doc (read kits, table of per-Type manual decisions, name the gaps).
+   ✅ DONE 2026-06-10 → `docs/RINGWARD-MANUAL-VERB-AUDIT.md`. Verdict: Reactor/Assassin/Hexer
+   strong; Mender weakest then Bulwark then Booster flagged for a kit pass; biggest cheap lever =
+   a legibility pass (telegraph enemy intent + first-action cue + 45% breakpoint line) that lifts
+   Warden/Striker/Booster/Bulwark at once. Structural note: V2 (build-vs-spend) doesn't exist below
+   2 charge, so opening turns are pure targeting — new verbs should ride the always-legal builder.
 Out of scope until Sky's look: silhouette wall visual design (art instance owns look).
 
 **⚠ Channel audit (checked against the engine, 2026-06-10):** most sketches ride existing
