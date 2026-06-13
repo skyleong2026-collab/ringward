@@ -34,7 +34,8 @@ import {
   COMBAT_ROSTER,
 } from '../engine/combat/index.js';
 
-import { ACCENT, CHG, BURN, AMP, WIN, LOSS, DIM, PANEL, LINE, SEL, TYPE_SCALE as T } from '../data/designTokens.js';
+import { ACCENT, CHG, BURN, AMP, WIN, LOSS, DIM, PANEL, LINE, SEL, TYPE_SCALE as T, FONTS, BASE } from '../data/designTokens.js';
+import { StatusChip } from '../components/ui/index.jsx';
 const PATCHUP = 0.18; // between-wave heal (fraction of max HP) — small, so a run is a war of attrition
 // Input-locking beat after each action — the hit animates, THEN the next actor is
 // asked. Weighted by move size for a Summoners-War-style feel (~1.2–1.9s/turn): a
@@ -1679,11 +1680,13 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {hurt && <div style={{ position: 'absolute', top: '48%', left: '50%', width: size * 0.95, height: size * 0.95, borderRadius: '50%', background: `radial-gradient(circle, transparent 52%, ${LOSS}66 100%)`, animation: 'seam-hurtring 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 2 }} />}
         {hurt && <div style={{ position: 'absolute', top: -size * 0.16, left: '50%', fontSize: size * 0.3, animation: 'seam-alert .8s ease-in-out infinite', pointerEvents: 'none', zIndex: 6, filter: 'drop-shadow(0 1px 2px #000)' }}>❗</div>}
         {/* burning: flames keep licking up the WHOLE time it burns, not just on the hit */}
-        {u.burn > 0 && !dead && Array.from({ length: 4 }).map((_, i) => {
+        {/* the fire intensifies with the burn stack — a calm lick at ×1, a blaze + card-edge glow at ×5 */}
+        {u.burn > 0 && !dead && Array.from({ length: Math.min(9, 3 + u.burn) }).map((_, i) => {
           const c = EMBER_COLORS[i % EMBER_COLORS.length];
-          const dx = ((i * 29) % 40) - 20;
-          return <div key={`bn${i}`} style={{ position: 'absolute', bottom: size * 0.12, left: `calc(50% + ${dx}px)`, width: size * 0.12, height: size * 0.12, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${c} 55%, transparent 78%)`, boxShadow: `0 0 6px 2px ${c}`, animation: `seam-rise 1.1s ease-out ${i * 0.28}s infinite`, pointerEvents: 'none', zIndex: 5 }} />;
+          const dx = ((i * 29) % 46) - 23;
+          return <div key={`bn${i}`} style={{ position: 'absolute', bottom: size * 0.12, left: `calc(50% + ${dx}px)`, width: size * 0.12, height: size * 0.12, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${c} 55%, transparent 78%)`, boxShadow: `0 0 6px 2px ${c}`, animation: `seam-rise 1.1s ease-out ${i * 0.16}s infinite`, pointerEvents: 'none', zIndex: 5 }} />;
         })}
+        {u.burn >= 3 && !dead && <div style={{ position: 'absolute', inset: 0, borderRadius: 14, boxShadow: `inset 0 -20px 26px -14px ${BURN}`, opacity: Math.min(1, (u.burn - 1) / 5), pointerEvents: 'none', zIndex: 4 }} />}
         {/* amped: a rising violet power aura + sparks climbing — "charged up to hit big" */}
         {u.amp > 0 && !dead && <div style={{ position: 'absolute', bottom: size * 0.02, left: '50%', transform: 'translateX(-50%)', width: size * 0.8, height: size * 0.5, borderRadius: '50%', background: `radial-gradient(ellipse at bottom, ${AMP}88 0%, transparent 70%)`, animation: 'seam-aura 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 2 }} />}
         {u.amp > 0 && !dead && Array.from({ length: 3 }).map((_, i) => (
@@ -1705,19 +1708,21 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.1, height: size * 1.1, borderRadius: '50%', background: 'radial-gradient(circle, transparent 50%, #b06bff22 72%, #b06bff55 100%)', boxShadow: 'inset 0 0 18px #b06bff66', pointerEvents: 'none', zIndex: 5 }} />}
         {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '6%', right: '12%', fontSize: size * 0.26, pointerEvents: 'none', zIndex: 8, textShadow: '0 0 6px #b06bff' }}>💀</div>}
       </div>
-      <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {/* name — the world's voice (serif); HP/charge stay neutral so type-color reads clean */}
+      <div style={{ fontFamily: FONTS.serif, fontSize: T.label, fontWeight: 700, letterSpacing: 0.2, color: isActor ? ACCENT : BASE.ink, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {ti.glyph} {u.name}
       </div>
       <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} /></div>
-      <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aab', marginTop: 2, fontWeight: 700 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
+      <div style={{ fontFamily: FONTS.mono, fontSize: T.small, color: dead ? LOSS : '#cdbb9a', marginTop: 2, fontWeight: 700, letterSpacing: 0.5 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
       <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center' }}><ChargeDots value={u.charge} max={u.maxCharge} /></div>
-      <div style={{ display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center', marginTop: 3, flexWrap: 'wrap', minHeight: 15 }}>
-        {u.burn > 0 && <span style={{ fontSize: T.micro, color: BURN, fontWeight: 700 }}>🔥{u.burn}</span>}
-        {u.block > 0 && <span style={{ fontSize: T.micro, color: '#7fd6ff', fontWeight: 700 }}>🛡{u.block}</span>}
-        {u.regen > 0 && <span style={{ fontSize: T.micro, color: WIN, fontWeight: 700 }}>🌿{u.regen}</span>}
-        {u.amp > 0 && <span style={{ fontSize: T.micro, color: AMP, fontWeight: 700 }}>✦{u.amp}</span>}
-        {u.freeze > 0 && <span style={{ fontSize: T.micro, color: '#8fd8ff', fontWeight: 700 }}>❄{u.freeze}</span>}
-        {u.vuln > 0 && <span style={{ fontSize: T.micro, color: '#b06bff', fontWeight: 700 }}>💀{u.vuln}</span>}
+      {/* status — type/effect-colored chips that show their stack count (tiered read) */}
+      <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', minHeight: 18 }}>
+        {u.burn > 0 && <StatusChip kind="burn" count={u.burn} size={22} />}
+        {u.block > 0 && <StatusChip kind="shield" count={u.block} size={22} />}
+        {u.regen > 0 && <StatusChip kind="regen" count={u.regen} size={22} />}
+        {u.amp > 0 && <StatusChip kind="amp" count={u.amp} size={22} />}
+        {u.freeze > 0 && <StatusChip kind="freeze" count={u.freeze} size={22} />}
+        {u.vuln > 0 && <StatusChip kind="curse" count={u.vuln} size={22} />}
       </div>
     </div>
   );
