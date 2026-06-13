@@ -34,17 +34,7 @@ import {
   COMBAT_ROSTER,
 } from '../engine/combat/index.js';
 
-const ACCENT = '#e8a040';
-const CHG = '#f5a623';
-const BURN = '#ff5a2a';
-const AMP = '#b06bff';
-const WIN = '#7ed321';
-const LOSS = '#d0021b';
-const DIM = '#8a8a9a';
-const PANEL = '#12121c';
-const LINE = '#2a2a3a';
-const SEL = '#9cd1ff';
-const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
+import { ACCENT, CHG, BURN, AMP, WIN, LOSS, DIM, PANEL, LINE, SEL, TYPE_SCALE as T } from '../data/designTokens.js';
 const PATCHUP = 0.18; // between-wave heal (fraction of max HP) — small, so a run is a war of attrition
 // Input-locking beat after each action — the hit animates, THEN the next actor is
 // asked. Weighted by move size for a Summoners-War-style feel (~1.2–1.9s/turn): a
