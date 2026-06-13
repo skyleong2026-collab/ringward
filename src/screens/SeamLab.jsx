@@ -24,6 +24,7 @@ import { UPGRADES, UPGRADE_BY_ID } from '../data/upgrades.js';
 import { RELICS, RELIC_BY_ID, cutsFor, cutEffect } from '../data/relics.js';
 import { detectRecipes, memberFits, pullReveal, slotLabel, recipesForCreature, RECIPE_BY_ID, RECIPES } from '../data/recipes.js';
 import { GlossaryDot } from '../components/GlossaryPopover.jsx';
+import { vfxFor } from '../data/attackVfx.js';
 import {
   createBattleState,
   runBattle,
@@ -46,17 +47,10 @@ import { applyTemperament } from '../engine/combat/doctrines.js';
 import { ASSASSIN, STRIKER } from '../engine/combat/dials.js';
 import { DEEP_INSCRIPTIONS, loadStones, saveStones } from '../data/lore.js';
 
-const ACCENT = '#e8a040';
-const CHG = '#f5a623';
-const BURN = '#ff5a2a';
-const AMP = '#b06bff';
-const WIN = '#7ed321';
-const LOSS = '#d0021b';
-const DIM = '#8a8a9a';
-const PANEL = '#12121c';
-const LINE = '#2a2a3a';
-const SEL = '#9cd1ff';
-const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
+import { ACCENT, CHG, BURN, AMP, WIN, LOSS, DIM, PANEL, LINE, SEL, TYPE_SCALE as T, FONTS, BASE } from '../data/designTokens.js';
+import { StatusChip, RelicCard } from '../components/ui/index.jsx';
+import { FramePlayer } from '../components/FramePlayer.jsx';
+import { hasCreatureAnim } from '../data/creatureAnim.js';
 const PATCHUP = 0.18; // between-wave heal (fraction of max HP) — small, so a run is a war of attrition
 // Input-locking beat after each action — the hit animates, THEN the next actor is
 // asked. Weighted by move size for a Summoners-War-style feel (~1.2–1.9s/turn): a
@@ -830,6 +824,9 @@ function savePerks(ids) {
 // so the §31 recut numbers can never drift between game and sim. The React-coupled relic logic
 // (state, persistence, RELIC_SETS bonuses, relicMods, rollRelicChoices) stays below.
 // (RELICS, RELIC_BY_ID, RELIC_CUTS, cutsFor, cutEffect imported at the top.)
+const VERB_RELIC_IDS = new Set(['r_ambush', 'r_frostbite', 'r_totem', 'r_vampiric', 'r_bramble', 'r_reaper', 'r_phoenix', 'r_reservoir']);
+const RELIC_WHEN = { r_ambush: 'FULL-HP ENEMY', r_frostbite: 'FROZEN ENEMY', r_totem: 'ON A KILL', r_vampiric: 'ON ANY HIT', r_bramble: 'WHEN STRUCK', r_reaper: 'ENEMY BELOW HALF', r_phoenix: 'A LETHAL BLOW', r_reservoir: 'ON A KILL' };
+const relicKind = (r) => (VERB_RELIC_IDS.has(r.id) ? 'verb' : 'stat');
 const KEYSTONE_IDS = RELICS.filter((r) => r.keystone).map((r) => r.id); // craft-only top tier
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
 const RELIC_KEY = '8gents_seam_relics';          // owned relic ids (the collection)
@@ -1685,27 +1682,37 @@ const FOCAL_X = {
 // One creature, cropped big out of its concept-art strip and framed in its type
 // color with a shape badge — so you read it by color + silhouette, not by name.
 // Falls back to the big glyph if the PNG is missing.
-function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64 }) {
-  const animCss = {
-    idle: 'seam-idle 1.7s ease-in-out infinite',
-    attack: 'seam-attack .5s ease-out',
-    damaged: 'seam-damaged .45s ease-in-out',
-    defeated: 'seam-defeated .7s ease-out forwards',
-  }[anim] || 'seam-idle 1.7s ease-in-out infinite';
+function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64, beat = 0 }) {
+  const animated = hasCreatureAnim(spriteId); // real frame rig (Cinderpaw +) vs static crop
+  // For animated creatures the GIF carries idle/hurt motion itself — the engine only
+  // adds the positional verbs (attack thrust, defeat collapse) on top. Static creatures
+  // get the full CSS state set as before.
+  const animCss = (animated
+    ? { attack: 'seam-attack .5s ease-out', defeated: 'seam-defeated .7s ease-out forwards' }[anim] || 'none'
+    : {
+        idle: 'seam-idle 1.7s ease-in-out infinite',
+        attack: 'seam-attack .5s ease-out',
+        damaged: 'seam-damaged .45s ease-in-out',
+        defeated: 'seam-defeated .7s ease-out forwards',
+      }[anim]) || (animated ? 'none' : 'seam-idle 1.7s ease-in-out infinite');
   const focal = (FOCAL_X[spriteId] ?? 0.04) * 100;
   return (
     <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 14, overflow: 'hidden', position: 'relative', background: `radial-gradient(circle at 50% 38%, ${color}33 0%, #0b0b14 72%)`, border: `2.5px solid ${color}`, boxShadow: `0 0 12px ${color}44, inset 0 0 16px ${color}22` }}>
       {/* fallback glyph sits behind the art */}
       <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, opacity: 0.5 }}>{glyph}</span>
-      <div style={{ position: 'absolute', inset: 0, transform: `scaleX(${facing})` }}>
+      <div style={{ position: 'absolute', inset: 0, transform: animated ? 'none' : `scaleX(${facing})` }}>
         <div style={{ width: '100%', height: '100%', animation: animCss }}>
-          <div style={{
-            width: '100%', height: '100%',
-            backgroundImage: `url(/sprites/${spriteId}.jpg)`,
-            backgroundSize: 'auto 122%',
-            backgroundPosition: `${focal}% 38%`,
-            backgroundRepeat: 'no-repeat',
-          }} />
+          {animated ? (
+            <FramePlayer creatureId={spriteId} anim={anim} size={size} facing={facing} beat={beat} />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%',
+              backgroundImage: `url(/sprites/${spriteId}.jpg)`,
+              backgroundSize: 'auto 122%',
+              backgroundPosition: `${focal}% 38%`,
+              backgroundRepeat: 'no-repeat',
+            }} />
+          )}
         </div>
       </div>
       {/* shape badge — the type's color + glyph, bottom-right */}
@@ -1786,9 +1793,21 @@ function ChargeDots({ value, max }) {
   );
 }
 
+// PNG-ready VFX layer — the seam for the PixelLab art swap. Renders the generated
+// sprite (per src/data/attackVfx.js) once it loads; until that file exists it shows
+// `fallback` (the current CSS blob / emoji), so the arena looks identical today and
+// the art drops in with zero code change. See docs/ATTACK-VFX-SIGNATURES.md.
+// Keyed per-attack by the caller (key includes fxN), so a new hit remounts and the
+// load state resets cleanly.
+function VfxSprite({ src, style, alt = '', fallback = null }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return fallback;
+  return <img src={src} alt={alt} onError={() => setFailed(true)} style={style} />;
+}
+
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, bigger, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire, heavy, justKilled }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, bigger, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire, heavy, justKilled, actorVfx }) {
   const dead = !u.alive;
   const struck = burst === 'attack'; // taking a hit this action → pop the sprite
   const hurt = u.alive && u.maxHp > 0 && u.hp / u.maxHp <= 0.3; // badly wounded — show distress so the player KNOWS to heal/guard it
@@ -1835,14 +1854,28 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       </div>
       <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
         {castEf && <div key={`c${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.15, height: size * 1.15, borderRadius: '50%', background: `radial-gradient(circle, ${castEf.color}cc 0%, transparent 70%)`, animation: 'seam-castglow .55s ease-out forwards', pointerEvents: 'none', zIndex: 3 }} />}
-        {streak === 'bolt' && Array.from({ length: nStreaks }).map((_, i) => (
-          <div key={`b${fxN}-${i}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.36, height: size * 0.36, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${burstEf.color} 45%, transparent 74%)`, boxShadow: `0 0 16px 4px ${burstEf.color}, ${trailX * -20}px 0 22px ${burstEf.color}aa`, animation: `${fromLeft ? 'seam-bolt-L' : 'seam-bolt-R'} .4s ease-in forwards`, animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 }} />
-        ))}
+        {streak === 'bolt' && Array.from({ length: nStreaks }).map((_, i) => {
+          // The projectile is the ACTOR's (a Reactor throws its ember, a Warden its
+          // shard) — travel + impact stay anchored on this target. PNG when it exists,
+          // else the warm CSS blob the arena has shipped with.
+          const common = { position: 'absolute', top: '46%', left: '50%', width: size * 0.36, height: size * 0.36, animation: `${fromLeft ? 'seam-bolt-L' : 'seam-bolt-R'} .4s ease-in forwards`, animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 };
+          return (
+            <VfxSprite key={`b${fxN}-${i}`} src={actorVfx?.projectile?.sprite || null}
+              style={{ ...common, objectFit: 'contain', filter: `drop-shadow(${trailX * -6}px 0 9px ${burstEf.color})` }}
+              fallback={<div style={{ ...common, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${burstEf.color} 45%, transparent 74%)`, boxShadow: `0 0 16px 4px ${burstEf.color}, ${trailX * -20}px 0 22px ${burstEf.color}aa` }} />}
+            />
+          );
+        })}
         {streak === 'slash' && Array.from({ length: nStreaks }).map((_, i) => (
           <div key={`s${fxN}-${i}`} style={{ position: 'absolute', top: `${44 + (i % 2 ? 7 : -3)}%`, left: '50%', width: size * 0.98, height: Math.max(4, size * 0.07), borderRadius: 4, background: `linear-gradient(90deg, transparent, #fff, ${burstEf.color}, transparent)`, boxShadow: `0 0 14px 3px ${burstEf.color}`, animation: 'seam-slash .32s ease-out forwards', animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 }} />
         ))}
         {burstEf && <div key={`r${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.85, height: size * 0.85, borderRadius: '50%', border: `3px solid ${burstEf.color}`, boxShadow: `0 0 12px ${burstEf.color}`, animation: 'seam-hitring .5s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 4 }} />}
-        {burstEf && <div key={`i${fxN}`} style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{impactIcon}</div>}
+        {burstEf && (
+          <VfxSprite key={`i${fxN}`} src={actorVfx?.impact?.sprite || null}
+            style={{ position: 'absolute', top: '42%', left: '50%', width: size * 0.7, height: size * 0.7, objectFit: 'contain', animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}
+            fallback={<div style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{impactIcon}</div>}
+          />
+        )}
         {/* fire embers — warm flecks that flicker up off a Reactor hit or a Burn tick */}
         {fire && burst === 'attack' && Array.from({ length: 6 }).map((_, i) => {
           const c = EMBER_COLORS[i % EMBER_COLORS.length];
@@ -1863,11 +1896,13 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {hurt && <div style={{ position: 'absolute', top: '48%', left: '50%', width: size * 0.95, height: size * 0.95, borderRadius: '50%', background: `radial-gradient(circle, transparent 52%, ${LOSS}66 100%)`, animation: 'seam-hurtring 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 2 }} />}
         {hurt && <div style={{ position: 'absolute', top: -size * 0.16, left: '50%', fontSize: size * 0.3, animation: 'seam-alert .8s ease-in-out infinite', pointerEvents: 'none', zIndex: 6, filter: 'drop-shadow(0 1px 2px #000)' }}>❗</div>}
         {/* burning: flames keep licking up the WHOLE time it burns, not just on the hit */}
-        {u.burn > 0 && !dead && Array.from({ length: 4 }).map((_, i) => {
+        {/* the fire intensifies with the burn stack — a calm lick at ×1, a blaze + card-edge glow at ×5 */}
+        {u.burn > 0 && !dead && Array.from({ length: Math.min(9, 3 + u.burn) }).map((_, i) => {
           const c = EMBER_COLORS[i % EMBER_COLORS.length];
-          const dx = ((i * 29) % 40) - 20;
-          return <div key={`bn${i}`} style={{ position: 'absolute', bottom: size * 0.12, left: `calc(50% + ${dx}px)`, width: size * 0.12, height: size * 0.12, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${c} 55%, transparent 78%)`, boxShadow: `0 0 6px 2px ${c}`, animation: `seam-rise 1.1s ease-out ${i * 0.28}s infinite`, pointerEvents: 'none', zIndex: 5 }} />;
+          const dx = ((i * 29) % 46) - 23;
+          return <div key={`bn${i}`} style={{ position: 'absolute', bottom: size * 0.12, left: `calc(50% + ${dx}px)`, width: size * 0.12, height: size * 0.12, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${c} 55%, transparent 78%)`, boxShadow: `0 0 6px 2px ${c}`, animation: `seam-rise 1.1s ease-out ${i * 0.16}s infinite`, pointerEvents: 'none', zIndex: 5 }} />;
         })}
+        {u.burn >= 3 && !dead && <div style={{ position: 'absolute', inset: 0, borderRadius: 14, boxShadow: `inset 0 -20px 26px -14px ${BURN}`, opacity: Math.min(1, (u.burn - 1) / 5), pointerEvents: 'none', zIndex: 4 }} />}
         {/* amped: a rising violet power aura + sparks climbing — "charged up to hit big" */}
         {u.amp > 0 && !dead && <div style={{ position: 'absolute', bottom: size * 0.02, left: '50%', transform: 'translateX(-50%)', width: size * 0.8, height: size * 0.5, borderRadius: '50%', background: `radial-gradient(ellipse at bottom, ${AMP}88 0%, transparent 70%)`, animation: 'seam-aura 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 2 }} />}
         {u.amp > 0 && !dead && Array.from({ length: 3 }).map((_, i) => (
@@ -1879,7 +1914,7 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         ))}
         <div style={{ animation: hurt ? 'seam-hurtshake .5s ease-in-out infinite' : 'none' }}>
           <div key={struck && !dead ? `hp${fxN}` : 'sprite'} style={{ animation: struck && !dead ? (heavy ? 'seam-hitpop-big .34s ease-out' : 'seam-hitpop .26s ease-out') : 'none' }}>
-            <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
+            <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} beat={fxN} />
           </div>
         </div>
         {/* shield: a glowing blue dome wrapping the body — clearly "protected", over everything */}
@@ -1891,23 +1926,22 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.1, height: size * 1.1, borderRadius: '50%', background: 'radial-gradient(circle, transparent 50%, #b06bff22 72%, #b06bff55 100%)', boxShadow: 'inset 0 0 18px #b06bff66', pointerEvents: 'none', zIndex: 5 }} />}
         {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '6%', right: '12%', fontSize: size * 0.26, pointerEvents: 'none', zIndex: 8, textShadow: '0 0 6px #b06bff' }}>💀</div>}
       </div>
-      <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {/* name — the world's voice (serif); HP/charge stay neutral so type-color reads clean */}
+      <div style={{ fontFamily: FONTS.serif, fontSize: T.label, fontWeight: 700, letterSpacing: 0.2, color: isActor ? ACCENT : BASE.ink, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {ti.glyph} {u.name}
       </div>
       <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} mark={dead ? null : u.execMark} /></div>
-      <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aab', marginTop: 2, fontWeight: 700 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
+      <div style={{ fontFamily: FONTS.mono, fontSize: T.small, color: dead ? LOSS : '#cdbb9a', marginTop: 2, fontWeight: 700, letterSpacing: 0.5 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
       <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center' }}><ChargeDots value={u.charge} max={u.maxCharge} /></div>
-      {/* legibility cues (manual-verb audit §5): what the enemy will do next, and the
-          Striker's open strike-first window — shown only while you're picking who acts */}
       {u.nextMove && !dead && <div style={{ fontSize: T.micro, fontWeight: 800, color: '#ffb38a', marginTop: 2, animation: 'seam-loaded 1.2s ease-in-out infinite', whiteSpace: 'nowrap' }}>⚠ {u.nextMove} next</div>}
       {u.strikeFirst && !dead && (selectable || isActor) && <div style={{ fontSize: T.micro, fontWeight: 800, color: CHG, marginTop: 2, animation: 'seam-loaded 1.2s ease-in-out infinite', whiteSpace: 'nowrap' }}>⚡ ×{STRIKER.blitz.firstStrikeBonus} Blitz now</div>}
-      <div style={{ display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center', marginTop: 3, flexWrap: 'wrap', minHeight: 15 }}>
-        {u.burn > 0 && <span style={{ fontSize: T.micro, color: BURN, fontWeight: 700 }}>🔥{u.burn}</span>}
-        {u.block > 0 && <span style={{ fontSize: T.micro, color: '#7fd6ff', fontWeight: 700 }}>🛡{u.block}</span>}
-        {u.regen > 0 && <span style={{ fontSize: T.micro, color: WIN, fontWeight: 700 }}>🌿{u.regen}</span>}
-        {u.amp > 0 && <span style={{ fontSize: T.micro, color: AMP, fontWeight: 700 }}>✦{u.amp}</span>}
-        {u.freeze > 0 && <span style={{ fontSize: T.micro, color: '#8fd8ff', fontWeight: 700 }}>❄{u.freeze}</span>}
-        {u.vuln > 0 && <span style={{ fontSize: T.micro, color: '#b06bff', fontWeight: 700 }}>💀{u.vuln}</span>}
+      <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', minHeight: 18 }}>
+        {u.burn > 0 && <StatusChip kind="burn" count={u.burn} size={22} />}
+        {u.block > 0 && <StatusChip kind="shield" count={u.block} size={22} />}
+        {u.regen > 0 && <StatusChip kind="regen" count={u.regen} size={22} />}
+        {u.amp > 0 && <StatusChip kind="amp" count={u.amp} size={22} />}
+        {u.freeze > 0 && <StatusChip kind="freeze" count={u.freeze} size={22} />}
+        {u.vuln > 0 && <StatusChip kind="curse" count={u.vuln} size={22} />}
       </div>
     </div>
   );
@@ -2033,7 +2067,7 @@ function useFight(opts = {}) {
       (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
       const anyDmg = (event.hits || []).some((h) => h.dmg > 0 || h.killed);
       const shake = (Object.keys(killed).length || Object.keys(heavy).length) ? 'big' : anyDmg ? 'small' : null;
-      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, heavy, killed, shake, fire: FIRE_MOVES.has(event.skill.id), n: ++FX_NONCE });
+      setFx({ actor: event.actor.uid, actorType: event.actor.type, actorSpriteId: event.actor.spriteId || event.actor.id, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, heavy, killed, shake, fire: FIRE_MOVES.has(event.skill.id), n: ++FX_NONCE });
       startHold(HOLD_MS[event.skill.kind] ?? 1300); // big payoffs land heavier than chip builders
       // ── Sound: cast type sets the signature, then secondary effects layer on top ──
       const kind = event.skill.kind;
@@ -2282,6 +2316,9 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
     : 'HIT';
   const targetLabel = tgtAll ? `◀ ${verb} ALL` : `◀ TAP TO ${verb}`;
   const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : fx.bursts?.[u.uid] === 'attack' ? 'damaged' : 'idle';
+  // The acting unit's attack-VFX signature — drives the projectile + impact PNGs that
+  // land on whoever it hit this beat (src/data/attackVfx.js). Null on DOT ticks.
+  const actorVfx = fx.actor ? vfxFor(fx.actorSpriteId, fx.actorType) : null;
   const popsFor = (uid) => popups.filter((p) => p.uid === uid);
   // Landscape (U6): the fight becomes a TABLE of three panes — squad column | center
   // (moves + log) | enemy column — instead of a portrait river with the log below. Bigger
@@ -2304,7 +2341,7 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
             isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={tLabel}
             targetMark={mark} aoe={isTgt && tgtAll && !tgtAllies}
             burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move} hitN={fx.hitCounts?.[u.uid]} fire={fx.fire}
-            heavy={fx.heavy?.[u.uid]} justKilled={fx.killed?.[u.uid]}
+            heavy={fx.heavy?.[u.uid]} justKilled={fx.killed?.[u.uid]} actorVfx={actorVfx}
             boss={u.uid === bossUid}
             onSelect={previewUnit}
             onPick={chooseTarget} popups={popsFor(u.uid)} />
@@ -5549,15 +5586,11 @@ function RunMode({ narrow, slag = 0, onSlag }) {
               <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff', marginBottom: 8 }}>✦ THE BOSS LEAVES SPOILS — take one</div>
               <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
                 {relicChoices.map((r) => (
-                  <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
-                    style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1px solid ${LINE}` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                      <RelicIcon r={r} size={T.body} />
-                      <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, color: (RARITY_INFO[r.rarity] || {}).color || r.color }}>{(RARITY_INFO[r.rarity] || {}).pips || ''}</span>
-                    </div>
-                    <div style={{ fontSize: T.micro, color: '#bfb0d6', lineHeight: 1.35 }}>{r.desc}</div>
-                  </button>
+                  <RelicCard key={r.id} relic={r}
+                    rarityColor={(RARITY_INFO[r.rarity] || {}).color || r.color}
+                    icon={<RelicIcon r={r} size={T.sub} />}
+                    kind={relicKind(r)} when={RELIC_WHEN[r.id]}
+                    onClick={() => chooseRelic(r)} />
                 ))}
               </div>
             </div>
