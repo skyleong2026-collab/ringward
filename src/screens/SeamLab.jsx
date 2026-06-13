@@ -20,6 +20,7 @@ import { FeedbackButton } from './Feedback.jsx';
 import { setLiveContext } from '../data/feedback.js';
 import { endlessWaveSpec, endlessRoundSlag, endlessReached } from '../data/endless.js';
 import { evalFeats, featTally, FEAT_GROUPS, TIER_COLOR } from '../data/feats.js';
+import { vfxFor } from '../data/attackVfx.js';
 import {
   createBattleState,
   runBattle,
@@ -1596,9 +1597,21 @@ function ChargeDots({ value, max }) {
   );
 }
 
+// PNG-ready VFX layer — the seam for the PixelLab art swap. Renders the generated
+// sprite (per src/data/attackVfx.js) once it loads; until that file exists it shows
+// `fallback` (the current CSS blob / emoji), so the arena looks identical today and
+// the art drops in with zero code change. See docs/ATTACK-VFX-SIGNATURES.md.
+// Keyed per-attack by the caller (key includes fxN), so a new hit remounts and the
+// load state resets cleanly.
+function VfxSprite({ src, style, alt = '', fallback = null }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return fallback;
+  return <img src={src} alt={alt} onError={() => setFailed(true)} style={style} />;
+}
+
 // A combatant on the arena stage: big animated sprite, HP/charge, status pips, and
 // floating damage/heal numbers (popups) that pop on each hit.
-function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire }) {
+function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, popups, big, burst, cast, fxN, boss, targetLabel, targetMark, aoe, move, hitN, fire, actorVfx }) {
   const dead = !u.alive;
   const hurt = u.alive && u.maxHp > 0 && u.hp / u.maxHp <= 0.3; // badly wounded — show distress so the player KNOWS to heal/guard it
   const ti = TYPE_INFO[u.type] || { accent: DIM, glyph: '✦' };
@@ -1643,14 +1656,28 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
       </div>
       <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
         {castEf && <div key={`c${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.15, height: size * 1.15, borderRadius: '50%', background: `radial-gradient(circle, ${castEf.color}cc 0%, transparent 70%)`, animation: 'seam-castglow .55s ease-out forwards', pointerEvents: 'none', zIndex: 3 }} />}
-        {streak === 'bolt' && Array.from({ length: nStreaks }).map((_, i) => (
-          <div key={`b${fxN}-${i}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.36, height: size * 0.36, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${burstEf.color} 45%, transparent 74%)`, boxShadow: `0 0 16px 4px ${burstEf.color}, ${trailX * -20}px 0 22px ${burstEf.color}aa`, animation: `${fromLeft ? 'seam-bolt-L' : 'seam-bolt-R'} .4s ease-in forwards`, animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 }} />
-        ))}
+        {streak === 'bolt' && Array.from({ length: nStreaks }).map((_, i) => {
+          // The projectile is the ACTOR's (a Reactor throws its ember, a Warden its
+          // shard) — travel + impact stay anchored on this target. PNG when it exists,
+          // else the warm CSS blob the arena has shipped with.
+          const common = { position: 'absolute', top: '46%', left: '50%', width: size * 0.36, height: size * 0.36, animation: `${fromLeft ? 'seam-bolt-L' : 'seam-bolt-R'} .4s ease-in forwards`, animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 };
+          return (
+            <VfxSprite key={`b${fxN}-${i}`} src={actorVfx?.projectile?.sprite || null}
+              style={{ ...common, objectFit: 'contain', filter: `drop-shadow(${trailX * -6}px 0 9px ${burstEf.color})` }}
+              fallback={<div style={{ ...common, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${burstEf.color} 45%, transparent 74%)`, boxShadow: `0 0 16px 4px ${burstEf.color}, ${trailX * -20}px 0 22px ${burstEf.color}aa` }} />}
+            />
+          );
+        })}
         {streak === 'slash' && Array.from({ length: nStreaks }).map((_, i) => (
           <div key={`s${fxN}-${i}`} style={{ position: 'absolute', top: `${44 + (i % 2 ? 7 : -3)}%`, left: '50%', width: size * 0.98, height: Math.max(4, size * 0.07), borderRadius: 4, background: `linear-gradient(90deg, transparent, #fff, ${burstEf.color}, transparent)`, boxShadow: `0 0 14px 3px ${burstEf.color}`, animation: 'seam-slash .32s ease-out forwards', animationDelay: `${i * STAGGER}s`, pointerEvents: 'none', zIndex: 4 }} />
         ))}
         {burstEf && <div key={`r${fxN}`} style={{ position: 'absolute', top: '46%', left: '50%', width: size * 0.85, height: size * 0.85, borderRadius: '50%', border: `3px solid ${burstEf.color}`, boxShadow: `0 0 12px ${burstEf.color}`, animation: 'seam-hitring .5s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 4 }} />}
-        {burstEf && <div key={`i${fxN}`} style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{impactIcon}</div>}
+        {burstEf && (
+          <VfxSprite key={`i${fxN}`} src={actorVfx?.impact?.sprite || null}
+            style={{ position: 'absolute', top: '42%', left: '50%', width: size * 0.7, height: size * 0.7, objectFit: 'contain', animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}
+            fallback={<div style={{ position: 'absolute', top: '42%', left: '50%', fontSize: size * 0.46, animation: 'seam-iconpop .6s ease-out forwards', animationDelay: ringDelay, pointerEvents: 'none', zIndex: 5, filter: 'drop-shadow(0 1px 3px #000)' }}>{impactIcon}</div>}
+          />
+        )}
         {/* fire embers — warm flecks that flicker up off a Reactor hit or a Burn tick */}
         {fire && burst === 'attack' && Array.from({ length: 6 }).map((_, i) => {
           const c = EMBER_COLORS[i % EMBER_COLORS.length];
@@ -1812,7 +1839,7 @@ function useFight(opts = {}) {
       (event.shields || []).forEach((s) => { if (s.block > 0 && s.uid) bursts[s.uid] = 'shield'; });
       (event.heals || []).forEach((h) => { if (h.healed > 0) bursts[h.uid] = 'heal'; });
       (event.amps || []).forEach((a) => { if (a.uid) bursts[a.uid] = 'boost'; });
-      setFx({ actor: event.actor.uid, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, fire: FIRE_MOVES.has(event.skill.id), n: ++FX_NONCE });
+      setFx({ actor: event.actor.uid, actorType: event.actor.type, actorSpriteId: event.actor.spriteId || event.actor.id, cast: SKILL_EFFECT[event.skill.id] || 'attack', bursts, move: event.skill.id, hitCounts, fire: FIRE_MOVES.has(event.skill.id), n: ++FX_NONCE });
       startHold(HOLD_MS[event.skill.kind] ?? 1300); // big payoffs land heavier than chip builders
       // ── Sound: cast type sets the signature, then secondary effects layer on top ──
       const kind = event.skill.kind;
@@ -2018,6 +2045,9 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
     : 'HIT';
   const targetLabel = tgtAll ? `◀ ${verb} ALL` : `◀ TAP TO ${verb}`;
   const animOf = (u) => !u.alive ? 'defeated' : fx.actor === u.uid ? 'attack' : fx.bursts?.[u.uid] === 'attack' ? 'damaged' : 'idle';
+  // The acting unit's attack-VFX signature — drives the projectile + impact PNGs that
+  // land on whoever it hit this beat (src/data/attackVfx.js). Null on DOT ticks.
+  const actorVfx = fx.actor ? vfxFor(fx.actorSpriteId, fx.actorType) : null;
   const popsFor = (uid) => popups.filter((p) => p.uid === uid);
   const side = (units, isEnemy) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
@@ -2033,7 +2063,7 @@ function FightView({ fight, narrow, banner, bossUid, hintSkill, auto, onToggleAu
           <StageUnit key={u.uid} u={u} anim={animOf(u)} big={units.length <= 2}
             isActor={isAct} selectable={canSwitch} isTarget={isTgt} targetLabel={targetLabel}
             targetMark={mark} aoe={isTgt && tgtAll && !tgtAllies}
-            burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move} hitN={fx.hitCounts?.[u.uid]} fire={fx.fire}
+            burst={fx.bursts?.[u.uid]} cast={fx.actor === u.uid ? fx.cast : null} fxN={fx.n} move={fx.move} hitN={fx.hitCounts?.[u.uid]} fire={fx.fire} actorVfx={actorVfx}
             boss={u.uid === bossUid}
             onSelect={previewUnit}
             onPick={chooseTarget} popups={popsFor(u.uid)} />
