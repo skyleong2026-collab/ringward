@@ -66,6 +66,46 @@ export function StatusChip({ kind, count, size = 30 }) {
   );
 }
 
+// ── RelicCard — the two relic treatments from the design: a clean STAT relic
+// (icon orb + plain multiplier line) vs a VERB relic (a conditional rule band).
+// Rarity owns the frame; keystones get the forged badge. `icon` is a render node
+// (the caller passes the painted RelicIcon); `rarityColor` themes the frame.
+export function RelicCard({ relic, rarityColor, icon, kind = 'stat', when, onClick, selected, disabled, footer, style = {} }) {
+  const frame = rarityColor || relic.color;
+  const isKeystone = relic.rarity === 'Keystone' || relic.keystone;
+  return (
+    <button type="button" onClick={disabled ? undefined : onClick} title={relic.lore} disabled={disabled}
+      style={{
+        position: 'relative', textAlign: 'left', borderRadius: 10, padding: '11px 12px',
+        cursor: disabled ? 'default' : 'pointer', color: BASE.ink, width: '100%',
+        background: `linear-gradient(180deg, ${relic.color}14, ${BASE.panel})`,
+        border: `1.5px solid ${selected ? BASE.gold : `${frame}99`}`,
+        boxShadow: selected ? `0 0 0 1.5px ${BASE.gold}, 0 0 22px -10px ${BASE.gold}`
+          : isKeystone ? `0 0 26px -10px #9be7ff` : `0 0 20px -11px ${frame}`,
+        opacity: disabled ? 0.55 : 1, ...style,
+      }}>
+      {isKeystone && <span style={{ position: 'absolute', top: 8, right: 10, fontFamily: FONTS.mono, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: '#9be7ff' }}>⚒ FORGED</span>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: kind === 'verb' ? 7 : 4 }}>
+        <span style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          background: `radial-gradient(circle at 50% 40%, ${relic.color}40, ${BASE.pitch} 72%)`, border: `1px solid ${frame}66` }}>{icon}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: FONTS.serif, fontSize: 16, fontWeight: 700, color: frame, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{relic.name}</div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 9, fontWeight: 700, letterSpacing: 0.6, color: frame, opacity: 0.85 }}>{String(relic.rarity).toUpperCase()}</div>
+        </div>
+      </div>
+      {kind === 'verb' ? (
+        <div style={{ background: '#0a141c', border: `1px solid ${STATUS.shield}44`, borderLeft: `3px solid ${relic.color}`, borderRadius: 4, padding: '5px 8px' }}>
+          {when && <div style={{ fontFamily: FONTS.mono, fontSize: 8, fontWeight: 700, letterSpacing: 0.8, color: STATUS.shield, marginBottom: 2 }}>WHEN · {when}</div>}
+          <div style={{ fontFamily: FONTS.serif, fontSize: 13, fontWeight: 700, color: BASE.ink, lineHeight: 1.3 }}>{relic.desc}</div>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12.5, color: '#cbbfae', lineHeight: 1.4 }}>{relic.desc}</div>
+      )}
+      {footer && <div style={{ marginTop: 7, fontFamily: FONTS.sans, fontSize: 11, fontWeight: 700 }}>{footer}</div>}
+    </button>
+  );
+}
+
 // ── DamageNumber — floats up from the target, fades. Colored by element. ───────
 export function DamageNumber({ value, color = STATUS.burn, heal = false }) {
   const c = heal ? STATUS.regen : color;

@@ -35,7 +35,7 @@ import {
 } from '../engine/combat/index.js';
 
 import { ACCENT, CHG, BURN, AMP, WIN, LOSS, DIM, PANEL, LINE, SEL, TYPE_SCALE as T, FONTS, BASE } from '../data/designTokens.js';
-import { StatusChip } from '../components/ui/index.jsx';
+import { StatusChip, RelicCard } from '../components/ui/index.jsx';
 import { FramePlayer } from '../components/FramePlayer.jsx';
 import { hasCreatureAnim } from '../data/creatureAnim.js';
 const PATCHUP = 0.18; // between-wave heal (fraction of max HP) — small, so a run is a war of attrition
@@ -838,6 +838,12 @@ const RELICS = [
   { id: 'k_apex',      icon: '👑', color: ACCENT,    name: 'Drop-Forged Crown',  rarity: 'Keystone', keystone: true, craftOnly: true, desc: '+32% damage, +20% max HP, +20% healing, start +1 charge.', lore: 'Beaten from a splinter of whatever fell. To wear it is to carry a piece of the Drop inward, toward the rest of it.', apply: (m) => { m.dmgMult *= 1.32; m.hpMult *= 1.2; m.healMult *= 1.2; m.chargeStart += 1; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
+// Stat relic (clean multipliers) vs verb relic (a conditional rule) — drives which
+// of the two design card treatments renders. The verb relics hook the shared combat
+// path (opener/shatter/apex/…); `RELIC_WHEN` is the human-readable trigger.
+const VERB_RELIC_IDS = new Set(['r_ambush', 'r_frostbite', 'r_totem', 'r_vampiric', 'r_bramble', 'r_reaper', 'r_phoenix', 'r_reservoir']);
+const RELIC_WHEN = { r_ambush: 'FULL-HP ENEMY', r_frostbite: 'FROZEN ENEMY', r_totem: 'ON A KILL', r_vampiric: 'ON ANY HIT', r_bramble: 'WHEN STRUCK', r_reaper: 'ENEMY BELOW HALF', r_phoenix: 'A LETHAL BLOW', r_reservoir: 'ON A KILL' };
+const relicKind = (r) => (VERB_RELIC_IDS.has(r.id) ? 'verb' : 'stat');
 const KEYSTONE_IDS = RELICS.filter((r) => r.keystone).map((r) => r.id); // craft-only top tier
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
 const RELIC_KEY = '8gents_seam_relics';          // owned relic ids (the collection)
@@ -3734,19 +3740,15 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   const full = !eq && relicKit.length >= RELIC_SLOTS;
                   const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
                   const disabled = !salvageMode && full;
+                  const footerColor = salvageMode ? '#ffae5a' : eq ? '#cba6ff' : full ? DIM : rc;
                   return (
-                    <button key={r.id} onClick={() => (salvageMode ? salvageRelic(r.id) : toggleRelic(r.id))} disabled={disabled}
-                      title={salvageMode ? `Melt for +${shardYield(r.rarity)} shards` : r.lore}
-                      style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: disabled ? 'default' : 'pointer',
-                        background: salvageMode ? '#16100e' : eq ? '#1a1230' : PANEL, border: `1.5px solid ${salvageMode ? '#6a4a3a' : eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: disabled ? 0.5 : 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                        <RelicIcon r={r} size={T.body} />
-                        <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: salvageMode ? '#ffae5a' : eq ? '#cba6ff' : full ? DIM : rc }}>{salvageMode ? `⛏ +${shardYield(r.rarity)}` : eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
-                      </div>
-                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.keystone ? 'KEYSTONE' : r.rarity.toUpperCase()}</div>
-                      <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
-                    </button>
+                    <RelicCard key={r.id} relic={r}
+                      rarityColor={salvageMode ? '#c98a4a' : rc}
+                      icon={<RelicIcon r={r} size={T.sub} />}
+                      kind={relicKind(r)} when={RELIC_WHEN[r.id]}
+                      selected={eq && !salvageMode} disabled={disabled}
+                      onClick={() => (salvageMode ? salvageRelic(r.id) : toggleRelic(r.id))}
+                      footer={<span style={{ color: footerColor }}>{salvageMode ? `⛏ melt · +${shardYield(r.rarity)} shards` : eq ? '● equipped — tap to remove' : full ? 'kit full' : '+ equip'}</span>} />
                   );
                 })}
               </div>
@@ -4501,20 +4503,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ background: '#120a1e', border: '1.5px solid #b06bff', borderRadius: 11, padding: '12px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
               <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff', marginBottom: 8 }}>✦ CHOOSE A RELIC <span style={{ color: DIM, fontWeight: 700, letterSpacing: 0 }}>— the boss leaves spoils. Take one.</span></div>
               <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
-                {relicChoices.map((r) => {
-                  const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
-                  return (
-                    <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
-                      style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1.5px solid ${r.color}88` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <RelicIcon r={r} size={T.body} />
-                        <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
-                      </div>
-                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
-                      <div style={{ fontSize: T.micro, color: '#bfb0d6', lineHeight: 1.35 }}>{r.desc}</div>
-                    </button>
-                  );
-                })}
+                {relicChoices.map((r) => (
+                  <RelicCard key={r.id} relic={r}
+                    rarityColor={(RARITY_INFO[r.rarity] || {}).color || r.color}
+                    icon={<RelicIcon r={r} size={T.sub} />}
+                    kind={relicKind(r)} when={RELIC_WHEN[r.id]}
+                    onClick={() => chooseRelic(r)} />
+                ))}
               </div>
             </div>
           )}
