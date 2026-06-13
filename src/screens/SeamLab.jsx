@@ -36,6 +36,8 @@ import {
 
 import { ACCENT, CHG, BURN, AMP, WIN, LOSS, DIM, PANEL, LINE, SEL, TYPE_SCALE as T, FONTS, BASE } from '../data/designTokens.js';
 import { StatusChip } from '../components/ui/index.jsx';
+import { FramePlayer } from '../components/FramePlayer.jsx';
+import { hasCreatureAnim } from '../data/creatureAnim.js';
 const PATCHUP = 0.18; // between-wave heal (fraction of max HP) — small, so a run is a war of attrition
 // Input-locking beat after each action — the hit animates, THEN the next actor is
 // asked. Weighted by move size for a Summoners-War-style feel (~1.2–1.9s/turn): a
@@ -1487,27 +1489,37 @@ const FOCAL_X = {
 // One creature, cropped big out of its concept-art strip and framed in its type
 // color with a shape badge — so you read it by color + silhouette, not by name.
 // Falls back to the big glyph if the PNG is missing.
-function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64 }) {
-  const animCss = {
-    idle: 'seam-idle 1.7s ease-in-out infinite',
-    attack: 'seam-attack .5s ease-out',
-    damaged: 'seam-damaged .45s ease-in-out',
-    defeated: 'seam-defeated .7s ease-out forwards',
-  }[anim] || 'seam-idle 1.7s ease-in-out infinite';
+function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64, beat = 0 }) {
+  const animated = hasCreatureAnim(spriteId); // real frame rig (Cinderpaw +) vs static crop
+  // For animated creatures the GIF carries idle/hurt motion itself — the engine only
+  // adds the positional verbs (attack thrust, defeat collapse) on top. Static creatures
+  // get the full CSS state set as before.
+  const animCss = (animated
+    ? { attack: 'seam-attack .5s ease-out', defeated: 'seam-defeated .7s ease-out forwards' }[anim] || 'none'
+    : {
+        idle: 'seam-idle 1.7s ease-in-out infinite',
+        attack: 'seam-attack .5s ease-out',
+        damaged: 'seam-damaged .45s ease-in-out',
+        defeated: 'seam-defeated .7s ease-out forwards',
+      }[anim]) || (animated ? 'none' : 'seam-idle 1.7s ease-in-out infinite');
   const focal = (FOCAL_X[spriteId] ?? 0.04) * 100;
   return (
     <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 14, overflow: 'hidden', position: 'relative', background: `radial-gradient(circle at 50% 38%, ${color}33 0%, #0b0b14 72%)`, border: `2.5px solid ${color}`, boxShadow: `0 0 12px ${color}44, inset 0 0 16px ${color}22` }}>
       {/* fallback glyph sits behind the art */}
       <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, opacity: 0.5 }}>{glyph}</span>
-      <div style={{ position: 'absolute', inset: 0, transform: `scaleX(${facing})` }}>
+      <div style={{ position: 'absolute', inset: 0, transform: animated ? 'none' : `scaleX(${facing})` }}>
         <div style={{ width: '100%', height: '100%', animation: animCss }}>
-          <div style={{
-            width: '100%', height: '100%',
-            backgroundImage: `url(/sprites/${spriteId}.jpg)`,
-            backgroundSize: 'auto 122%',
-            backgroundPosition: `${focal}% 38%`,
-            backgroundRepeat: 'no-repeat',
-          }} />
+          {animated ? (
+            <FramePlayer creatureId={spriteId} anim={anim} size={size} facing={facing} beat={beat} />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%',
+              backgroundImage: `url(/sprites/${spriteId}.jpg)`,
+              backgroundSize: 'auto 122%',
+              backgroundPosition: `${focal}% 38%`,
+              backgroundRepeat: 'no-repeat',
+            }} />
+          )}
         </div>
       </div>
       {/* shape badge — the type's color + glyph, bottom-right */}
@@ -1697,7 +1709,7 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
           <div key={`rg${i}`} style={{ position: 'absolute', bottom: size * 0.18, left: `calc(50% + ${(i * 23 % 34) - 17}px)`, fontSize: size * 0.16, animation: `seam-rise 1.4s ease-out ${i * 0.45}s infinite`, pointerEvents: 'none', zIndex: 5, color: WIN }}>🌿</div>
         ))}
         <div style={{ animation: hurt ? 'seam-hurtshake .5s ease-in-out infinite' : 'none' }}>
-          <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
+          <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} beat={fxN} />
         </div>
         {/* shield: a glowing blue dome wrapping the body — clearly "protected", over everything */}
         {u.block > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', width: size * 1.18, height: size * 1.18, borderRadius: '50%', border: `2px solid #bfeaff`, background: `radial-gradient(circle, transparent 55%, #7fd6ff33 80%, #7fd6ff66 100%)`, boxShadow: '0 0 14px #7fd6ffaa, inset 0 0 18px #7fd6ff55', animation: 'seam-shield 1.6s ease-in-out infinite', pointerEvents: 'none', zIndex: 6 }} />}
