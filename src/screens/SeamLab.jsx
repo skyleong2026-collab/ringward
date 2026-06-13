@@ -34,17 +34,10 @@ import {
   COMBAT_ROSTER,
 } from '../engine/combat/index.js';
 
-const ACCENT = '#e8a040';
-const CHG = '#f5a623';
-const BURN = '#ff5a2a';
-const AMP = '#b06bff';
-const WIN = '#7ed321';
-const LOSS = '#d0021b';
-const DIM = '#8a8a9a';
-const PANEL = '#12121c';
-const LINE = '#2a2a3a';
-const SEL = '#9cd1ff';
-const T = { micro: 11, small: 13, body: 15, label: 16, sub: 18, head: 21, huge: 30 };
+import { ACCENT, CHG, BURN, AMP, WIN, LOSS, DIM, PANEL, LINE, SEL, TYPE_SCALE as T, FONTS, BASE } from '../data/designTokens.js';
+import { StatusChip, RelicCard } from '../components/ui/index.jsx';
+import { FramePlayer } from '../components/FramePlayer.jsx';
+import { hasCreatureAnim } from '../data/creatureAnim.js';
 const PATCHUP = 0.18; // between-wave heal (fraction of max HP) — small, so a run is a war of attrition
 // Input-locking beat after each action — the hit animates, THEN the next actor is
 // asked. Weighted by move size for a Summoners-War-style feel (~1.2–1.9s/turn): a
@@ -845,6 +838,12 @@ const RELICS = [
   { id: 'k_apex',      icon: '👑', color: ACCENT,    name: 'Drop-Forged Crown',  rarity: 'Keystone', keystone: true, craftOnly: true, desc: '+32% damage, +20% max HP, +20% healing, start +1 charge.', lore: 'Beaten from a splinter of whatever fell. To wear it is to carry a piece of the Drop inward, toward the rest of it.', apply: (m) => { m.dmgMult *= 1.32; m.hpMult *= 1.2; m.healMult *= 1.2; m.chargeStart += 1; } },
 ];
 const RELIC_BY_ID = Object.fromEntries(RELICS.map((r) => [r.id, r]));
+// Stat relic (clean multipliers) vs verb relic (a conditional rule) — drives which
+// of the two design card treatments renders. The verb relics hook the shared combat
+// path (opener/shatter/apex/…); `RELIC_WHEN` is the human-readable trigger.
+const VERB_RELIC_IDS = new Set(['r_ambush', 'r_frostbite', 'r_totem', 'r_vampiric', 'r_bramble', 'r_reaper', 'r_phoenix', 'r_reservoir']);
+const RELIC_WHEN = { r_ambush: 'FULL-HP ENEMY', r_frostbite: 'FROZEN ENEMY', r_totem: 'ON A KILL', r_vampiric: 'ON ANY HIT', r_bramble: 'WHEN STRUCK', r_reaper: 'ENEMY BELOW HALF', r_phoenix: 'A LETHAL BLOW', r_reservoir: 'ON A KILL' };
+const relicKind = (r) => (VERB_RELIC_IDS.has(r.id) ? 'verb' : 'stat');
 const KEYSTONE_IDS = RELICS.filter((r) => r.keystone).map((r) => r.id); // craft-only top tier
 const RELIC_SLOTS = 3; // how many you can equip into a run loadout at once
 const RELIC_KEY = '8gents_seam_relics';          // owned relic ids (the collection)
@@ -1496,27 +1495,37 @@ const FOCAL_X = {
 // One creature, cropped big out of its concept-art strip and framed in its type
 // color with a shape badge — so you read it by color + silhouette, not by name.
 // Falls back to the big glyph if the PNG is missing.
-function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64 }) {
-  const animCss = {
-    idle: 'seam-idle 1.7s ease-in-out infinite',
-    attack: 'seam-attack .5s ease-out',
-    damaged: 'seam-damaged .45s ease-in-out',
-    defeated: 'seam-defeated .7s ease-out forwards',
-  }[anim] || 'seam-idle 1.7s ease-in-out infinite';
+function Sprite({ spriteId, color, glyph = '✦', anim = 'idle', facing = 1, size = 64, beat = 0 }) {
+  const animated = hasCreatureAnim(spriteId); // real frame rig (Cinderpaw +) vs static crop
+  // For animated creatures the GIF carries idle/hurt motion itself — the engine only
+  // adds the positional verbs (attack thrust, defeat collapse) on top. Static creatures
+  // get the full CSS state set as before.
+  const animCss = (animated
+    ? { attack: 'seam-attack .5s ease-out', defeated: 'seam-defeated .7s ease-out forwards' }[anim] || 'none'
+    : {
+        idle: 'seam-idle 1.7s ease-in-out infinite',
+        attack: 'seam-attack .5s ease-out',
+        damaged: 'seam-damaged .45s ease-in-out',
+        defeated: 'seam-defeated .7s ease-out forwards',
+      }[anim]) || (animated ? 'none' : 'seam-idle 1.7s ease-in-out infinite');
   const focal = (FOCAL_X[spriteId] ?? 0.04) * 100;
   return (
     <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 14, overflow: 'hidden', position: 'relative', background: `radial-gradient(circle at 50% 38%, ${color}33 0%, #0b0b14 72%)`, border: `2.5px solid ${color}`, boxShadow: `0 0 12px ${color}44, inset 0 0 16px ${color}22` }}>
       {/* fallback glyph sits behind the art */}
       <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, opacity: 0.5 }}>{glyph}</span>
-      <div style={{ position: 'absolute', inset: 0, transform: `scaleX(${facing})` }}>
+      <div style={{ position: 'absolute', inset: 0, transform: animated ? 'none' : `scaleX(${facing})` }}>
         <div style={{ width: '100%', height: '100%', animation: animCss }}>
-          <div style={{
-            width: '100%', height: '100%',
-            backgroundImage: `url(/sprites/${spriteId}.jpg)`,
-            backgroundSize: 'auto 122%',
-            backgroundPosition: `${focal}% 38%`,
-            backgroundRepeat: 'no-repeat',
-          }} />
+          {animated ? (
+            <FramePlayer creatureId={spriteId} anim={anim} size={size} facing={facing} beat={beat} />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%',
+              backgroundImage: `url(/sprites/${spriteId}.jpg)`,
+              backgroundSize: 'auto 122%',
+              backgroundPosition: `${focal}% 38%`,
+              backgroundRepeat: 'no-repeat',
+            }} />
+          )}
         </div>
       </div>
       {/* shape badge — the type's color + glyph, bottom-right */}
@@ -1689,11 +1698,13 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {hurt && <div style={{ position: 'absolute', top: '48%', left: '50%', width: size * 0.95, height: size * 0.95, borderRadius: '50%', background: `radial-gradient(circle, transparent 52%, ${LOSS}66 100%)`, animation: 'seam-hurtring 1s ease-in-out infinite', pointerEvents: 'none', zIndex: 2 }} />}
         {hurt && <div style={{ position: 'absolute', top: -size * 0.16, left: '50%', fontSize: size * 0.3, animation: 'seam-alert .8s ease-in-out infinite', pointerEvents: 'none', zIndex: 6, filter: 'drop-shadow(0 1px 2px #000)' }}>❗</div>}
         {/* burning: flames keep licking up the WHOLE time it burns, not just on the hit */}
-        {u.burn > 0 && !dead && Array.from({ length: 4 }).map((_, i) => {
+        {/* the fire intensifies with the burn stack — a calm lick at ×1, a blaze + card-edge glow at ×5 */}
+        {u.burn > 0 && !dead && Array.from({ length: Math.min(9, 3 + u.burn) }).map((_, i) => {
           const c = EMBER_COLORS[i % EMBER_COLORS.length];
-          const dx = ((i * 29) % 40) - 20;
-          return <div key={`bn${i}`} style={{ position: 'absolute', bottom: size * 0.12, left: `calc(50% + ${dx}px)`, width: size * 0.12, height: size * 0.12, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${c} 55%, transparent 78%)`, boxShadow: `0 0 6px 2px ${c}`, animation: `seam-rise 1.1s ease-out ${i * 0.28}s infinite`, pointerEvents: 'none', zIndex: 5 }} />;
+          const dx = ((i * 29) % 46) - 23;
+          return <div key={`bn${i}`} style={{ position: 'absolute', bottom: size * 0.12, left: `calc(50% + ${dx}px)`, width: size * 0.12, height: size * 0.12, borderRadius: '50%', background: `radial-gradient(circle, #fff 0%, ${c} 55%, transparent 78%)`, boxShadow: `0 0 6px 2px ${c}`, animation: `seam-rise 1.1s ease-out ${i * 0.16}s infinite`, pointerEvents: 'none', zIndex: 5 }} />;
         })}
+        {u.burn >= 3 && !dead && <div style={{ position: 'absolute', inset: 0, borderRadius: 14, boxShadow: `inset 0 -20px 26px -14px ${BURN}`, opacity: Math.min(1, (u.burn - 1) / 5), pointerEvents: 'none', zIndex: 4 }} />}
         {/* amped: a rising violet power aura + sparks climbing — "charged up to hit big" */}
         {u.amp > 0 && !dead && <div style={{ position: 'absolute', bottom: size * 0.02, left: '50%', transform: 'translateX(-50%)', width: size * 0.8, height: size * 0.5, borderRadius: '50%', background: `radial-gradient(ellipse at bottom, ${AMP}88 0%, transparent 70%)`, animation: 'seam-aura 1.3s ease-in-out infinite', pointerEvents: 'none', zIndex: 2 }} />}
         {u.amp > 0 && !dead && Array.from({ length: 3 }).map((_, i) => (
@@ -1704,7 +1715,7 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
           <div key={`rg${i}`} style={{ position: 'absolute', bottom: size * 0.18, left: `calc(50% + ${(i * 23 % 34) - 17}px)`, fontSize: size * 0.16, animation: `seam-rise 1.4s ease-out ${i * 0.45}s infinite`, pointerEvents: 'none', zIndex: 5, color: WIN }}>🌿</div>
         ))}
         <div style={{ animation: hurt ? 'seam-hurtshake .5s ease-in-out infinite' : 'none' }}>
-          <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} />
+          <Sprite spriteId={u.spriteId} color={ti.accent} glyph={ti.glyph} anim={dead ? 'defeated' : (anim || 'idle')} facing={u.side === 'A' ? 1 : -1} size={size} beat={fxN} />
         </div>
         {/* shield: a glowing blue dome wrapping the body — clearly "protected", over everything */}
         {u.block > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', width: size * 1.18, height: size * 1.18, borderRadius: '50%', border: `2px solid #bfeaff`, background: `radial-gradient(circle, transparent 55%, #7fd6ff33 80%, #7fd6ff66 100%)`, boxShadow: '0 0 14px #7fd6ffaa, inset 0 0 18px #7fd6ff55', animation: 'seam-shield 1.6s ease-in-out infinite', pointerEvents: 'none', zIndex: 6 }} />}
@@ -1715,19 +1726,21 @@ function StageUnit({ u, anim, isActor, isTarget, selectable, onPick, onSelect, p
         {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '47%', left: '50%', transform: 'translate(-50%,-50%)', width: size * 1.1, height: size * 1.1, borderRadius: '50%', background: 'radial-gradient(circle, transparent 50%, #b06bff22 72%, #b06bff55 100%)', boxShadow: 'inset 0 0 18px #b06bff66', pointerEvents: 'none', zIndex: 5 }} />}
         {u.vuln > 0 && !dead && <div style={{ position: 'absolute', top: '6%', right: '12%', fontSize: size * 0.26, pointerEvents: 'none', zIndex: 8, textShadow: '0 0 6px #b06bff' }}>💀</div>}
       </div>
-      <div style={{ fontSize: T.small, fontWeight: 800, color: isActor ? ACCENT : '#eee', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {/* name — the world's voice (serif); HP/charge stay neutral so type-color reads clean */}
+      <div style={{ fontFamily: FONTS.serif, fontSize: T.label, fontWeight: 700, letterSpacing: 0.2, color: isActor ? ACCENT : BASE.ink, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {ti.glyph} {u.name}
       </div>
       <div style={{ marginTop: 3 }}><Bar value={u.hp} max={u.maxHp} color={dead ? LOSS : u.side === 'A' ? '#3ec9a0' : '#e07a7a'} h={7} /></div>
-      <div style={{ fontSize: T.micro, color: dead ? LOSS : '#aab', marginTop: 2, fontWeight: 700 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
+      <div style={{ fontFamily: FONTS.mono, fontSize: T.small, color: dead ? LOSS : '#cdbb9a', marginTop: 2, fontWeight: 700, letterSpacing: 0.5 }}>{dead ? 'KO' : `${u.hp}/${u.maxHp}`}</div>
       <div style={{ marginTop: 4, display: 'flex', justifyContent: 'center' }}><ChargeDots value={u.charge} max={u.maxCharge} /></div>
-      <div style={{ display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center', marginTop: 3, flexWrap: 'wrap', minHeight: 15 }}>
-        {u.burn > 0 && <span style={{ fontSize: T.micro, color: BURN, fontWeight: 700 }}>🔥{u.burn}</span>}
-        {u.block > 0 && <span style={{ fontSize: T.micro, color: '#7fd6ff', fontWeight: 700 }}>🛡{u.block}</span>}
-        {u.regen > 0 && <span style={{ fontSize: T.micro, color: WIN, fontWeight: 700 }}>🌿{u.regen}</span>}
-        {u.amp > 0 && <span style={{ fontSize: T.micro, color: AMP, fontWeight: 700 }}>✦{u.amp}</span>}
-        {u.freeze > 0 && <span style={{ fontSize: T.micro, color: '#8fd8ff', fontWeight: 700 }}>❄{u.freeze}</span>}
-        {u.vuln > 0 && <span style={{ fontSize: T.micro, color: '#b06bff', fontWeight: 700 }}>💀{u.vuln}</span>}
+      {/* status — type/effect-colored chips that show their stack count (tiered read) */}
+      <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', minHeight: 18 }}>
+        {u.burn > 0 && <StatusChip kind="burn" count={u.burn} size={22} />}
+        {u.block > 0 && <StatusChip kind="shield" count={u.block} size={22} />}
+        {u.regen > 0 && <StatusChip kind="regen" count={u.regen} size={22} />}
+        {u.amp > 0 && <StatusChip kind="amp" count={u.amp} size={22} />}
+        {u.freeze > 0 && <StatusChip kind="freeze" count={u.freeze} size={22} />}
+        {u.vuln > 0 && <StatusChip kind="curse" count={u.vuln} size={22} />}
       </div>
     </div>
   );
@@ -3727,19 +3740,15 @@ function RunMode({ narrow, slag = 0, onSlag }) {
                   const full = !eq && relicKit.length >= RELIC_SLOTS;
                   const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
                   const disabled = !salvageMode && full;
+                  const footerColor = salvageMode ? '#ffae5a' : eq ? '#cba6ff' : full ? DIM : rc;
                   return (
-                    <button key={r.id} onClick={() => (salvageMode ? salvageRelic(r.id) : toggleRelic(r.id))} disabled={disabled}
-                      title={salvageMode ? `Melt for +${shardYield(r.rarity)} shards` : r.lore}
-                      style={{ textAlign: 'left', borderRadius: 10, padding: '9px 10px', cursor: disabled ? 'default' : 'pointer',
-                        background: salvageMode ? '#16100e' : eq ? '#1a1230' : PANEL, border: `1.5px solid ${salvageMode ? '#6a4a3a' : eq ? '#b06bff' : full ? LINE : `${r.color}77`}`, opacity: disabled ? 0.5 : 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                        <RelicIcon r={r} size={T.body} />
-                        <span style={{ fontSize: T.small, fontWeight: 900, color: eq ? '#cba6ff' : r.color }}>{r.name}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: T.micro, fontWeight: 800, color: salvageMode ? '#ffae5a' : eq ? '#cba6ff' : full ? DIM : rc }}>{salvageMode ? `⛏ +${shardYield(r.rarity)}` : eq ? '● equipped' : full ? 'kit full' : `equip`}</span>
-                      </div>
-                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.keystone ? 'KEYSTONE' : r.rarity.toUpperCase()}</div>
-                      <div style={{ fontSize: T.micro, color: eq ? '#d8c8f0' : '#9a9aaa', lineHeight: 1.35 }}>{r.desc}</div>
-                    </button>
+                    <RelicCard key={r.id} relic={r}
+                      rarityColor={salvageMode ? '#c98a4a' : rc}
+                      icon={<RelicIcon r={r} size={T.sub} />}
+                      kind={relicKind(r)} when={RELIC_WHEN[r.id]}
+                      selected={eq && !salvageMode} disabled={disabled}
+                      onClick={() => (salvageMode ? salvageRelic(r.id) : toggleRelic(r.id))}
+                      footer={<span style={{ color: footerColor }}>{salvageMode ? `⛏ melt · +${shardYield(r.rarity)} shards` : eq ? '● equipped — tap to remove' : full ? 'kit full' : '+ equip'}</span>} />
                   );
                 })}
               </div>
@@ -4494,20 +4503,13 @@ function RunMode({ narrow, slag = 0, onSlag }) {
             <div style={{ background: '#120a1e', border: '1.5px solid #b06bff', borderRadius: 11, padding: '12px 13px', margin: '10px 0', boxShadow: '0 0 22px #b06bff22' }}>
               <div style={{ fontSize: T.micro, fontWeight: 900, letterSpacing: 1.5, color: '#cba6ff', marginBottom: 8 }}>✦ CHOOSE A RELIC <span style={{ color: DIM, fontWeight: 700, letterSpacing: 0 }}>— the boss leaves spoils. Take one.</span></div>
               <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr', gap: 8 }}>
-                {relicChoices.map((r) => {
-                  const rc = (RARITY_INFO[r.rarity] || {}).color || r.color;
-                  return (
-                    <button key={r.id} onClick={() => chooseRelic(r)} title={r.lore}
-                      style={{ textAlign: 'left', borderRadius: 10, padding: '10px 11px', cursor: 'pointer', background: PANEL, border: `1.5px solid ${r.color}88` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <RelicIcon r={r} size={T.body} />
-                        <span style={{ fontSize: T.small, fontWeight: 900, color: r.color }}>{r.name}</span>
-                      </div>
-                      <div style={{ fontSize: 9, fontWeight: 800, color: rc, letterSpacing: 0.3, marginBottom: 2 }}>{r.rarity.toUpperCase()}</div>
-                      <div style={{ fontSize: T.micro, color: '#bfb0d6', lineHeight: 1.35 }}>{r.desc}</div>
-                    </button>
-                  );
-                })}
+                {relicChoices.map((r) => (
+                  <RelicCard key={r.id} relic={r}
+                    rarityColor={(RARITY_INFO[r.rarity] || {}).color || r.color}
+                    icon={<RelicIcon r={r} size={T.sub} />}
+                    kind={relicKind(r)} when={RELIC_WHEN[r.id]}
+                    onClick={() => chooseRelic(r)} />
+                ))}
               </div>
             </div>
           )}
